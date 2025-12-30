@@ -4,16 +4,20 @@ from uuid import UUID
 from datetime import datetime
 
 from app.campaigns.models import Campaign
+from app.plans.enforcement import (
+    PlanEnforcementService,
+    EnforcementError,
+)
 
 
 class CampaignService:
     """
     Campaign business logic layer.
 
-    IMPORTANT:
-    - No enforcement yet (STEP 8.5)
-    - No AI logic
-    - No Meta API
+    🔒 Enforcement is applied HERE.
+    - No UI bypass
+    - No AI bypass
+    - No admin bypass (unless via override table)
     """
 
     @staticmethod
@@ -43,8 +47,24 @@ class CampaignService:
         if not campaign:
             raise ValueError("Campaign not found")
 
-        # ⚠️ Enforcement will be called here in STEP 8.5
+        # =====================================================
+        # 🔐 ENFORCEMENT (ONLY WHEN ENABLING AI)
+        # =====================================================
+        if enable and not campaign.ai_active:
+            try:
+                await PlanEnforcementService.can_activate_ai(
+                    db=db,
+                    user_id=user_id,
+                )
+            except EnforcementError as e:
+                # IMPORTANT:
+                # - Do NOT mutate campaign
+                # - Do NOT partially commit
+                raise ValueError(str(e))
 
+        # =====================================================
+        # APPLY TOGGLE
+        # =====================================================
         campaign.ai_active = enable
         campaign.ai_activated_at = datetime.utcnow() if enable else None
 
