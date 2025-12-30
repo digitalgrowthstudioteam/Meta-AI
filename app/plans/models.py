@@ -16,24 +16,33 @@ from app.core.database import Base
 class Plan(Base):
     """
     System-owned plan definitions.
-    Plans define WHAT is allowed.
-    They never expire.
+
+    IMPORTANT:
+    - Old columns are intentionally retained (deprecated)
+    - New columns are added for STEP 8 enforcement
+    - No destructive changes allowed in this phase
     """
 
     __tablename__ = "plans"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        primary_key=True,
-        default=uuid.uuid4,
-    )
+    # 🔒 EXISTING PK (DO NOT CHANGE TYPE IN DB)
+    id: Mapped[int] = mapped_column(primary_key=True)
 
-    name: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    # ======================
+    # EXISTING (DEPRECATED)
+    # ======================
+    name: Mapped[str] = mapped_column(String, unique=True)
 
-    price_monthly: Mapped[int] = mapped_column(Integer, nullable=False)  # paise
+    # OLD pricing / limits (kept for backward compatibility)
+    monthly_price: Mapped[int] = mapped_column(Integer)
+    max_ai_campaigns: Mapped[int] = mapped_column(Integer)
+    allows_addons: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    ai_campaign_limit: Mapped[int] = mapped_column(Integer, nullable=False)
-    max_ad_accounts: Mapped[int] = mapped_column(Integer, nullable=False)
+    # ======================
+    # NEW (ENFORCEMENT)
+    # ======================
+    price_monthly: Mapped[int | None] = mapped_column(Integer, nullable=True)  # paise
+    ai_campaign_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     is_trial_allowed: Mapped[bool] = mapped_column(Boolean, default=False)
     trial_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
