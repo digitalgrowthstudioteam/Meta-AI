@@ -32,4 +32,16 @@ class Plan(Base):
 
     price_monthly: Mapped[int] = mapped_column(Integer, nullable=False)  # paise
 
-    a
+    ai_campaign_limit: Mapped[int] = mapped_column(Integer, nullable=False)
+    max_ad_accounts: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    is_trial_allowed: Mapped[bool] = mapped_column(Boolean, default=False)
+    trial_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+    )
