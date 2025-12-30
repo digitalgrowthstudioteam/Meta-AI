@@ -1,14 +1,14 @@
-from datetime import datetime
+from datetime import datetime, date
 import uuid
 
 from sqlalchemy import (
     Boolean,
+    Date,
     DateTime,
     ForeignKey,
     Integer,
     String,
 )
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -16,42 +16,56 @@ from app.core.database import Base
 
 class Subscription(Base):
     """
-    SINGLE source of truth for user access enforcement.
+    User subscription access record.
+
+    IMPORTANT:
+    - Old columns retained (no data loss)
+    - New enforcement columns added
     """
 
     __tablename__ = "subscriptions"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        primary_key=True,
-        default=uuid.uuid4,
-    )
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
 
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
-        index=True,
+        ForeignKey("users.id"),
         nullable=False,
     )
 
-    plan_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
+    plan_id: Mapped[int | None] = mapped_column(
         ForeignKey("plans.id"),
-        nullable=True,  # NULL for trial
+        nullable=True,
     )
 
-    # trial | active | expired | cancelled
-    status: Mapped[str] = mapped_column(String(20), nullable=False)
-
+    # ======================
+    # EXISTING (DEPRECATED)
+    # ======================
     is_trial: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    starts_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    ends_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    trial_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    trial_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    trial_ai_campaign_limit: Mapped[int] = mapped_column(Integer, default=3)
 
-    # 🔒 Snapshot — NEVER recalc from plan
-    ai_campaign_limit_snapshot: Mapped[int] = mapped_column(
+    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    assigned_by_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # ======================
+    # NEW (ENFORCEMENT)
+    # ======================
+    status: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,  # trial | active | expired | cancelled
+    )
+
+    starts_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    ends_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    ai_campaign_limit_snapshot: Mapped[int | None] = mapped_column(
         Integer,
-        nullable=False,
+        nullable=True,
     )
 
     created_by_admin: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -64,4 +78,3 @@ class Subscription(Base):
 
     # Relationships
     user = relationship("User")
-    plan = relationship("Plan")
