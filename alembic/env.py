@@ -18,6 +18,7 @@ from app.core.database import Base
 # Import ALL models so Alembic can detect tables
 # (NO database calls at import time)
 # =========================================================
+import app.auth.models
 import app.users.models
 import app.plans.models
 import app.plans.subscription_models
