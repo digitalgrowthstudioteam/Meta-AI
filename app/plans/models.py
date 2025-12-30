@@ -1,20 +1,35 @@
-from sqlalchemy import String, Integer, Boolean, DateTime
-from sqlalchemy.orm import Mapped, mapped_column
 from datetime import datetime
+import uuid
+
+from sqlalchemy import (
+    String,
+    Integer,
+    Boolean,
+    DateTime,
+)
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
 
 
 class Plan(Base):
+    """
+    System-owned plan definitions.
+    Plans define WHAT is allowed.
+    They never expire.
+    """
+
     __tablename__ = "plans"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String, unique=True)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
 
-    monthly_price: Mapped[int] = mapped_column(Integer)
+    name: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
 
-    max_ai_campaigns: Mapped[int] = mapped_column(Integer)
-    max_ad_accounts: Mapped[int] = mapped_column(Integer)
-    allows_addons: Mapped[bool] = mapped_column(Boolean, default=False)
+    price_monthly: Mapped[int] = mapped_column(Integer, nullable=False)  # paise
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    a
