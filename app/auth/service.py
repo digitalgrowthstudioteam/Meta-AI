@@ -15,6 +15,7 @@ Rules:
 - NO Meta / AI logic
 """
 
+from app.core.email import send_email
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from typing import Optional
@@ -58,19 +59,41 @@ def build_magic_link_subject() -> str:
 # =========================================================
 # PLACEHOLDER EMAIL SENDER (NO-OP)
 # =========================================================
-def send_magic_link_email_placeholder(
+def send_magic_link_email(
     to_email: str,
     magic_link: str,
     subject: str,
 ) -> None:
     """
-    Placeholder for email sending.
-    Real SMTP will be added later.
+    Send magic login link via SMTP.
     """
-    # INTENTIONALLY LEFT BLANK
-    # This function exists to lock subject + flow.
-    pass
+    html_body = f"""
+    <html>
+        <body style="font-family: Arial, sans-serif;">
+            <h2>Digital Growth Studio</h2>
+            <p>Click the button below to log in:</p>
+            <p>
+                <a href="{magic_link}"
+                   style="padding:12px 18px;
+                          background:#4F46E5;
+                          color:#ffffff;
+                          text-decoration:none;
+                          border-radius:6px;">
+                    Login to Dashboard
+                </a>
+            </p>
+            <p>This link expires in 10 minutes.</p>
+            <p>If you did not request this, ignore this email.</p>
+        </body>
+    </html>
+    """
 
+    send_email(
+        to_email=to_email,
+        subject=subject,
+        html_body=html_body,
+        text_body=f"Login link: {magic_link}",
+    )
 
 # =========================================================
 # LOGIN REQUEST FLOW
@@ -102,7 +125,7 @@ async def request_magic_login(
     # Magic link format (frontend will consume later)
     magic_link = f"/auth/verify?token={raw_token}"
 
-    send_magic_link_email_placeholder(
+    send_magic_link_email(
         to_email=email,
         magic_link=magic_link,
         subject=subject,
