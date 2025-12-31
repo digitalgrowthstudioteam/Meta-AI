@@ -1,8 +1,8 @@
 fastapi
 uvicorn
 
-sqlalchemy>=2.0
+SQLAlchemy>=2.0
 asyncpg
-alembic
+alembic>=1.10
 python-dotenv
 httpx
