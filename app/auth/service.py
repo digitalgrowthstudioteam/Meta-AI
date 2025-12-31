@@ -123,7 +123,7 @@ async def request_magic_login(
     subject = build_magic_link_subject()
 
     # Magic link format (frontend will consume later)
-    magic_link = f"/auth/verify?token={raw_token}"
+    magic_link = f"https://meta-ai.digitalgrowthstudio.in/auth/verify?token={raw_token}"
 
     send_magic_link_email(
         to_email=email,
