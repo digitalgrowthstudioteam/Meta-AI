@@ -368,3 +368,91 @@ body {
     padding: 40px 20px;
     color: #475569;
 }
+
+/* =========================
+   AI Actions
+========================= */
+
+.ai-actions-container {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.ai-info-banner {
+    background: linear-gradient(135deg, #0f172a, #020617);
+    color: #e5e7eb;
+    padding: 20px 24px;
+    border-radius: 14px;
+}
+
+.ai-info-banner strong {
+    display: block;
+    font-size: 15px;
+    margin-bottom: 6px;
+}
+
+.ai-info-banner p {
+    font-size: 13px;
+    color: #cbd5e1;
+}
+
+/* =========================
+   AI Actions Table
+========================= */
+
+.ai-actions-table-wrapper {
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(2, 6, 23, 0.08);
+    overflow: hidden;
+}
+
+.ai-actions-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.ai-actions-table thead {
+    background: #f8fafc;
+}
+
+.ai-actions-table th {
+    padding: 14px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #334155;
+    text-align: left;
+}
+
+.ai-actions-table td {
+    padding: 16px;
+    font-size: 14px;
+    border-top: 1px solid #e5e7eb;
+}
+
+/* =========================
+   Confidence Badges
+========================= */
+
+.confidence {
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.confidence.low {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.confidence.medium {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.confidence.high {
+    background: #dcfce7;
+    color: #166534;
+}
