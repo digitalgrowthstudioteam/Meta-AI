@@ -1,0 +1,56 @@
+{% extends "user_base.html" %}
+
+{% block title %}Dashboard | Digital Growth Studio{% endblock %}
+
+{% block page_title %}
+Dashboard
+{% endblock %}
+
+{% block content %}
+
+<div class="dashboard-container">
+
+    <!-- ================= Metrics Row ================= -->
+    <div class="metrics-grid">
+
+        <div class="metric-card">
+            <div class="metric-title">Connected Ad Accounts</div>
+            <div class="metric-value">—</div>
+            <div class="metric-note">Meta accounts linked</div>
+        </div>
+
+        <div class="metric-card">
+            <div class="metric-title">AI-Active Campaigns</div>
+            <div class="metric-value">—</div>
+            <div class="metric-note">Currently optimized</div>
+        </div>
+
+        <div class="metric-card">
+            <div class="metric-title">Pending AI Suggestions</div>
+            <div class="metric-value">—</div>
+            <div class="metric-note">Awaiting approval</div>
+        </div>
+
+        <div class="metric-card">
+            <div class="metric-title">Total Spend</div>
+            <div class="metric-value">—</div>
+            <div class="metric-note">Read-only</div>
+        </div>
+
+    </div>
+
+    <!-- ================= Activity Section ================= -->
+    <div class="dashboard-section">
+        <h2 class="section-title">Recent Campaign Activity</h2>
+
+        <div class="empty-state">
+            <p>No campaign activity yet.</p>
+            <p class="muted">
+                Connect your Meta ad account to begin.
+            </p>
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
