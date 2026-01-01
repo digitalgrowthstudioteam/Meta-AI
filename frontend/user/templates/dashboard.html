@@ -10,31 +10,47 @@ Dashboard
 
 <div class="dashboard-container">
 
-    <!-- ================= Metrics Row ================= -->
+    <!-- ================= AI Metrics Grid ================= -->
     <div class="metrics-grid">
 
-        <div class="metric-card">
-            <div class="metric-title">Connected Ad Accounts</div>
+        <!-- Total Campaigns -->
+        <div class="metric-card ai-card">
+            <div class="metric-header">
+                <span class="metric-icon">📊</span>
+                <span class="metric-title">Total Campaigns</span>
+            </div>
             <div class="metric-value">—</div>
-            <div class="metric-note">Meta accounts linked</div>
+            <div class="metric-note">Across all ad accounts</div>
         </div>
 
-        <div class="metric-card">
-            <div class="metric-title">AI-Active Campaigns</div>
+        <!-- AI Active -->
+        <div class="metric-card ai-card">
+            <div class="metric-header">
+                <span class="metric-icon">🤖</span>
+                <span class="metric-title">AI-Active</span>
+            </div>
             <div class="metric-value">—</div>
-            <div class="metric-note">Currently optimized</div>
+            <div class="metric-note">Optimized by AI</div>
         </div>
 
-        <div class="metric-card">
-            <div class="metric-title">Pending AI Suggestions</div>
-            <div class="metric-value">—</div>
-            <div class="metric-note">Awaiting approval</div>
+        <!-- Lead vs Sales -->
+        <div class="metric-card ai-card">
+            <div class="metric-header">
+                <span class="metric-icon">🎯</span>
+                <span class="metric-title">Lead / Sales</span>
+            </div>
+            <div class="metric-value">— / —</div>
+            <div class="metric-note">Objective split</div>
         </div>
 
-        <div class="metric-card">
-            <div class="metric-title">Total Spend</div>
-            <div class="metric-value">—</div>
-            <div class="metric-note">Read-only</div>
+        <!-- Meta Account -->
+        <div class="metric-card ai-card">
+            <div class="metric-header">
+                <span class="metric-icon">🔗</span>
+                <span class="metric-title">Meta Account</span>
+            </div>
+            <div class="metric-value connected">Connected</div>
+            <div class="metric-note">Read-only access</div>
         </div>
 
     </div>
@@ -46,7 +62,7 @@ Dashboard
         <div class="empty-state">
             <p>No campaign activity yet.</p>
             <p class="muted">
-                Connect your Meta ad account to begin.
+                Connect your Meta ad account to begin AI analysis.
             </p>
         </div>
     </div>
