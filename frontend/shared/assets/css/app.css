@@ -313,3 +313,58 @@ body {
     font-size: 13px;
     color: #64748b;
 }
+
+/* =========================
+   Campaigns Table
+========================= */
+
+.campaigns-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.campaigns-header h2 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.campaign-table-wrapper {
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+    overflow: hidden;
+}
+
+.campaign-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.campaign-table thead {
+    background: #f1f5f9;
+}
+
+.campaign-table th {
+    text-align: left;
+    padding: 14px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #334155;
+}
+
+.campaign-table td {
+    padding: 16px;
+    font-size: 14px;
+    border-top: 1px solid #e5e7eb;
+}
+
+.empty-row td {
+    text-align: center;
+}
+
+.empty-state {
+    padding: 40px 20px;
+    color: #475569;
+}
