@@ -88,6 +88,16 @@ def dashboard_page(
         },
     )
 
+@app.get("/billing")
+def billing_page(
+    request: Request,
+    current_user: User = Depends(require_user),
+):
+    return user_templates.TemplateResponse(
+        "billing.html",
+        {"request": request, "user": current_user},
+    )
+
 @app.get("/campaigns")
 def campaigns_page(
     request: Request,
