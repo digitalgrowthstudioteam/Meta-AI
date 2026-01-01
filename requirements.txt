@@ -6,3 +6,5 @@ asyncpg
 alembic>=1.10
 python-dotenv
 httpx
+
+jinja2
