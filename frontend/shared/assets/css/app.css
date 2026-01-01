@@ -456,3 +456,81 @@ body {
     background: #dcfce7;
     color: #166534;
 }
+
+/* =========================
+   Audience Insights
+========================= */
+
+.audience-container {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.audience-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 20px;
+}
+
+/* =========================
+   Audience Cards
+========================= */
+
+.audience-card {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 12px 30px rgba(2, 6, 23, 0.08);
+    position: relative;
+}
+
+.audience-card h3 {
+    font-size: 15px;
+    margin-bottom: 6px;
+}
+
+.audience-metric {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.audience-note {
+    font-size: 13px;
+    color: #475569;
+    margin-bottom: 14px;
+}
+
+/* =========================
+   Card States
+========================= */
+
+.audience-card.positive {
+    border-left: 5px solid #22c55e;
+}
+
+.audience-card.warning {
+    border-left: 5px solid #f59e0b;
+}
+
+.audience-card.info {
+    border-left: 5px solid #3b82f6;
+}
+
+/* =========================
+   Section
+========================= */
+
+.audience-section {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 12px 30px rgba(2, 6, 23, 0.08);
+}
+
+.section-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 12px;
+}
