@@ -139,6 +139,16 @@ def audience_insights_page(
         },
     )
 
+@app.get("/buy-campaign")
+def buy_campaign_page(
+    request: Request,
+    current_user: User = Depends(require_user),
+):
+    return user_templates.TemplateResponse(
+        "buy_campaign.html",
+        {"request": request, "user": current_user},
+    )
+
 # =========================
 # API ROUTERS
 # =========================
