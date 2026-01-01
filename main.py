@@ -55,11 +55,9 @@ app.mount(
 
 
 # =========================
-# FRONTEND — TEMPLATES
+# FRONTEND — SINGLE TEMPLATE LOADER (CRITICAL)
 # =========================
-shared_templates = Jinja2Templates(directory="frontend/shared/templates")
-user_templates = Jinja2Templates(directory="frontend/user/templates")
-admin_templates = Jinja2Templates(directory="frontend/admin/templates")
+templates = Jinja2Templates(directory="frontend")
 
 
 # =========================
@@ -67,8 +65,8 @@ admin_templates = Jinja2Templates(directory="frontend/admin/templates")
 # =========================
 @app.get("/login")
 def login_page(request: Request):
-    return shared_templates.TemplateResponse(
-        "login.html",
+    return templates.TemplateResponse(
+        "shared/templates/login.html",
         {"request": request},
     )
 
@@ -82,8 +80,8 @@ def dashboard_page(
     User dashboard UI.
     Requires authenticated session.
     """
-    return user_templates.TemplateResponse(
-        "dashboard.html",
+    return templates.TemplateResponse(
+        "user/templates/dashboard.html",
         {
             "request": request,
             "user": current_user,
@@ -92,7 +90,7 @@ def dashboard_page(
 
 
 # =========================
-# ROUTERS
+# API ROUTERS
 # =========================
 app.include_router(auth_router)
 app.include_router(campaigns_router)
