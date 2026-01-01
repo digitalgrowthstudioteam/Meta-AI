@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}Digital Growth Studio{% endblock %}</title>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Global CSS (added in next step) -->
+    <link rel="stylesheet" href="/static/shared/css/app.css">
+
+    {% block head %}{% endblock %}
+</head>
+<body>
+
+    <div class="app-container">
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>DGS</h2>
+            </div>
+
+            <nav class="sidebar-nav">
+                <ul>
+                    <li><a href="#">Dashboard</a></li>
+                    <li><a href="#">Meta Accounts</a></li>
+                    <li><a href="#">Campaigns</a></li>
+                    <li><a href="#">AI Insights</a></li>
+                </ul>
+            </nav>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+
+            <!-- Top Bar -->
+            <header class="topbar">
+                <div class="topbar-left">
+                    <span class="app-name">Digital Growth Studio</span>
+                </div>
+
+                <div class="topbar-right">
+                    <!-- Future: user info / logout -->
+                    <span class="user-placeholder">Account</span>
+                </div>
+            </header>
+
+            <!-- Page Content -->
+            <section class="page-content">
+                {% block content %}
+                <!-- Page-specific content goes here -->
+                {% endblock %}
+            </section>
+
+        </main>
+
+    </div>
+
+    {% block scripts %}{% endblock %}
+
+</body>
+</html>
