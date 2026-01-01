@@ -122,6 +122,23 @@ def ai_actions_page(
         },
     )
 
+@app.get("/audience-insights")
+def audience_insights_page(
+    request: Request,
+    current_user: User = Depends(require_user),
+):
+    """
+    Audience insights UI.
+    AI-generated audience intelligence.
+    """
+    return user_templates.TemplateResponse(
+        "audience_insights.html",
+        {
+            "request": request,
+            "user": current_user,
+        },
+    )
+
 # =========================
 # API ROUTERS
 # =========================
