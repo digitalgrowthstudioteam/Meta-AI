@@ -88,6 +88,22 @@ def dashboard_page(
         },
     )
 
+@app.get("/campaigns")
+def campaigns_page(
+    request: Request,
+    current_user: User = Depends(require_user),
+):
+    """
+    Campaign list UI.
+    Data will be connected later.
+    """
+    return user_templates.TemplateResponse(
+        "campaigns.html",
+        {
+            "request": request,
+            "user": current_user,
+        },
+    )
 
 # =========================
 # API ROUTERS
