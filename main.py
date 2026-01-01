@@ -105,6 +105,23 @@ def campaigns_page(
         },
     )
 
+@app.get("/ai-actions")
+def ai_actions_page(
+    request: Request,
+    current_user: User = Depends(require_user),
+):
+    """
+    AI action history UI.
+    Shows explainable ML actions.
+    """
+    return user_templates.TemplateResponse(
+        "ai_actions.html",
+        {
+            "request": request,
+            "user": current_user,
+        },
+    )
+
 # =========================
 # API ROUTERS
 # =========================
