@@ -3,11 +3,6 @@ Auth Routes
 - /auth/login
 - /auth/verify
 - /auth/logout
-
-Rules:
-- Thin routes ONLY
-- No business logic
-- Delegate to service / sessions layers
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Form
@@ -25,33 +20,25 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 # =========================================================
-# REQUEST MAGIC LINK (HTML FORM SAFE)
+# REQUEST MAGIC LINK
 # =========================================================
 @router.post("/login", status_code=status.HTTP_204_NO_CONTENT)
 async def login_request(
     email: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Request a magic login link.
-    Always returns 204 to avoid email enumeration.
-    """
     await request_magic_login(db, email=email)
     return None
 
 
 # =========================================================
-# VERIFY MAGIC LINK (REDIRECT TO DASHBOARD)
+# VERIFY MAGIC LINK (SET COOKIE + REDIRECT)
 # =========================================================
 @router.get("/verify")
 async def verify_login(
     token: str,
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Verify magic token, create session,
-    and redirect user to dashboard.
-    """
     session_token = await verify_magic_login(db, raw_token=token)
 
     if not session_token:
@@ -60,12 +47,22 @@ async def verify_login(
             detail="Invalid or expired login link",
         )
 
-    # 🔐 Session is already stored server-side.
-    # We do NOT expose it to the browser.
-    return RedirectResponse(
+    response = RedirectResponse(
         url="/dashboard",
         status_code=status.HTTP_302_FOUND,
     )
+
+    # 🔐 Secure, HTTP-only cookie
+    response.set_cookie(
+        key="session_token",
+        value=session_token,
+        httponly=True,
+        secure=True,          # HTTPS only
+        samesite="lax",
+        max_age=60 * 60 * 24 * 3,  # 3 days
+    )
+
+    return response
 
 
 # =========================================================
@@ -74,19 +71,14 @@ async def verify_login(
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(
     current_user: User = Depends(require_user),
-    authorization: str | None = None,
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Logout current session.
-    Requires Authorization: Bearer <session_token>
-    """
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Authorization header missing",
-        )
+    # Cookie-based logout
+    response = RedirectResponse(
+        url="/login",
+        status_code=status.HTTP_302_FOUND,
+    )
 
-    session_token = authorization.replace("Bearer ", "").strip()
-    await revoke_session(db, session_token=session_token)
-    return None
+    response.delete_cookie("session_token")
+
+    return response
