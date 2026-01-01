@@ -159,6 +159,16 @@ def buy_campaign_page(
         {"request": request, "user": current_user},
     )
 
+@app.get("/settings")
+def settings_page(
+    request: Request,
+    current_user: User = Depends(require_user),
+):
+    return user_templates.TemplateResponse(
+        "settings.html",
+        {"request": request, "user": current_user},
+    )
+
 # =========================
 # API ROUTERS
 # =========================
