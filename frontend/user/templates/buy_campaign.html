@@ -1,0 +1,92 @@
+{% extends "user_base.html" %}
+
+{% block title %}Buy Campaign | Digital Growth Studio{% endblock %}
+
+{% block page_title %}
+Buy Manual Campaigns
+{% endblock %}
+
+{% block content %}
+
+<div class="buy-campaign-container">
+
+    <!-- ================= Intro ================= -->
+    <div class="info-card">
+        <h2>Manual Campaign Purchase</h2>
+        <p class="muted">
+            Purchase campaigns created manually by our experts inside Meta Ads Manager.
+            Once live, they will automatically appear in your dashboard and can be marked
+            <strong>AI-Active</strong>.
+        </p>
+    </div>
+
+    <!-- ================= Pricing Grid ================= -->
+    <div class="pricing-grid">
+
+        <!-- Tier 1 -->
+        <div class="pricing-card">
+            <h3>Starter Pack</h3>
+            <div class="price">₹999</div>
+            <p class="per-unit">per campaign</p>
+
+            <ul>
+                <li>0 – 5 campaigns</li>
+                <li>Validity: <strong>3 Months</strong></li>
+                <li>AI eligible</li>
+            </ul>
+
+            <button class="primary-btn" disabled>
+                Purchase (Coming Soon)
+            </button>
+        </div>
+
+        <!-- Tier 2 -->
+        <div class="pricing-card highlight">
+            <h3>Growth Pack</h3>
+            <div class="price">₹599</div>
+            <p class="per-unit">per campaign</p>
+
+            <ul>
+                <li>6 – 29 campaigns</li>
+                <li>Validity: <strong>6 Months</strong></li>
+                <li>Best for scaling</li>
+            </ul>
+
+            <button class="primary-btn" disabled>
+                Purchase (Coming Soon)
+            </button>
+        </div>
+
+        <!-- Tier 3 -->
+        <div class="pricing-card">
+            <h3>Agency Pack</h3>
+            <div class="price">₹333</div>
+            <p class="per-unit">per campaign</p>
+
+            <ul>
+                <li>30+ campaigns</li>
+                <li>Validity: <strong>1 Year</strong></li>
+                <li>Agency friendly</li>
+            </ul>
+
+            <button class="primary-btn" disabled>
+                Purchase (Coming Soon)
+            </button>
+        </div>
+
+    </div>
+
+    <!-- ================= Rules ================= -->
+    <div class="rules-card">
+        <h4>Important Rules</h4>
+        <ul>
+            <li>Validity starts from the date of purchase</li>
+            <li>Expired campaigns automatically have AI disabled</li>
+            <li>Re-purchase is required after expiry</li>
+            <li>Admin may assign complimentary campaigns manually</li>
+        </ul>
+    </div>
+
+</div>
+
+{% endblock %}
