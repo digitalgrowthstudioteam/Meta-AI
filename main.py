@@ -3,7 +3,7 @@ Digital Growth Studio (Meta-AI)
 Main application entry point
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -54,6 +54,17 @@ app.mount(
 shared_templates = Jinja2Templates(directory="frontend/shared/templates")
 user_templates = Jinja2Templates(directory="frontend/user/templates")
 admin_templates = Jinja2Templates(directory="frontend/admin/templates")
+
+
+# =========================
+# UI ROUTES (NO LOGIC)
+# =========================
+@app.get("/login")
+def login_page(request: Request):
+    return shared_templates.TemplateResponse(
+        "login.html",
+        {"request": request},
+    )
 
 
 # =========================
