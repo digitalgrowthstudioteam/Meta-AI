@@ -13,6 +13,7 @@ from typing import Optional
 
 from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.core.db_session import get_db
 from app.auth.sessions import get_active_session
@@ -20,7 +21,7 @@ from app.users.models import User
 
 
 # =========================================================
-# CURRENT USER DEPENDENCY
+# CURRENT USER DEPENDENCY (ASYNC-SAFE)
 # =========================================================
 async def get_current_user(
     authorization: Optional[str] = Header(default=None),
@@ -52,7 +53,14 @@ async def get_current_user(
             detail="Invalid or expired session",
         )
 
-    user = session.user
+    # -----------------------------------------------------
+    # IMPORTANT: Explicit user fetch (NO lazy loading)
+    # -----------------------------------------------------
+    result = await db.execute(
+        select(User).where(User.id == session.user_id)
+    )
+    user = result.scalar_one_or_none()
+
     if not user or not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
