@@ -1,0 +1,71 @@
+{% extends "user/templates/user_base.html" %}
+
+{% block title %}Audience Insights | Digital Growth Studio{% endblock %}
+
+{% block page_title %}
+Audience Insights
+{% endblock %}
+
+{% block content %}
+
+<div class="audience-container">
+
+    <!-- ================= AI Explainability Banner ================= -->
+    <div class="ai-info-banner">
+        <strong>AI Audience Intelligence</strong>
+        <p>
+            Insights are generated using performance patterns, engagement signals,
+            and historical trends. No audiences are modified automatically.
+        </p>
+    </div>
+
+    <!-- ================= Audience Insight Cards ================= -->
+    <div class="audience-grid">
+
+        <!-- Performing Well -->
+        <div class="audience-card positive">
+            <h3>High Performing Audiences</h3>
+            <p class="audience-metric">CTR ↑ · CPA ↓</p>
+            <p class="audience-note">
+                These audiences show consistent engagement and strong results.
+            </p>
+            <span class="confidence high">High Confidence</span>
+        </div>
+
+        <!-- Fatigue Detected -->
+        <div class="audience-card warning">
+            <h3>Audience Fatigue Detected</h3>
+            <p class="audience-metric">Frequency ↑ · CTR ↓</p>
+            <p class="audience-note">
+                Repeated exposure detected. Consider pausing or refreshing.
+            </p>
+            <span class="confidence medium">Medium Confidence</span>
+        </div>
+
+        <!-- Expansion Opportunity -->
+        <div class="audience-card info">
+            <h3>Expansion Opportunities</h3>
+            <p class="audience-metric">Lookalike-style signals</p>
+            <p class="audience-note">
+                Similar behavior patterns detected across top converters.
+            </p>
+            <span class="confidence high">High Confidence</span>
+        </div>
+
+    </div>
+
+    <!-- ================= Detailed Insight Section ================= -->
+    <div class="audience-section">
+        <h2 class="section-title">Detailed Insights</h2>
+
+        <div class="empty-state">
+            <p>No audience insights available yet.</p>
+            <p class="muted">
+                Insights will appear once campaigns generate sufficient data.
+            </p>
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
