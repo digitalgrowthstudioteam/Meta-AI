@@ -10,7 +10,7 @@ Rules:
 - Delegate to service / sessions layers
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db_session import get_db
@@ -24,11 +24,11 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 # =========================================================
-# REQUEST MAGIC LINK
+# REQUEST MAGIC LINK (HTML FORM SAFE)
 # =========================================================
 @router.post("/login", status_code=status.HTTP_204_NO_CONTENT)
 async def login_request(
-    email: str,
+    email: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
     """
