@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{# ========================================================= #}
+{# USER BASE TEMPLATE                                         #}
+{# Extends: app base layout                                   #}
+{# Purpose: User-only sidebar & structure                     #}
+{# ========================================================= #}
+
+{% block sidebar %}
+<nav class="sidebar-nav">
+    <ul>
+        <li>
+            <a href="/dashboard">
+                Dashboard
+            </a>
+        </li>
+
+        <li>
+            <a href="/campaigns">
+                Campaigns
+            </a>
+        </li>
+
+        <li>
+            <a href="/ai-insights">
+                AI Insights
+            </a>
+        </li>
+
+        <li>
+            <a href="/billing">
+                Billing
+            </a>
+        </li>
+
+        <li>
+            <a href="/profile">
+                Profile
+            </a>
+        </li>
+    </ul>
+</nav>
+{% endblock %}
+
+{# Page title block remains overridable by child pages #}
+{% block page_title %}{% endblock %}
+
+{# Main content will be defined by child templates #}
+{% block content %}{% endblock %}
