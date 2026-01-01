@@ -18,6 +18,7 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
+from sqlalchemy.orm import selectinload
 
 from app.auth.models import Session
 from app.users.models import User
@@ -73,7 +74,7 @@ async def create_session(
 
 
 # =========================================================
-# SESSION VALIDATION
+# SESSION VALIDATION (FIXED — ASYNC SAFE)
 # =========================================================
 async def get_active_session(
     db: AsyncSession,
@@ -81,9 +82,12 @@ async def get_active_session(
 ) -> Optional[Session]:
     """
     Fetch a valid active session.
+    Eager-load user to avoid async lazy-loading issues.
     """
     result = await db.execute(
-        select(Session).where(
+        select(Session)
+        .options(selectinload(Session.user))
+        .where(
             Session.session_token == session_token,
             Session.is_active.is_(True),
             Session.expires_at > datetime.now(timezone.utc),
