@@ -1,0 +1,97 @@
+{% extends "user_base.html" %}
+
+{% block title %}Settings | Digital Growth Studio{% endblock %}
+
+{% block page_title %}
+Account Settings
+{% endblock %}
+
+{% block content %}
+
+<div class="settings-container">
+
+    <!-- ================= Profile ================= -->
+    <div class="settings-card">
+        <h3>Profile Information</h3>
+
+        <div class="settings-row">
+            <label>Email</label>
+            <div class="readonly-field">
+                {{ user.email }}
+            </div>
+        </div>
+
+        <div class="settings-row">
+            <label>Account Role</label>
+            <div class="readonly-field">
+                {{ user.role | capitalize }}
+            </div>
+        </div>
+
+        <p class="muted">
+            Profile details are managed via secure email authentication.
+        </p>
+    </div>
+
+    <!-- ================= Subscription ================= -->
+    <div class="settings-card">
+        <h3>Subscription</h3>
+
+        <div class="settings-row">
+            <label>Current Plan</label>
+            <div class="readonly-field">
+                Starter
+            </div>
+        </div>
+
+        <div class="settings-row">
+            <label>AI-Active Limit</label>
+            <div class="readonly-field">
+                3 Campaigns
+            </div>
+        </div>
+
+        <a href="/billing" class="link-btn">
+            View Billing & Plans →
+        </a>
+    </div>
+
+    <!-- ================= Security ================= -->
+    <div class="settings-card">
+        <h3>Security</h3>
+
+        <div class="settings-row">
+            <label>Login Method</label>
+            <div class="readonly-field">
+                Magic Link (Email)
+            </div>
+        </div>
+
+        <div class="settings-row">
+            <label>Active Session</label>
+            <div class="readonly-field">
+                Valid
+            </div>
+        </div>
+
+        <p class="muted">
+            Sessions automatically expire for security.
+        </p>
+    </div>
+
+    <!-- ================= Logout ================= -->
+    <div class="settings-card danger-zone">
+        <h3>Sign Out</h3>
+
+        <p class="muted">
+            Signing out will immediately revoke your active session.
+        </p>
+
+        <button class="danger-btn" disabled>
+            Logout (Coming Soon)
+        </button>
+    </div>
+
+</div>
+
+{% endblock %}
