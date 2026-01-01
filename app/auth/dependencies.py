@@ -5,13 +5,13 @@ Authentication Dependencies
 
 Rules:
 - Server-side session validation ONLY
-- No cookies assumption yet
-- Session token expected via Authorization header
+- Support Authorization header (API)
+- Support HTTP-only cookie (Browser UI)
 """
 
 from typing import Optional
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status, Cookie
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -21,41 +21,53 @@ from app.users.models import User
 
 
 # =========================================================
-# CURRENT USER DEPENDENCY (ASYNC-SAFE)
+# CURRENT USER DEPENDENCY (HEADER OR COOKIE)
 # =========================================================
 async def get_current_user(
     authorization: Optional[str] = Header(default=None),
+    session_token: Optional[str] = Cookie(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """
     Resolve current logged-in user from session token.
-    Expects:
-    Authorization: Bearer <session_token>
+
+    Priority:
+    1. Authorization header (API clients)
+    2. HTTP-only cookie (Browser UI)
     """
-    if not authorization:
+
+    token: Optional[str] = None
+
+    # -------------------------------
+    # API Clients (Authorization)
+    # -------------------------------
+    if authorization:
+        if not authorization.startswith("Bearer "):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authorization format",
+            )
+        token = authorization.replace("Bearer ", "").strip()
+
+    # -------------------------------
+    # Browser UI (Cookie)
+    # -------------------------------
+    elif session_token:
+        token = session_token
+
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authorization header missing",
+            detail="Authentication required",
         )
 
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization format",
-        )
-
-    session_token = authorization.replace("Bearer ", "").strip()
-
-    session = await get_active_session(db, session_token)
+    session = await get_active_session(db, token)
     if not session:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired session",
         )
 
-    # -----------------------------------------------------
-    # IMPORTANT: Explicit user fetch (NO lazy loading)
-    # -----------------------------------------------------
     result = await db.execute(
         select(User).where(User.id == session.user_id)
     )
@@ -76,9 +88,6 @@ async def get_current_user(
 async def require_user(
     current_user: User = Depends(get_current_user),
 ) -> User:
-    """
-    Ensure user is authenticated (any role).
-    """
     return current_user
 
 
@@ -88,9 +97,6 @@ async def require_user(
 async def require_admin(
     current_user: User = Depends(get_current_user),
 ) -> User:
-    """
-    Ensure user has admin role.
-    """
     if current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
