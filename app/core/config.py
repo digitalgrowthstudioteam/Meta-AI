@@ -8,13 +8,20 @@ from typing import Optional
 
 
 class Settings:
-    # ===============================
-    # DATABASE
-    # ===============================
+    # ======================
+    # Database
+    # ======================
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
         "postgresql+asyncpg://meta_ai_user:StrongPassword123@localhost:5432/meta_ai_db"
     )
+
+    # ======================
+    # Meta OAuth
+    # ======================
+    META_APP_ID: str = os.getenv("META_APP_ID", "")
+    META_APP_SECRET: str = os.getenv("META_APP_SECRET", "")
+    META_REDIRECT_URI: str = os.getenv("META_REDIRECT_URI", "")
 
     # ===============================
     # SMTP (OPTIONAL)
