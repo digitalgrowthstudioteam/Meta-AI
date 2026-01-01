@@ -11,6 +11,7 @@ Rules:
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Form
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db_session import get_db
@@ -40,7 +41,7 @@ async def login_request(
 
 
 # =========================================================
-# VERIFY MAGIC LINK
+# VERIFY MAGIC LINK (REDIRECT TO DASHBOARD)
 # =========================================================
 @router.get("/verify")
 async def verify_login(
@@ -48,8 +49,8 @@ async def verify_login(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Verify magic token and create session.
-    Returns session token for client usage.
+    Verify magic token, create session,
+    and redirect user to dashboard.
     """
     session_token = await verify_magic_login(db, raw_token=token)
 
@@ -59,10 +60,12 @@ async def verify_login(
             detail="Invalid or expired login link",
         )
 
-    return {
-        "session_token": session_token,
-        "token_type": "Bearer",
-    }
+    # 🔐 Session is already stored server-side.
+    # We do NOT expose it to the browser.
+    return RedirectResponse(
+        url="/dashboard",
+        status_code=status.HTTP_302_FOUND,
+    )
 
 
 # =========================================================
