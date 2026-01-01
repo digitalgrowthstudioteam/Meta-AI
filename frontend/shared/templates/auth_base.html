@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}Digital Growth Studio{% endblock %}</title>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Global CSS -->
+    <link rel="stylesheet" href="/static/shared/css/app.css">
+
+    {% block head %}{% endblock %}
+</head>
+<body class="auth-body">
+
+    <!-- Auth Page Container -->
+    <div class="auth-container">
+
+        {% block content %}
+        <!-- Auth page content goes here -->
+        {% endblock %}
+
+    </div>
+
+    {% block scripts %}{% endblock %}
+
+</body>
+</html>
