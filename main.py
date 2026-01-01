@@ -3,9 +3,15 @@ Digital Growth Studio (Meta-AI)
 Main application entry point
 """
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+
+# =========================
+# AUTH DEPENDENCY
+# =========================
+from app.auth.dependencies import require_user
+from app.users.models import User
 
 # =========================
 # ROUTERS
@@ -64,6 +70,24 @@ def login_page(request: Request):
     return shared_templates.TemplateResponse(
         "login.html",
         {"request": request},
+    )
+
+
+@app.get("/dashboard")
+def dashboard_page(
+    request: Request,
+    current_user: User = Depends(require_user),
+):
+    """
+    User dashboard UI.
+    Requires authenticated session.
+    """
+    return user_templates.TemplateResponse(
+        "dashboard.html",
+        {
+            "request": request,
+            "user": current_user,
+        },
     )
 
 
