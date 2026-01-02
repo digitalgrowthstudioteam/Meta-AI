@@ -1,8 +1,7 @@
 import httpx
 from typing import List, Dict
 
-from app.core.config import settings
-from app.meta.models import MetaAdAccount
+from app.meta_api.models import MetaAdAccount
 
 
 class MetaCampaignClient:
@@ -78,6 +77,6 @@ class MetaCampaignClient:
 
                 # Meta returns a full URL for next page
                 url = next_url
-                params = None  # next already contains params
+                params = None
 
         return campaigns
