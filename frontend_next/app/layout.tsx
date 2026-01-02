@@ -21,11 +21,11 @@ export default function RootLayout({ children }: Props) {
         });
 
         if (!res.ok) {
-          router.replace("/auth/login");
+          router.replace("/login"); // ✅ FIXED
           return;
         }
       } catch {
-        router.replace("/auth/login");
+        router.replace("/login"); // ✅ FIXED
         return;
       } finally {
         setCheckingSession(false);
@@ -35,9 +35,6 @@ export default function RootLayout({ children }: Props) {
     verifySession();
   }, [router]);
 
-  /* ===============================
-     LOADING STATE (SESSION CHECK)
-  =============================== */
   if (checkingSession) {
     return (
       <html lang="en">
@@ -57,9 +54,7 @@ export default function RootLayout({ children }: Props) {
       <body className="bg-gray-100 text-gray-900">
         <div className="flex h-screen w-screen overflow-hidden">
           
-          {/* ===============================
-              SIDEBAR
-          =============================== */}
+          {/* SIDEBAR */}
           <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
             <div className="h-16 flex items-center px-6 border-b border-gray-200 font-semibold text-lg">
               Digital Growth Studio
@@ -77,9 +72,7 @@ export default function RootLayout({ children }: Props) {
             </nav>
           </aside>
 
-          {/* ===============================
-              MAIN CONTENT
-          =============================== */}
+          {/* MAIN */}
           <div className="flex flex-col flex-1">
             <header className="h-16 bg-white border-b border-gray-200 flex items-center px-6">
               <div className="text-sm text-gray-600">
@@ -97,9 +90,6 @@ export default function RootLayout({ children }: Props) {
   );
 }
 
-/* ===============================
-   SIDEBAR LINK
-=============================== */
 function SidebarLink({
   href,
   label,
