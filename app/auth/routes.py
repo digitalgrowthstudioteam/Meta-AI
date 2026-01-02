@@ -47,7 +47,7 @@ async def verify_login(
         )
 
     response = RedirectResponse(
-        url="/dashboard",
+        url="https://meta-ai.digitalgrowthstudio.in/dashboard",
         status_code=status.HTTP_302_FOUND,
     )
 
@@ -75,7 +75,7 @@ async def logout(
     db: AsyncSession = Depends(get_db),
 ):
     response = RedirectResponse(
-        url="https://meta-ai.digitalgrowthstudio.in/dashboard",
+        url="login",
         status_code=status.HTTP_302_FOUND,
     )
 
