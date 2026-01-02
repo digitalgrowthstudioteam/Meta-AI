@@ -2,7 +2,7 @@
 Digital Growth Studio (Meta-AI)
 Main application entry point
 """
-
+import app.models  # registers all SQLAlchemy models
 from fastapi import FastAPI, Request, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
