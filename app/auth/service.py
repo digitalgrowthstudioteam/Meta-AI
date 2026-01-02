@@ -6,23 +6,22 @@ Responsibilities:
 - Verify magic link token
 - Auto-create user on first login
 - Create server-side session
-- Enforce IST-based unique email subject
+- Assign trial subscription on first successful login
 
 Rules:
 - NO routes here
-- NO real email sending
 - NO billing enforcement
 - NO Meta / AI logic
 """
 
-from app.core.email import send_email
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from app.core.email import send_email
 from app.auth.models import MagicLoginToken
 from app.auth.tokens import (
     create_magic_token_pair,
@@ -32,12 +31,16 @@ from app.auth.tokens import (
 )
 from app.auth.sessions import create_session
 from app.users.models import User
+from app.plans.subscription_models import Subscription
 
 
 # =========================================================
 # CONSTANTS (LOCKED)
 # =========================================================
 IST_ZONE = ZoneInfo("Asia/Kolkata")
+TRIAL_DAYS = 7
+GRACE_DAYS = 3
+TRIAL_AI_LIMIT = 3
 
 
 # =========================================================
@@ -46,8 +49,6 @@ IST_ZONE = ZoneInfo("Asia/Kolkata")
 def build_magic_link_subject() -> str:
     """
     Build unique email subject with IST timestamp.
-    Example:
-    Digital Growth Studio Login | 30 Dec 2025, 18:45 IST
     """
     now_ist = datetime.now(IST_ZONE)
     return (
@@ -57,16 +58,13 @@ def build_magic_link_subject() -> str:
 
 
 # =========================================================
-# PLACEHOLDER EMAIL SENDER (NO-OP)
+# PLACEHOLDER EMAIL SENDER
 # =========================================================
 def send_magic_link_email(
     to_email: str,
     magic_link: str,
     subject: str,
 ) -> None:
-    """
-    Send magic login link via SMTP.
-    """
     html_body = f"""
     <html>
         <body style="font-family: Arial, sans-serif;">
@@ -95,6 +93,7 @@ def send_magic_link_email(
         text_body=f"Login link: {magic_link}",
     )
 
+
 # =========================================================
 # LOGIN REQUEST FLOW
 # =========================================================
@@ -102,12 +101,6 @@ async def request_magic_login(
     db: AsyncSession,
     email: str,
 ) -> None:
-    """
-    Step 1:
-    - Generate magic token
-    - Store hashed token
-    - Send placeholder email
-    """
     raw_token, token_hash = create_magic_token_pair()
 
     magic_token = MagicLoginToken(
@@ -121,8 +114,6 @@ async def request_magic_login(
     await db.commit()
 
     subject = build_magic_link_subject()
-
-    # Magic link format (frontend will consume later)
     magic_link = f"https://meta-ai.digitalgrowthstudio.in/auth/verify?token={raw_token}"
 
     send_magic_link_email(
@@ -139,14 +130,6 @@ async def verify_magic_login(
     db: AsyncSession,
     raw_token: str,
 ) -> Optional[str]:
-    """
-    Step 2:
-    - Verify magic token
-    - Mark token as used
-    - Create or fetch user
-    - Create session
-    - Return session token
-    """
     token_hash = hash_magic_token(raw_token)
 
     result = await db.execute(
@@ -157,10 +140,7 @@ async def verify_magic_login(
     )
     magic_token = result.scalar_one_or_none()
 
-    if not magic_token:
-        return None
-
-    if is_token_expired(magic_token.expires_at):
+    if not magic_token or is_token_expired(magic_token.expires_at):
         return None
 
     # Mark token as used
@@ -171,10 +151,13 @@ async def verify_magic_login(
     # Fetch or create user
     user = await _get_or_create_user(db, magic_token.email)
 
+    # Assign trial if needed
+    await _assign_trial_if_needed(db, user)
+
     # Create session
     session = await create_session(db, user)
 
-    # Update last login timestamp
+    # Update last login
     user.last_login_at = datetime.utcnow()
     await db.commit()
 
@@ -188,10 +171,6 @@ async def _get_or_create_user(
     db: AsyncSession,
     email: str,
 ) -> User:
-    """
-    Fetch existing user or auto-create new user.
-    Trial assignment hook lives here (future).
-    """
     result = await db.execute(
         select(User).where(User.email == email)
     )
@@ -200,7 +179,6 @@ async def _get_or_create_user(
     if user:
         return user
 
-    # Auto-create user (trial assignment happens later)
     user = User(
         email=email,
         name=email.split("@")[0],
@@ -213,3 +191,43 @@ async def _get_or_create_user(
     await db.refresh(user)
 
     return user
+
+
+async def _assign_trial_if_needed(
+    db: AsyncSession,
+    user: User,
+) -> None:
+    """
+    Assign 7-day trial + 3-day grace period
+    ONLY if user has no subscription.
+    """
+    result = await db.execute(
+        select(Subscription).where(
+            Subscription.user_id == user.id
+        )
+    )
+    existing = result.scalar_one_or_none()
+
+    if existing:
+        return
+
+    now = datetime.utcnow()
+    trial_end = now + timedelta(days=TRIAL_DAYS)
+    grace_end = trial_end + timedelta(days=GRACE_DAYS)
+
+    subscription = Subscription(
+        user_id=user.id,
+        is_trial=True,
+        trial_start_date=now.date(),
+        trial_end_date=trial_end.date(),
+        status="trial",
+        starts_at=now,
+        ends_at=trial_end,
+        grace_ends_at=grace_end,
+        ai_campaign_limit_snapshot=TRIAL_AI_LIMIT,
+        is_active=True,
+        created_by_admin=False,
+    )
+
+    db.add(subscription)
+    await db.commit()
