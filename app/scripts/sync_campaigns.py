@@ -16,6 +16,19 @@ import asyncio
 import logging
 from uuid import UUID
 
+# =========================================================
+# 🔴 CRITICAL: FORCE ORM REGISTRATION (DO NOT REMOVE)
+# =========================================================
+import app.users.models
+import app.auth.models          # ← registers Session
+import app.meta_api.models
+import app.campaigns.models
+import app.plans.subscription_models
+import app.admin.models
+
+# =========================================================
+# NORMAL IMPORTS (SAFE AFTER REGISTRATION)
+# =========================================================
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,9 +58,6 @@ async def sync_all_users_campaigns() -> None:
     """
 
     async with AsyncSessionLocal() as db:  # type: AsyncSession
-        # -------------------------------------------------
-        # 1️⃣ Fetch users with Meta access
-        # -------------------------------------------------
         stmt = (
             select(User.id)
             .join(
@@ -66,9 +76,6 @@ async def sync_all_users_campaigns() -> None:
 
         logger.info("Starting campaign sync for %d users", len(user_ids))
 
-        # -------------------------------------------------
-        # 2️⃣ Sync campaigns per user (isolated failures)
-        # -------------------------------------------------
         for user_id in user_ids:
             try:
                 campaigns = await CampaignService.sync_from_meta(
