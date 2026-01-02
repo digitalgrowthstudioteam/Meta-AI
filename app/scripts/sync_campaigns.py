@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db_session import AsyncSessionLocal
 from app.users.models import User
-from app.meta.models import UserMetaAdAccount
+from app.meta_api.models import UserMetaAdAccount
 from app.campaigns.service import CampaignService
 
 
