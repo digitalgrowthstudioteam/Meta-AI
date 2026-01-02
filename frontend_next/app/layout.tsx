@@ -4,10 +4,22 @@ import "./globals.css";
 import Link from "next/link";
 import { ReactNode, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import clsx from "clsx";
 
 type Props = {
   children: ReactNode;
 };
+
+const NAV_ITEMS = [
+  { href: "/dashboard", label: "Dashboard" },
+  { href: "/campaigns", label: "Campaigns", primary: true },
+  { href: "/ai-actions", label: "AI Actions" },
+  { href: "/audience-insights", label: "Audience Insights" },
+  { href: "/reports", label: "Reports" },
+  { href: "/buy-campaign", label: "Buy Campaign" },
+  { href: "/billing", label: "Billing" },
+  { href: "/settings", label: "Settings" },
+];
 
 export default function RootLayout({ children }: Props) {
   const router = useRouter();
@@ -16,8 +28,10 @@ export default function RootLayout({ children }: Props) {
 
   const isPublicPage = pathname === "/login";
 
+  /* ======================================================
+     SESSION VERIFICATION (DO NOT TOUCH)
+  ====================================================== */
   useEffect(() => {
-    // ✅ Skip auth enforcement on public pages
     if (isPublicPage) {
       setCheckingSession(false);
       return;
@@ -44,16 +58,16 @@ export default function RootLayout({ children }: Props) {
     verifySession();
   }, [router, isPublicPage]);
 
-  /* ===============================
+  /* ======================================================
      LOADING STATE
-  =============================== */
+  ====================================================== */
   if (checkingSession) {
     return (
       <html lang="en">
-        <body className="bg-gray-100 text-gray-900">
+        <body className="bg-gray-50 text-gray-900">
           <div className="flex items-center justify-center h-screen">
             <div className="text-sm text-gray-500">
-              Verifying session…
+              Verifying secure session…
             </div>
           </div>
         </body>
@@ -61,53 +75,64 @@ export default function RootLayout({ children }: Props) {
     );
   }
 
-  /* ===============================
-     PUBLIC PAGE (LOGIN)
-  =============================== */
+  /* ======================================================
+     PUBLIC (LOGIN) LAYOUT
+  ====================================================== */
   if (isPublicPage) {
     return (
       <html lang="en">
-        <body className="bg-gray-100 text-gray-900">
+        <body className="bg-gray-50 text-gray-900">
           {children}
         </body>
       </html>
     );
   }
 
-  /* ===============================
+  /* ======================================================
      PROTECTED APP LAYOUT
-  =============================== */
+  ====================================================== */
   return (
     <html lang="en">
-      <body className="bg-gray-100 text-gray-900">
+      <body className="bg-gray-50 text-gray-900">
         <div className="flex h-screen w-screen overflow-hidden">
           
-          {/* SIDEBAR */}
+          {/* ================= SIDEBAR ================= */}
           <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
-            <div className="h-16 flex items-center px-6 border-b border-gray-200 font-semibold text-lg">
-              Digital Growth Studio
+            <div className="h-16 flex items-center px-6 border-b border-gray-200">
+              <div className="font-semibold text-base tracking-tight">
+                Digital Growth Studio
+              </div>
             </div>
 
-            <nav className="flex-1 px-4 py-4 space-y-1 text-sm">
-              <SidebarLink href="/dashboard" label="Dashboard" />
-              <SidebarLink href="/campaigns" label="Campaigns" />
-              <SidebarLink href="/ai-actions" label="AI Actions" />
-              <SidebarLink href="/audience-insights" label="Audience Insights" />
-              <SidebarLink href="/billing" label="Billing" />
-              <SidebarLink href="/buy-campaign" label="Buy Campaign" />
-              <SidebarLink href="/reports" label="Reports" />
-              <SidebarLink href="/settings" label="Settings" />
+            <nav className="flex-1 px-3 py-4 space-y-1 text-sm">
+              {NAV_ITEMS.map((item) => (
+                <SidebarLink
+                  key={item.href}
+                  href={item.href}
+                  label={item.label}
+                  active={pathname.startsWith(item.href)}
+                  primary={item.primary}
+                />
+              ))}
             </nav>
           </aside>
 
-          {/* MAIN */}
-          <div className="flex flex-col flex-1">
-            <header className="h-16 bg-white border-b border-gray-200 flex items-center px-6">
+          {/* ================= MAIN ================= */}
+          <div className="flex flex-col flex-1 min-w-0">
+            
+            {/* HEADER */}
+            <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6">
               <div className="text-sm text-gray-600">
                 Meta Ads AI • Read-only Intelligence Mode
               </div>
+
+              <div className="text-sm text-gray-700">
+                {/* Placeholder for Meta Account + User */}
+                Account: <span className="font-medium">Not Connected</span>
+              </div>
             </header>
 
+            {/* CONTENT */}
             <main className="flex-1 overflow-y-auto p-6">
               {children}
             </main>
@@ -118,17 +143,30 @@ export default function RootLayout({ children }: Props) {
   );
 }
 
+/* ======================================================
+   SIDEBAR LINK
+====================================================== */
 function SidebarLink({
   href,
   label,
+  active,
+  primary,
 }: {
   href: string;
   label: string;
+  active: boolean;
+  primary?: boolean;
 }) {
   return (
     <Link
       href={href}
-      className="block rounded px-3 py-2 text-gray-700 hover:bg-gray-100 transition"
+      className={clsx(
+        "flex items-center rounded px-3 py-2 transition",
+        active
+          ? "bg-blue-50 text-blue-700 font-medium"
+          : "text-gray-700 hover:bg-gray-100",
+        primary && !active && "font-medium"
+      )}
     >
       {label}
     </Link>
