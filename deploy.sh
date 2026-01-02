@@ -21,4 +21,9 @@ echo "Installing Python dependencies..."
 venv/bin/pip install --upgrade pip
 venv/bin/pip install -r requirements.txt
 
+# Restart application service
+echo "Restarting meta-ai service..."
+systemctl daemon-reload
+systemctl restart meta-ai.service
+
 echo "Deploy completed successfully."
