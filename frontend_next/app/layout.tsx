@@ -1,8 +1,9 @@
-// frontend_next/app/layout.tsx
+"use client";
 
 import "./globals.css";
 import Link from "next/link";
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 export const metadata = {
   title: "Digital Growth Studio",
@@ -14,6 +15,48 @@ type Props = {
 };
 
 export default function RootLayout({ children }: Props) {
+  const router = useRouter();
+  const [checkingSession, setCheckingSession] = useState(true);
+
+  useEffect(() => {
+    async function verifySession() {
+      try {
+        const res = await fetch("/auth/me", {
+          credentials: "include",
+        });
+
+        if (!res.ok) {
+          router.replace("/auth/login");
+          return;
+        }
+      } catch (error) {
+        router.replace("/auth/login");
+        return;
+      } finally {
+        setCheckingSession(false);
+      }
+    }
+
+    verifySession();
+  }, [router]);
+
+  /* ===============================
+     LOADING STATE (SESSION CHECK)
+  =============================== */
+  if (checkingSession) {
+    return (
+      <html lang="en">
+        <body className="bg-gray-100 text-gray-900">
+          <div className="flex items-center justify-center h-screen">
+            <div className="text-sm text-gray-500">
+              Verifying session…
+            </div>
+          </div>
+        </body>
+      </html>
+    );
+  }
+
   return (
     <html lang="en">
       <body className="bg-gray-100 text-gray-900">
