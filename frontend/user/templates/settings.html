@@ -3,85 +3,93 @@
 {% block title %}Settings | Digital Growth Studio{% endblock %}
 
 {% block page_title %}
-Account Settings
+Account Intelligence
 {% endblock %}
 
 {% block content %}
 
-<div class="settings-container">
+<div class="audience-container">
 
-    <div class="settings-grid">
+    <!-- ================= AI Explainability Banner ================= -->
+    <div class="ai-info-banner">
+        <strong>Account Intelligence</strong>
+        <p>
+            Account settings are derived from your subscription state,
+            authentication model, and system security policies.
+        </p>
+    </div>
 
-        <!-- Profile -->
-        <div class="settings-card">
-            <h3>👤 Profile</h3>
+    <!-- ================= Settings Intelligence Cards ================= -->
+    <div class="audience-grid">
 
-            <div class="settings-row">
-                <span>Email</span>
-                <strong>{{ user.email }}</strong>
-            </div>
-
-            <div class="settings-row">
-                <span>Role</span>
-                <strong>{{ user.role | capitalize }}</strong>
-            </div>
-
-            <p class="muted">
-                Profile details are secured via email-based authentication.
+        <!-- Profile Intelligence -->
+        <div class="audience-card info">
+            <h3>Profile Intelligence</h3>
+            <p class="audience-metric">Identity · Role · Access</p>
+            <p class="audience-note">
+                This account is authenticated using secure email-based magic links.
             </p>
+
+            <p class="audience-note">
+                <strong>Email:</strong> {{ user.email }}<br>
+                <strong>Role:</strong> {{ user.role | capitalize }}
+            </p>
+
+            <span class="confidence high">Verified</span>
         </div>
 
-        <!-- Subscription -->
-        <div class="settings-card">
-            <h3>💳 Subscription</h3>
+        <!-- Subscription Intelligence -->
+        <div class="audience-card positive">
+            <h3>Subscription Intelligence</h3>
+            <p class="audience-metric">Plan · Limits · Eligibility</p>
+            <p class="audience-note">
+                Your current plan determines AI activation limits and access scope.
+            </p>
 
-            <div class="settings-row">
-                <span>Current Plan</span>
-                <strong>Starter</strong>
-            </div>
-
-            <div class="settings-row">
-                <span>AI-Active Limit</span>
-                <strong>3 Campaigns</strong>
-            </div>
+            <p class="audience-note">
+                <strong>Plan:</strong> Starter<br>
+                <strong>AI-Active Limit:</strong> 3 Campaigns
+            </p>
 
             <a href="/billing" class="link-btn">
                 View Billing & Plans →
             </a>
+
+            <span class="confidence high">Active</span>
         </div>
 
-        <!-- Security -->
-        <div class="settings-card">
-            <h3>🔐 Security</h3>
-
-            <div class="settings-row">
-                <span>Login Method</span>
-                <strong>Magic Link (Email)</strong>
-            </div>
-
-            <div class="settings-row">
-                <span>Session Status</span>
-                <strong class="status-ok">Active</strong>
-            </div>
-
-            <p class="muted">
-                Sessions expire automatically for your protection.
+        <!-- Security Intelligence -->
+        <div class="audience-card positive">
+            <h3>Security Intelligence</h3>
+            <p class="audience-metric">Session · Authentication</p>
+            <p class="audience-note">
+                Sessions are short-lived and automatically revoked for safety.
             </p>
+
+            <p class="audience-note">
+                <strong>Login Method:</strong> Magic Link (Email)<br>
+                <strong>Session Status:</strong> Active
+            </p>
+
+            <span class="confidence high">Secure</span>
         </div>
 
-        <!-- Logout -->
-        <div class="settings-card danger">
-            <h3>🚪 Sign Out</h3>
+    </div>
 
+    <!-- ================= Action Section ================= -->
+    <div class="audience-section">
+        <h2 class="section-title">Account Actions</h2>
+
+        <div class="empty-state">
+            <p>Logout is currently disabled.</p>
             <p class="muted">
-                This will revoke your current session.
+                Session revocation controls will be available soon.
             </p>
 
             <button class="danger-btn" disabled>
                 Logout (Coming Soon)
             </button>
         </div>
-
     </div>
 
 </div>
