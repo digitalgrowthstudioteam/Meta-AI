@@ -19,84 +19,100 @@ Reports
         </p>
     </div>
 
-    <!-- ================= Report Summary Cards ================= -->
+    <!-- ================= Summary Cards ================= -->
     <div class="audience-grid">
 
-        <!-- Total Campaigns -->
         <div class="audience-card info">
             <h3>Total Campaigns</h3>
             <p class="audience-metric" id="total-campaigns">—</p>
-            <p class="audience-note">
-                All campaigns fetched from connected Meta ad accounts.
-            </p>
-            <span class="confidence medium">Live Data</span>
+            <p class="audience-note">All fetched campaigns</p>
+            <span class="confidence medium">Live</span>
         </div>
 
-        <!-- AI Active Campaigns -->
         <div class="audience-card positive">
             <h3>AI-Active Campaigns</h3>
             <p class="audience-metric" id="ai-active-campaigns">—</p>
-            <p class="audience-note">
-                Campaigns currently optimized by AI.
-            </p>
+            <p class="audience-note">Optimized by AI</p>
             <span class="confidence high">High Confidence</span>
         </div>
 
-        <!-- Lead vs Sales -->
         <div class="audience-card warning">
-            <h3>Lead vs Sales Split</h3>
+            <h3>Lead vs Sales</h3>
             <p class="audience-metric">
                 <span id="lead-campaigns">—</span> Leads ·
                 <span id="sales-campaigns">—</span> Sales
             </p>
-            <p class="audience-note">
-                Objective distribution across AI-active campaigns.
-            </p>
+            <p class="audience-note">Objective split</p>
             <span class="confidence medium">Derived</span>
         </div>
 
     </div>
 
-    <!-- ================= Detailed Reports Section ================= -->
+    <!-- ================= Campaign-level Reports ================= -->
     <div class="audience-section">
-        <h2 class="section-title">Detailed Reports</h2>
+        <h2 class="section-title">Campaign-level Reports</h2>
 
-        <div class="empty-state">
-            <p>More detailed reports coming soon.</p>
+        <div id="campaign-empty" class="empty-state">
+            <p>No campaign reports available yet.</p>
             <p class="muted">
-                This section will include campaign-level and time-based insights.
+                Campaign-level data will appear once performance data
+                and AI actions are recorded.
             </p>
         </div>
+
+        <table id="campaign-table" class="report-table" style="display:none;">
+            <thead>
+                <tr>
+                    <th>Campaign Name</th>
+                    <th>Objective</th>
+                    <th>AI Status</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody id="campaign-rows"></tbody>
+        </table>
     </div>
 
 </div>
 
-<!-- ================= Reports API Integration ================= -->
 <script>
-(async function loadReportsOverview() {
+(async function loadReports() {
     try {
-        const response = await fetch("/api/reports/overview");
-        if (!response.ok) {
-            throw new Error("Failed to load reports");
+        /* ---------- OVERVIEW ---------- */
+        const overviewRes = await fetch("/api/reports/overview");
+        const overviewJson = await overviewRes.json();
+        const o = overviewJson.data || {};
+
+        document.getElementById("total-campaigns").innerText = o.total_campaigns ?? 0;
+        document.getElementById("ai-active-campaigns").innerText = o.ai_active_campaigns ?? 0;
+        document.getElementById("lead-campaigns").innerText = o.lead_campaigns ?? 0;
+        document.getElementById("sales-campaigns").innerText = o.sales_campaigns ?? 0;
+
+        /* ---------- CAMPAIGNS ---------- */
+        const campaignRes = await fetch("/api/reports/campaigns");
+        const campaignJson = await campaignRes.json();
+        const campaigns = campaignJson.campaigns || [];
+
+        if (campaigns.length > 0) {
+            document.getElementById("campaign-empty").style.display = "none";
+            document.getElementById("campaign-table").style.display = "table";
+
+            const tbody = document.getElementById("campaign-rows");
+
+            campaigns.forEach(c => {
+                const row = document.createElement("tr");
+                row.innerHTML = `
+                    <td>${c.name}</td>
+                    <td>${c.objective}</td>
+                    <td>${c.ai_active ? "AI-Active" : "Inactive"}</td>
+                    <td>${c.status}</td>
+                `;
+                tbody.appendChild(row);
+            });
         }
 
-        const result = await response.json();
-        const data = result.data || {};
-
-        document.getElementById("total-campaigns").innerText =
-            data.total_campaigns ?? "0";
-
-        document.getElementById("ai-active-campaigns").innerText =
-            data.ai_active_campaigns ?? "0";
-
-        document.getElementById("lead-campaigns").innerText =
-            data.lead_campaigns ?? "0";
-
-        document.getElementById("sales-campaigns").innerText =
-            data.sales_campaigns ?? "0";
-
-    } catch (error) {
-        console.error("Reports load error:", error);
+    } catch (err) {
+        console.error("Reports load error", err);
     }
 })();
 </script>
