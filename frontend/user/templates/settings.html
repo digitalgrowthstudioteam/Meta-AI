@@ -10,86 +10,78 @@ Account Settings
 
 <div class="settings-container">
 
-    <!-- ================= Profile ================= -->
-    <div class="settings-card">
-        <h3>Profile Information</h3>
+    <div class="settings-grid">
 
-        <div class="settings-row">
-            <label>Email</label>
-            <div class="readonly-field">
-                {{ user.email }}
+        <!-- Profile -->
+        <div class="settings-card">
+            <h3>👤 Profile</h3>
+
+            <div class="settings-row">
+                <span>Email</span>
+                <strong>{{ user.email }}</strong>
             </div>
+
+            <div class="settings-row">
+                <span>Role</span>
+                <strong>{{ user.role | capitalize }}</strong>
+            </div>
+
+            <p class="muted">
+                Profile details are secured via email-based authentication.
+            </p>
         </div>
 
-        <div class="settings-row">
-            <label>Account Role</label>
-            <div class="readonly-field">
-                {{ user.role | capitalize }}
+        <!-- Subscription -->
+        <div class="settings-card">
+            <h3>💳 Subscription</h3>
+
+            <div class="settings-row">
+                <span>Current Plan</span>
+                <strong>Starter</strong>
             </div>
+
+            <div class="settings-row">
+                <span>AI-Active Limit</span>
+                <strong>3 Campaigns</strong>
+            </div>
+
+            <a href="/billing" class="link-btn">
+                View Billing & Plans →
+            </a>
         </div>
 
-        <p class="muted">
-            Profile details are managed via secure email authentication.
-        </p>
-    </div>
+        <!-- Security -->
+        <div class="settings-card">
+            <h3>🔐 Security</h3>
 
-    <!-- ================= Subscription ================= -->
-    <div class="settings-card">
-        <h3>Subscription</h3>
-
-        <div class="settings-row">
-            <label>Current Plan</label>
-            <div class="readonly-field">
-                Starter
+            <div class="settings-row">
+                <span>Login Method</span>
+                <strong>Magic Link (Email)</strong>
             </div>
+
+            <div class="settings-row">
+                <span>Session Status</span>
+                <strong class="status-ok">Active</strong>
+            </div>
+
+            <p class="muted">
+                Sessions expire automatically for your protection.
+            </p>
         </div>
 
-        <div class="settings-row">
-            <label>AI-Active Limit</label>
-            <div class="readonly-field">
-                3 Campaigns
-            </div>
+        <!-- Logout -->
+        <div class="settings-card danger">
+            <h3>🚪 Sign Out</h3>
+
+            <p class="muted">
+                This will revoke your current session.
+            </p>
+
+            <button class="danger-btn" disabled>
+                Logout (Coming Soon)
+            </button>
         </div>
 
-        <a href="/billing" class="link-btn">
-            View Billing & Plans →
-        </a>
-    </div>
-
-    <!-- ================= Security ================= -->
-    <div class="settings-card">
-        <h3>Security</h3>
-
-        <div class="settings-row">
-            <label>Login Method</label>
-            <div class="readonly-field">
-                Magic Link (Email)
-            </div>
-        </div>
-
-        <div class="settings-row">
-            <label>Active Session</label>
-            <div class="readonly-field">
-                Valid
-            </div>
-        </div>
-
-        <p class="muted">
-            Sessions automatically expire for security.
-        </p>
-    </div>
-
-    <!-- ================= Logout ================= -->
-    <div class="settings-card danger-zone">
-        <h3>Sign Out</h3>
-
-        <p class="muted">
-            Signing out will immediately revoke your active session.
-        </p>
-
-        <button class="danger-btn" disabled>
-            Logout (Coming Soon)
-        </button>
     </div>
 
 </div>
