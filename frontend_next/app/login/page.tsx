@@ -17,9 +17,13 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      const res = await fetch(`/auth/login?email=${encodeURIComponent(email)}`, {
+      const res = await fetch("/auth/login", {
         method: "POST",
         credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email }),
       });
 
       if (!res.ok) {
@@ -92,7 +96,6 @@ export default function LoginPage() {
           </form>
         )}
 
-        {/* FOOTER */}
         <div className="mt-6 text-center text-xs text-gray-400">
           Passwordless login • Secure • No spam
         </div>
