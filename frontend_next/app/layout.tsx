@@ -3,7 +3,7 @@
 import "./globals.css";
 import Link from "next/link";
 import { ReactNode, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 
 type Props = {
   children: ReactNode;
@@ -11,9 +11,18 @@ type Props = {
 
 export default function RootLayout({ children }: Props) {
   const router = useRouter();
+  const pathname = usePathname();
   const [checkingSession, setCheckingSession] = useState(true);
 
+  const isPublicPage = pathname === "/login";
+
   useEffect(() => {
+    // ✅ Skip auth enforcement on public pages
+    if (isPublicPage) {
+      setCheckingSession(false);
+      return;
+    }
+
     async function verifySession() {
       try {
         const res = await fetch("/auth/me", {
@@ -21,11 +30,11 @@ export default function RootLayout({ children }: Props) {
         });
 
         if (!res.ok) {
-          router.replace("/login"); // ✅ FIXED
+          router.replace("/login");
           return;
         }
       } catch {
-        router.replace("/login"); // ✅ FIXED
+        router.replace("/login");
         return;
       } finally {
         setCheckingSession(false);
@@ -33,8 +42,11 @@ export default function RootLayout({ children }: Props) {
     }
 
     verifySession();
-  }, [router]);
+  }, [router, isPublicPage]);
 
+  /* ===============================
+     LOADING STATE
+  =============================== */
   if (checkingSession) {
     return (
       <html lang="en">
@@ -49,6 +61,22 @@ export default function RootLayout({ children }: Props) {
     );
   }
 
+  /* ===============================
+     PUBLIC PAGE (LOGIN)
+  =============================== */
+  if (isPublicPage) {
+    return (
+      <html lang="en">
+        <body className="bg-gray-100 text-gray-900">
+          {children}
+        </body>
+      </html>
+    );
+  }
+
+  /* ===============================
+     PROTECTED APP LAYOUT
+  =============================== */
   return (
     <html lang="en">
       <body className="bg-gray-100 text-gray-900">
