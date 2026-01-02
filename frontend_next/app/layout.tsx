@@ -5,11 +5,6 @@ import Link from "next/link";
 import { ReactNode, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-export const metadata = {
-  title: "Digital Growth Studio",
-  description: "Meta Ads AI Optimization & Campaign Intelligence",
-};
-
 type Props = {
   children: ReactNode;
 };
@@ -29,7 +24,7 @@ export default function RootLayout({ children }: Props) {
           router.replace("/auth/login");
           return;
         }
-      } catch (error) {
+      } catch {
         router.replace("/auth/login");
         return;
       } finally {
@@ -63,7 +58,7 @@ export default function RootLayout({ children }: Props) {
         <div className="flex h-screen w-screen overflow-hidden">
           
           {/* ===============================
-              SIDEBAR (META STYLE)
+              SIDEBAR
           =============================== */}
           <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
             <div className="h-16 flex items-center px-6 border-b border-gray-200 font-semibold text-lg">
@@ -83,23 +78,19 @@ export default function RootLayout({ children }: Props) {
           </aside>
 
           {/* ===============================
-              MAIN CONTENT AREA
+              MAIN CONTENT
           =============================== */}
           <div className="flex flex-col flex-1">
-            
-            {/* Top Bar */}
             <header className="h-16 bg-white border-b border-gray-200 flex items-center px-6">
               <div className="text-sm text-gray-600">
                 Meta Ads AI • Read-only Intelligence Mode
               </div>
             </header>
 
-            {/* Page Content */}
             <main className="flex-1 overflow-y-auto p-6">
               {children}
             </main>
           </div>
-
         </div>
       </body>
     </html>
@@ -107,7 +98,7 @@ export default function RootLayout({ children }: Props) {
 }
 
 /* ===============================
-   SIDEBAR LINK COMPONENT
+   SIDEBAR LINK
 =============================== */
 function SidebarLink({
   href,
