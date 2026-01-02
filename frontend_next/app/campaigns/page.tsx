@@ -10,13 +10,28 @@ type Campaign = {
   ai_active: boolean;
 };
 
+type AIAction = {
+  id: string;
+  action_type: string;
+  reasoning?: string;
+  confidence?: number;
+  created_at: string;
+};
+
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
   const [selectedCampaign, setSelectedCampaign] =
     useState<Campaign | null>(null);
 
+  const [aiActions, setAiActions] = useState<AIAction[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+
+  /* ===============================
+     FETCH CAMPAIGNS
+  =============================== */
   useEffect(() => {
     async function fetchCampaigns() {
       try {
@@ -25,12 +40,12 @@ export default function CampaignsPage() {
         });
 
         if (!res.ok) {
-          throw new Error("Failed to fetch campaigns");
+          throw new Error();
         }
 
         const data = await res.json();
         setCampaigns(data);
-      } catch (err) {
+      } catch {
         setError("Unable to load campaigns");
       } finally {
         setLoading(false);
@@ -40,101 +55,96 @@ export default function CampaignsPage() {
     fetchCampaigns();
   }, []);
 
+  /* ===============================
+     FETCH AI ACTIONS (PER CAMPAIGN)
+  =============================== */
+  useEffect(() => {
+    if (!selectedCampaign) return;
+
+    async function fetchAiActions() {
+      setAiLoading(true);
+      try {
+        const res = await fetch(
+          `/ai/campaign/${selectedCampaign.id}/actions`,
+          { credentials: "include" }
+        );
+
+        if (!res.ok) throw new Error();
+
+        const data = await res.json();
+        setAiActions(data);
+      } catch {
+        setAiActions([]);
+      } finally {
+        setAiLoading(false);
+      }
+    }
+
+    fetchAiActions();
+  }, [selectedCampaign]);
+
   return (
     <div className="relative space-y-6">
-      {/* ===============================
-          PAGE HEADER
-      =============================== */}
+      {/* HEADER */}
       <div>
         <h1 className="text-xl font-semibold text-gray-900">
           Campaigns
         </h1>
         <p className="text-sm text-gray-500">
-          Read-only Meta campaigns with AI insights
+          Read-only Meta campaigns with AI intelligence
         </p>
       </div>
 
-      {/* ===============================
-          LOADING STATE (SKELETON)
-      =============================== */}
+      {/* LOADING */}
       {loading && (
-        <div className="bg-white border border-gray-200 rounded">
-          {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="flex items-center px-4 py-4 border-b last:border-b-0 animate-pulse"
-            >
-              <div className="flex-1 space-y-2">
-                <div className="h-3 w-1/3 bg-gray-200 rounded" />
-                <div className="h-2 w-1/4 bg-gray-100 rounded" />
-              </div>
-              <div className="h-6 w-16 bg-gray-200 rounded" />
-            </div>
-          ))}
+        <div className="bg-white border rounded p-6 text-sm text-gray-500">
+          Loading campaigns…
         </div>
       )}
 
-      {/* ===============================
-          ERROR STATE
-      =============================== */}
+      {/* ERROR */}
       {!loading && error && (
-        <div className="text-sm text-red-600">
-          {error}
-        </div>
+        <div className="text-sm text-red-600">{error}</div>
       )}
 
-      {/* ===============================
-          CAMPAIGNS TABLE
-      =============================== */}
+      {/* TABLE */}
       {!loading && !error && (
         <div className="bg-white border border-gray-200 rounded overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
+            <thead className="bg-gray-50 border-b">
               <tr>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">
-                  Campaign
-                </th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">
-                  Objective
-                </th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">
-                  Status
-                </th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">
-                  AI
-                </th>
-                <th className="px-4 py-3" />
+                <th className="px-4 py-3 text-left">Campaign</th>
+                <th className="px-4 py-3 text-left">Objective</th>
+                <th className="px-4 py-3 text-left">Status</th>
+                <th className="px-4 py-3 text-left">AI</th>
+                <th />
               </tr>
             </thead>
             <tbody>
-              {campaigns.map((campaign) => (
+              {campaigns.map((c) => (
                 <tr
-                  key={campaign.id}
+                  key={c.id}
                   className="border-b last:border-b-0 hover:bg-gray-50 transition"
                 >
                   <td className="px-4 py-3">
-                    <div className="font-medium text-gray-900">
-                      {campaign.name}
-                    </div>
+                    <div className="font-medium">{c.name}</div>
                     <div className="text-xs text-gray-500">
-                      ID: {campaign.id.slice(0, 8)}…
+                      {c.id.slice(0, 8)}…
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <ObjectiveBadge objective={campaign.objective} />
+                    <ObjectiveBadge value={c.objective} />
                   </td>
                   <td className="px-4 py-3">
-                    <StatusBadge status={campaign.status} />
+                    <StatusBadge value={c.status} />
                   </td>
                   <td className="px-4 py-3">
-                    <AIBadge active={campaign.ai_active} />
+                    <AIBadge active={c.ai_active} />
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button
-                      onClick={() =>
-                        setSelectedCampaign(campaign)
-                      }
-                      className="text-blue-600 hover:text-blue-800 font-medium text-sm"
+                      onClick={() => setSelectedCampaign(c)}
+                      className="text-blue-600 font-medium hover:text-blue-800"
                     >
                       View AI
                     </button>
@@ -146,7 +156,7 @@ export default function CampaignsPage() {
                 <tr>
                   <td
                     colSpan={5}
-                    className="px-4 py-8 text-center text-gray-500"
+                    className="px-6 py-8 text-center text-gray-500"
                   >
                     No campaigns found
                   </td>
@@ -161,10 +171,10 @@ export default function CampaignsPage() {
           AI DRAWER
       =============================== */}
       {selectedCampaign && (
-        <div className="fixed top-0 right-0 h-full w-[420px] bg-white border-l border-gray-200 shadow-xl z-50">
-          <div className="h-16 flex items-center justify-between px-5 border-b border-gray-200">
+        <div className="fixed top-0 right-0 h-full w-[440px] bg-white border-l shadow-xl z-50">
+          <div className="h-16 flex items-center justify-between px-5 border-b">
             <div>
-              <h2 className="text-sm font-semibold text-gray-900">
+              <h2 className="text-sm font-semibold">
                 AI Insights
               </h2>
               <p className="text-xs text-gray-500">
@@ -179,23 +189,83 @@ export default function CampaignsPage() {
             </button>
           </div>
 
-          <div className="p-5 space-y-6 text-sm">
-            <Section
-              title="Objective"
-              value={selectedCampaign.objective}
-            />
-            <Section
-              title="AI Status"
-              value={
-                selectedCampaign.ai_active
-                  ? "AI Active"
-                  : "AI Inactive"
-              }
-            />
-            <Section
-              title="AI Suggestions"
-              value="Read-only insights available. No actions applied."
-            />
+          <div className="p-5 space-y-6 text-sm overflow-y-auto h-[calc(100%-64px)]">
+            {/* AI LOADING */}
+            {aiLoading && (
+              <div className="text-gray-500">
+                Loading AI insights…
+              </div>
+            )}
+
+            {/* NO AI */}
+            {!aiLoading && aiActions.length === 0 && (
+              <div className="text-gray-500">
+                No AI suggestions generated yet.
+              </div>
+            )}
+
+            {/* LATEST AI */}
+            {!aiLoading && aiActions.length > 0 && (
+              <>
+                <Section
+                  title="Latest AI Suggestion"
+                  value={aiActions[0].action_type}
+                  highlight
+                />
+
+                <Section
+                  title="Why AI suggests this"
+                  value={
+                    aiActions[0].reasoning ??
+                    "Insufficient reasoning data available."
+                  }
+                />
+
+                <Section
+                  title="Confidence"
+                  value={
+                    aiActions[0].confidence
+                      ? `${Math.round(
+                          aiActions[0].confidence * 100
+                        )}%`
+                      : "N/A"
+                  }
+                />
+
+                <Section
+                  title="Generated At"
+                  value={new Date(
+                    aiActions[0].created_at
+                  ).toLocaleString()}
+                />
+
+                {/* HISTORY */}
+                {aiActions.length > 1 && (
+                  <div>
+                    <div className="text-xs font-medium text-gray-500 mb-2">
+                      History
+                    </div>
+                    <div className="space-y-2">
+                      {aiActions.slice(1).map((a) => (
+                        <div
+                          key={a.id}
+                          className="border rounded px-3 py-2 text-xs"
+                        >
+                          <div className="font-medium">
+                            {a.action_type}
+                          </div>
+                          <div className="text-gray-500">
+                            {new Date(
+                              a.created_at
+                            ).toLocaleString()}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}
@@ -204,30 +274,26 @@ export default function CampaignsPage() {
 }
 
 /* ===============================
-   SMALL UI COMPONENTS
+   UI COMPONENTS
 =============================== */
 
-function StatusBadge({ status }: { status: string }) {
-  const isActive = status.toLowerCase() === "active";
+function StatusBadge({ value }: { value: string }) {
+  const active = value.toLowerCase() === "active";
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${
-        isActive
+      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+        active
           ? "bg-green-100 text-green-700"
           : "bg-gray-200 text-gray-700"
       }`}
     >
-      {status}
+      {value}
     </span>
   );
 }
 
-function ObjectiveBadge({
-  objective,
-}: {
-  objective: string;
-}) {
-  const isLead = objective.toLowerCase().includes("lead");
+function ObjectiveBadge({ value }: { value: string }) {
+  const isLead = value.toLowerCase().includes("lead");
   return (
     <span
       className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
@@ -236,7 +302,7 @@ function ObjectiveBadge({
           : "bg-orange-100 text-orange-700"
       }`}
     >
-      {objective}
+      {value}
     </span>
   );
 }
@@ -258,16 +324,26 @@ function AIBadge({ active }: { active: boolean }) {
 function Section({
   title,
   value,
+  highlight,
 }: {
   title: string;
   value: string;
+  highlight?: boolean;
 }) {
   return (
     <div>
       <div className="text-xs font-medium text-gray-500 mb-1">
         {title}
       </div>
-      <div className="text-gray-800">{value}</div>
+      <div
+        className={`${
+          highlight
+            ? "font-semibold text-gray-900"
+            : "text-gray-800"
+        }`}
+      >
+        {value}
+      </div>
     </div>
   );
 }
