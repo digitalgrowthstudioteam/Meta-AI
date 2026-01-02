@@ -27,10 +27,10 @@ from app.meta_api.models import (
 )
 
 # ======================
-# AI / Audience
+# AI / Audience (REAL PATHS)
 # ======================
-from app.ai.models import AIAction
-from app.ai.audience_models import AudienceInsight
+from app.ai_engine.models import AIAction
+from app.audience_engine.models import AudienceInsight
 
 # ======================
 # Billing
