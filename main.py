@@ -61,7 +61,7 @@ templates = Jinja2Templates(directory="frontend")
 
 
 # =========================
-# UI ROUTES — PHASE 5.1 (NO BUSINESS LOGIC)
+# UI ROUTES — PHASE 5.1 / 5.2 (NO BUSINESS LOGIC)
 # =========================
 
 @app.get("/login")
@@ -163,6 +163,23 @@ def settings_page(
 ):
     return templates.TemplateResponse(
         "user/templates/settings.html",
+        {
+            "request": request,
+            "user": current_user,
+        },
+    )
+
+
+# =========================
+# NEW — REPORTS UI ROUTE (PHASE 5.2)
+# =========================
+@app.get("/reports")
+def reports_page(
+    request: Request,
+    current_user: User = Depends(require_user),
+):
+    return templates.TemplateResponse(
+        "user/templates/reports.html",
         {
             "request": request,
             "user": current_user,
