@@ -1,15 +1,15 @@
 """
 Background job: Sync Meta campaigns for all users.
 
-This script is SAFE to run:
-- via systemd timer (cron)
-- manually from CLI
-- repeatedly (idempotent)
+SAFE TO RUN:
+- systemd timer
+- manual CLI
+- repeated executions (idempotent)
 
-Responsibilities:
-- Iterate over users with Meta access
-- Sync campaigns via CampaignService
-- Log success / failure per user
+Golden Rules:
+- Uses canonical async DB session
+- No direct engine usage
+- No business logic duplication
 """
 
 import asyncio
@@ -19,24 +19,24 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import async_session_factory
+from app.core.db_session import async_session
 from app.users.models import User
-from app.meta_api.models import UserMetaAdAccount
+from app.meta.models import UserMetaAdAccount
 from app.campaigns.service import CampaignService
 
 
 # =========================================================
-# LOGGING SETUP
+# LOGGING
 # =========================================================
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [campaign-sync] %(levelname)s: %(message)s",
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("campaign-sync")
 
 
 # =========================================================
-# CORE SYNC LOGIC
+# CORE JOB
 # =========================================================
 async def sync_all_users_campaigns() -> None:
     """
@@ -44,8 +44,10 @@ async def sync_all_users_campaigns() -> None:
     who have at least one Meta ad account connected.
     """
 
-    async with async_session_factory() as db:  # type: AsyncSession
-        # 1️⃣ Find users who have Meta ad account access
+    async with async_session() as db:  # type: AsyncSession
+        # -------------------------------------------------
+        # 1️⃣ Fetch users with Meta access
+        # -------------------------------------------------
         stmt = (
             select(User.id)
             .join(
@@ -64,7 +66,9 @@ async def sync_all_users_campaigns() -> None:
 
         logger.info("Starting campaign sync for %d users", len(user_ids))
 
-        # 2️⃣ Sync campaigns per user (isolated)
+        # -------------------------------------------------
+        # 2️⃣ Sync campaigns per user (isolated failures)
+        # -------------------------------------------------
         for user_id in user_ids:
             try:
                 campaigns = await CampaignService.sync_from_meta(
@@ -76,14 +80,11 @@ async def sync_all_users_campaigns() -> None:
                     user_id,
                     len(campaigns),
                 )
-            except Exception as e:
-                # IMPORTANT:
-                # - Do NOT stop the job
-                # - Log and continue
+            except Exception as exc:
                 logger.error(
-                    "User %s: campaign sync failed: %s",
+                    "User %s: campaign sync failed → %s",
                     user_id,
-                    str(e),
+                    str(exc),
                 )
 
         logger.info("Campaign sync job completed")
