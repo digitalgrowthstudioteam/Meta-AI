@@ -57,7 +57,7 @@ async def verify_login(
         value=session_token,
         httponly=True,
         secure=True,
-        samesite="none",
+        samesite="lax",
         path="/",
         domain="meta-ai.digitalgrowthstudio.in",  # 🔑 isolate to THIS app
         max_age=60 * 60 * 24 * 3,               # 3 days
