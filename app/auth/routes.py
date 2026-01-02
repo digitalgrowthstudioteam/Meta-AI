@@ -3,6 +3,7 @@ Auth Routes
 - /auth/login
 - /auth/verify
 - /auth/logout
+- /auth/me
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Form
@@ -13,7 +14,6 @@ from app.core.db_session import get_db
 from app.auth.service import request_magic_login, verify_magic_login
 from app.auth.dependencies import require_user
 from app.users.models import User
-
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -47,35 +47,52 @@ async def verify_login(
         )
 
     response = RedirectResponse(
-        url="https://meta-ai.digitalgrowthstudio.in/dashboard",
+        url="/dashboard",   # ✅ relative path (important)
         status_code=status.HTTP_302_FOUND,
     )
 
-    # 🔐 ISOLATED COOKIE (CRITICAL FIX)
+    # 🔐 ISOLATED COOKIE — META AI ONLY
     response.set_cookie(
-        key="meta_ai_session",                 # UNIQUE cookie name
+        key="meta_ai_session",
         value=session_token,
         httponly=True,
         secure=True,
         samesite="lax",
         path="/",
-        domain="meta-ai.digitalgrowthstudio.in",  # 🔑 isolate to THIS app
-        max_age=60 * 60 * 24 * 3,               # 3 days
+        domain="meta-ai.digitalgrowthstudio.in",
+        max_age=60 * 60 * 24 * 3,  # 3 days
     )
 
     return response
 
 
 # =========================================================
+# AUTH SESSION CHECK (USED BY FRONTEND)
+# =========================================================
+@router.get("/me")
+async def auth_me(
+    user: User = Depends(require_user),
+):
+    """
+    Frontend auth guard endpoint.
+    If this returns 200 → user is logged in.
+    """
+    return {
+        "id": user.id,
+        "email": user.email,
+        "role": user.role,
+    }
+
+
+# =========================================================
 # LOGOUT
 # =========================================================
-@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/logout")
 async def logout(
-    current_user: User = Depends(require_user),
-    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_user),
 ):
     response = RedirectResponse(
-        url="login",
+        url="/login",
         status_code=status.HTTP_302_FOUND,
     )
 
@@ -86,16 +103,3 @@ async def logout(
     )
 
     return response
-
-# =========================================================
-# AUTH SESSION CHECK (FRONTEND USE)
-# =========================================================
-@router.get("/me", response_model=None)
-async def auth_me(
-    user: User = Depends(require_user),
-):
-    return {
-        "id": user.id,
-        "email": user.email,
-        "role": user.role,
-    }
