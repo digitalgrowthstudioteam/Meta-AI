@@ -23,9 +23,16 @@ def upgrade():
     # -----------------------------------------------------
 
     # Drop user_id column (ownership removed)
-    with op.batch_alter_table("meta_ad_accounts") as batch_op:
-        batch_op.drop_column("user_id")
+    from sqlalchemy import inspect
 
+    conn = op.get_bind()
+    inspector = inspect(conn)
+    columns = [col["name"] for col in inspector.get_columns("meta_ad_accounts")]
+    
+    with op.batch_alter_table("meta_ad_accounts") as batch_op:
+        if "user_id" in columns:
+            batch_op.drop_column("user_id")
+    
         batch_op.create_unique_constraint(
             "uq_meta_ad_accounts_meta_account_id",
             ["meta_account_id"],
