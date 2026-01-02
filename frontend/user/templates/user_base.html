@@ -1,11 +1,5 @@
 {% extends "shared/templates/base.html" %}
 
-{# ========================================================= #}
-{# USER BASE TEMPLATE                                         #}
-{# Extends: shared app base layout                            #}
-{# Purpose: User-only sidebar & structure                     #}
-{# ========================================================= #}
-
 {% block sidebar %}
 <nav class="sidebar-nav">
     <ul>
@@ -15,7 +9,12 @@
         <li><a href="/audience/insights">Audience Insights</a></li>
         <li><a href="/meta/connect">Connect Meta Ads Account</a></li>
         <li><a href="/campaigns/buy">Buy Campaign</a></li>
-        <li class="disabled"><span>Reports (Coming Soon)</span></li>
+
+        <li class="sidebar-disabled">
+            <span>Reports</span>
+            <small class="badge">Coming Soon</small>
+        </li>
+
         <li><a href="/billing">Billing & Plans</a></li>
         <li><a href="/settings">Settings</a></li>
     </ul>
