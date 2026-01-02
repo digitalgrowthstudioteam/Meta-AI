@@ -61,11 +61,13 @@ export default function CampaignsPage() {
   useEffect(() => {
     if (!selectedCampaign) return;
 
+    const campaignId = selectedCampaign.id;
+
     async function fetchAiActions() {
       setAiLoading(true);
       try {
         const res = await fetch(
-          `/ai/campaign/${selectedCampaign.id}/actions`,
+          `/ai/campaign/${campaignId}/actions`,
           { credentials: "include" }
         );
 
@@ -85,7 +87,6 @@ export default function CampaignsPage() {
 
   return (
     <div className="relative space-y-6">
-      {/* HEADER */}
       <div>
         <h1 className="text-xl font-semibold text-gray-900">
           Campaigns
@@ -95,19 +96,16 @@ export default function CampaignsPage() {
         </p>
       </div>
 
-      {/* LOADING */}
       {loading && (
         <div className="bg-white border rounded p-6 text-sm text-gray-500">
           Loading campaigns…
         </div>
       )}
 
-      {/* ERROR */}
       {!loading && error && (
         <div className="text-sm text-red-600">{error}</div>
       )}
 
-      {/* TABLE */}
       {!loading && !error && (
         <div className="bg-white border border-gray-200 rounded overflow-hidden">
           <table className="w-full text-sm">
@@ -167,9 +165,6 @@ export default function CampaignsPage() {
         </div>
       )}
 
-      {/* ===============================
-          AI DRAWER
-      =============================== */}
       {selectedCampaign && (
         <div className="fixed top-0 right-0 h-full w-[440px] bg-white border-l shadow-xl z-50">
           <div className="h-16 flex items-center justify-between px-5 border-b">
@@ -190,21 +185,18 @@ export default function CampaignsPage() {
           </div>
 
           <div className="p-5 space-y-6 text-sm overflow-y-auto h-[calc(100%-64px)]">
-            {/* AI LOADING */}
             {aiLoading && (
               <div className="text-gray-500">
                 Loading AI insights…
               </div>
             )}
 
-            {/* NO AI */}
             {!aiLoading && aiActions.length === 0 && (
               <div className="text-gray-500">
                 No AI suggestions generated yet.
               </div>
             )}
 
-            {/* LATEST AI */}
             {!aiLoading && aiActions.length > 0 && (
               <>
                 <Section
@@ -212,7 +204,6 @@ export default function CampaignsPage() {
                   value={aiActions[0].action_type}
                   highlight
                 />
-
                 <Section
                   title="Why AI suggests this"
                   value={
@@ -220,50 +211,22 @@ export default function CampaignsPage() {
                     "Insufficient reasoning data available."
                   }
                 />
-
                 <Section
                   title="Confidence"
                   value={
-                    aiActions[0].confidence
+                    aiActions[0].confidence !== undefined
                       ? `${Math.round(
                           aiActions[0].confidence * 100
                         )}%`
                       : "N/A"
                   }
                 />
-
                 <Section
                   title="Generated At"
                   value={new Date(
                     aiActions[0].created_at
                   ).toLocaleString()}
                 />
-
-                {/* HISTORY */}
-                {aiActions.length > 1 && (
-                  <div>
-                    <div className="text-xs font-medium text-gray-500 mb-2">
-                      History
-                    </div>
-                    <div className="space-y-2">
-                      {aiActions.slice(1).map((a) => (
-                        <div
-                          key={a.id}
-                          className="border rounded px-3 py-2 text-xs"
-                        >
-                          <div className="font-medium">
-                            {a.action_type}
-                          </div>
-                          <div className="text-gray-500">
-                            {new Date(
-                              a.created_at
-                            ).toLocaleString()}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </>
             )}
           </div>
@@ -336,11 +299,11 @@ function Section({
         {title}
       </div>
       <div
-        className={`${
+        className={
           highlight
             ? "font-semibold text-gray-900"
             : "text-gray-800"
-        }`}
+        }
       >
         {value}
       </div>
