@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 
@@ -11,32 +11,87 @@ from app.campaigns.schemas import CampaignResponse, ToggleAIRequest
 router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
 
 
-@router.get("/", response_model=list[CampaignResponse])
+# =========================================================
+# LIST CAMPAIGNS (READ-ONLY VISIBILITY)
+# =========================================================
+@router.get(
+    "/",
+    response_model=list[CampaignResponse],
+    status_code=status.HTTP_200_OK,
+)
 async def list_campaigns(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    campaigns = await CampaignService.list_campaigns(
+    """
+    Returns all campaigns visible to the user.
+    Meta is the source of truth.
+    """
+    return await CampaignService.list_campaigns(
         db=db,
         user_id=current_user.id,
     )
-    return campaigns
 
 
-@router.post("/{campaign_id}/ai-toggle", response_model=CampaignResponse)
+# =========================================================
+# SYNC CAMPAIGNS FROM META (READ-ONLY)
+# =========================================================
+@router.post(
+    "/sync",
+    response_model=list[CampaignResponse],
+    status_code=status.HTTP_200_OK,
+)
+async def sync_campaigns_from_meta(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Fetches ALL campaigns from Meta (read-only)
+    and stores them idempotently.
+
+    No AI logic.
+    No billing logic.
+    No enforcement here.
+    """
+    try:
+        return await CampaignService.sync_from_meta(
+            db=db,
+            user_id=current_user.id,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+# =========================================================
+# AI TOGGLE (ENFORCEMENT COMES IN PHASE 7.3)
+# =========================================================
+@router.post(
+    "/{campaign_id}/ai-toggle",
+    response_model=CampaignResponse,
+    status_code=status.HTTP_200_OK,
+)
 async def toggle_ai(
     campaign_id: UUID,
     payload: ToggleAIRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    """
+    Enables / disables AI for a campaign.
+    Enforcement rules will be applied in Phase 7.3.
+    """
     try:
-        campaign = await CampaignService.toggle_ai(
+        return await CampaignService.toggle_ai(
             db=db,
             user_id=current_user.id,
             campaign_id=campaign_id,
             enable=payload.enable,
         )
-        return campaign
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
