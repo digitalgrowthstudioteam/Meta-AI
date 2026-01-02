@@ -75,7 +75,7 @@ async def logout(
     db: AsyncSession = Depends(get_db),
 ):
     response = RedirectResponse(
-        url="/login",
+        url="https://meta-ai.digitalgrowthstudio.in/dashboard",
         status_code=status.HTTP_302_FOUND,
     )
 
