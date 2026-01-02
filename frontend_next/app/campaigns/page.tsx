@@ -54,16 +54,18 @@ export default function CampaignsPage() {
   }, []);
 
   /* ===============================
-     FETCH AI ACTIONS
+     FETCH AI ACTIONS (SAFE)
   =============================== */
   useEffect(() => {
     if (!selectedCampaign) return;
+
+    const campaignId = selectedCampaign.id;
 
     async function fetchAiActions() {
       setAiLoading(true);
       try {
         const res = await fetch(
-          `/ai/campaign/${selectedCampaign.id}/actions`,
+          `/ai/campaign/${campaignId}/actions`,
           { credentials: "include" }
         );
 
