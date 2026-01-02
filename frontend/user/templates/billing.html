@@ -1,4 +1,4 @@
-{% extends "user_base.html" %}
+{% extends "user/templates/user_base.html" %}
 
 {% block title %}Billing & Plans | Digital Growth Studio{% endblock %}
 
@@ -10,68 +10,36 @@ Billing & Plans
 
 <div class="billing-container">
 
-    <!-- ================= Current Plan ================= -->
     <div class="current-plan-card">
-        <div class="plan-header">
-            <h2>Current Plan</h2>
-            <span class="plan-badge">Starter</span>
-        </div>
+        <h2>Current Plan</h2>
+        <div class="plan-badge">Starter</div>
 
-        <div class="plan-details">
-            <div class="plan-price">₹999 / month</div>
+        <div class="plan-price">₹999 / month</div>
 
-            <ul class="plan-features">
-                <li>✔ 3 AI-Active Campaigns</li>
-                <li>✔ 1 Meta Ad Account</li>
-                <li>✔ Lead OR Sales Ads</li>
-                <li>✖ Add-on Campaigns</li>
-            </ul>
-        </div>
+        <ul class="plan-features">
+            <li>✔ 3 AI-Active Campaigns</li>
+            <li>✔ 1 Meta Ad Account</li>
+            <li>✔ Lead OR Sales Ads</li>
+            <li>✖ Add-ons not allowed</li>
+        </ul>
 
-        <div class="plan-footer">
-            <p class="muted">
-                Billing cycle renews monthly.
-            </p>
-        </div>
+        <p class="muted">
+            Billing renews monthly. Invoices will be available here.
+        </p>
     </div>
 
-    <!-- ================= Usage ================= -->
-    <div class="usage-card">
-        <h3>Usage Overview</h3>
-
-        <div class="usage-item">
-            <div class="usage-label">AI-Active Campaigns</div>
-            <div class="usage-bar">
-                <div class="usage-fill" style="width: 66%;"></div>
-            </div>
-            <div class="usage-meta">2 / 3 used</div>
-        </div>
-
-        <div class="usage-item">
-            <div class="usage-label">Connected Ad Accounts</div>
-            <div class="usage-bar">
-                <div class="usage-fill" style="width: 100%;"></div>
-            </div>
-            <div class="usage-meta">1 / 1 used</div>
-        </div>
-    </div>
-
-    <!-- ================= Upgrade Plans ================= -->
     <div class="upgrade-section">
-        <h3>Upgrade Your Plan</h3>
+        <h3>Upgrade Options</h3>
 
         <div class="upgrade-grid">
 
-            <!-- Pro -->
             <div class="upgrade-card highlight">
                 <h4>Pro</h4>
                 <div class="upgrade-price">₹1999 / month</div>
-
                 <ul>
                     <li>25 AI-Active Campaigns</li>
-                    <li>1 Meta Ad Account</li>
                     <li>Lead + Sales Ads</li>
-                    <li>No add-ons</li>
+                    <li>Single Ad Account</li>
                 </ul>
 
                 <button class="primary-btn" disabled>
@@ -79,15 +47,12 @@ Billing & Plans
                 </button>
             </div>
 
-            <!-- Agency -->
             <div class="upgrade-card">
                 <h4>Agency</h4>
                 <div class="upgrade-price">₹2999 / month</div>
-
                 <ul>
                     <li>30 AI-Active Campaigns</li>
                     <li>Multiple Ad Accounts</li>
-                    <li>Lead + Sales Ads</li>
                     <li>Add-on campaigns allowed</li>
                 </ul>
 
