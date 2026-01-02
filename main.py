@@ -20,6 +20,7 @@ from app.auth.routes import router as auth_router
 from app.campaigns.routes import router as campaigns_router
 from app.admin.routes import router as admin_router
 from app.meta_api.routes import router as meta_router
+from app.reports.routes import router as reports_router  # ✅ NEW
 
 
 # =========================
@@ -170,9 +171,6 @@ def settings_page(
     )
 
 
-# =========================
-# NEW — REPORTS UI ROUTE (PHASE 5.2)
-# =========================
 @app.get("/reports")
 def reports_page(
     request: Request,
@@ -194,6 +192,7 @@ app.include_router(auth_router)
 app.include_router(campaigns_router)
 app.include_router(admin_router)
 app.include_router(meta_router)
+app.include_router(reports_router)  # ✅ NEW
 
 
 # =========================
