@@ -7,6 +7,7 @@ from app.auth.dependencies import get_current_user
 from app.users.models import User
 from app.campaigns.service import CampaignService
 from app.campaigns.schemas import CampaignResponse, ToggleAIRequest
+from app.plans.enforcement import EnforcementError
 
 router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
 
@@ -66,7 +67,7 @@ async def sync_campaigns_from_meta(
 
 
 # =========================================================
-# AI TOGGLE (ENFORCEMENT COMES IN PHASE 7.3)
+# AI TOGGLE (FULL ENFORCEMENT FIREWALL)
 # =========================================================
 @router.post(
     "/{campaign_id}/ai-toggle",
@@ -81,7 +82,10 @@ async def toggle_ai(
 ):
     """
     Enables / disables AI for a campaign.
-    Enforcement rules will be applied in Phase 7.3.
+
+    Enforcement failures return:
+    - 409 Conflict
+    - Structured payload {code, message, action}
     """
     try:
         return await CampaignService.toggle_ai(
@@ -90,6 +94,13 @@ async def toggle_ai(
             campaign_id=campaign_id,
             enable=payload.enable,
         )
+
+    except EnforcementError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=e.to_dict(),
+        )
+
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
