@@ -1,58 +1,69 @@
-from datetime import datetime, date
+from datetime import datetime
 import uuid
 
 from sqlalchemy import (
-    Boolean,
-    Date,
-    DateTime,
-    ForeignKey,
-    Integer,
     String,
+    DateTime,
+    Boolean,
+    ForeignKey,
 )
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.base import Base
+
+# ✅ CRITICAL: import Plan so mapper can resolve it
+from app.plans.models import Plan
 
 
 class Subscription(Base):
     __tablename__ = "subscriptions"
 
     id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
         primary_key=True,
         default=uuid.uuid4,
     )
 
     user_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("users.id"),
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    plan_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("plans.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
+
+    status: Mapped[str] = mapped_column(
+        String,
         nullable=False,
     )
 
-    plan_id: Mapped[int | None] = mapped_column(
-        ForeignKey("plans.id"),
+    starts_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+    )
+
+    ends_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
         nullable=True,
     )
 
-    # Trial (legacy)
-    is_trial: Mapped[bool] = mapped_column(Boolean, default=False)
-    trial_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    trial_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    trial_ai_campaign_limit: Mapped[int] = mapped_column(Integer, default=3)
+    ai_campaign_limit_snapshot: Mapped[int] = mapped_column(
+        nullable=False,
+        default=0,
+    )
 
-    start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    assigned_by_admin: Mapped[bool] = mapped_column(Boolean, default=False)
-
-    # Enforcement
-    status: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    starts_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    ends_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    grace_ends_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-
-    ai_campaign_limit_snapshot: Mapped[int | None] = mapped_column(Integer, nullable=True)
-
-    created_by_admin: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False,
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
@@ -60,6 +71,10 @@ class Subscription(Base):
         nullable=False,
     )
 
-    # Relationships — STRING BASED (SAFE NOW)
-    user = relationship("User")
-    plan = relationship("Plan")
+    # =====================================================
+    # RELATIONSHIPS
+    # =====================================================
+    plan = relationship(
+        Plan,               # ✅ direct class reference
+        lazy="selectin",
+    )
