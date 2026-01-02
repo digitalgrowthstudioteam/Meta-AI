@@ -25,7 +25,7 @@ from app.users.models import User
 # =========================================================
 async def get_current_user(
     authorization: Optional[str] = Header(default=None),
-    session_token: Optional[str] = Cookie(default=None),
+    meta_ai_session: Optional[str] = Cookie(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """
@@ -52,8 +52,8 @@ async def get_current_user(
     # -------------------------------
     # Browser UI (Cookie)
     # -------------------------------
-    elif session_token:
-        token = session_token
+    elif meta_ai_session:
+        token = meta_ai_session
 
     if not token:
         raise HTTPException(
