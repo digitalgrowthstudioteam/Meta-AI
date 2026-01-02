@@ -206,7 +206,7 @@ async def _assign_trial_if_needed(
             Subscription.user_id == user.id
         )
     )
-    existing = result.scalar_one_or_none()
+    existing = result.scalars().first()
 
     if existing:
         return
@@ -231,4 +231,5 @@ async def _assign_trial_if_needed(
     )
 
     db.add(subscription)
+    await db.flush()   # IMPORTANT: force DB write
     await db.commit()
