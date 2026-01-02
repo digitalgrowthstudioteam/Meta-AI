@@ -52,14 +52,15 @@ async def verify_login(
         status_code=status.HTTP_302_FOUND,
     )
 
-    # 🔐 Secure, HTTP-only cookie
+    # 🔐 REQUIRED for magic-link auth over HTTPS
     response.set_cookie(
         key="session_token",
         value=session_token,
         httponly=True,
-        secure=True,          # HTTPS only
-        samesite="lax",
-        max_age=60 * 60 * 24 * 3,  # 3 days
+        secure=True,              # MUST be true for SameSite=None
+        samesite="none",          # 🔑 FIX (was lax)
+        path="/",                 # ensure frontend can read it
+        max_age=60 * 60 * 24 * 3, # 3 days
     )
 
     return response
@@ -73,12 +74,10 @@ async def logout(
     current_user: User = Depends(require_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Cookie-based logout
     response = RedirectResponse(
         url="/login",
         status_code=status.HTTP_302_FOUND,
     )
 
-    response.delete_cookie("session_token")
-
-    return response
+    response.delete_cookie(
+        key="
