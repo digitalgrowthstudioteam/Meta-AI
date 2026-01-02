@@ -39,14 +39,12 @@ export default function CampaignsPage() {
           credentials: "include",
         });
 
-        if (!res.ok) {
-          throw new Error();
-        }
+        if (!res.ok) throw new Error();
 
         const data = await res.json();
         setCampaigns(data);
       } catch {
-        setError("Unable to load campaigns");
+        setError("Unable to load campaigns from Meta.");
       } finally {
         setLoading(false);
       }
@@ -56,18 +54,16 @@ export default function CampaignsPage() {
   }, []);
 
   /* ===============================
-     FETCH AI ACTIONS (PER CAMPAIGN)
+     FETCH AI ACTIONS
   =============================== */
   useEffect(() => {
     if (!selectedCampaign) return;
-
-    const campaignId = selectedCampaign.id;
 
     async function fetchAiActions() {
       setAiLoading(true);
       try {
         const res = await fetch(
-          `/ai/campaign/${campaignId}/actions`,
+          `/ai/campaign/${selectedCampaign.id}/actions`,
           { credentials: "include" }
         );
 
@@ -86,19 +82,27 @@ export default function CampaignsPage() {
   }, [selectedCampaign]);
 
   return (
-    <div className="relative space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold text-gray-900">
-          Campaigns
-        </h1>
-        <p className="text-sm text-gray-500">
-          Read-only Meta campaigns with AI intelligence
-        </p>
+    <div className="space-y-6">
+      {/* ================= HEADER ================= */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900">
+            Campaigns
+          </h1>
+          <p className="text-sm text-gray-500">
+            Synced from Meta Ads Manager • Read-only
+          </p>
+        </div>
+
+        <div className="text-xs text-gray-500">
+          Managed in Meta
+        </div>
       </div>
 
+      {/* ================= STATES ================= */}
       {loading && (
-        <div className="bg-white border rounded p-6 text-sm text-gray-500">
-          Loading campaigns…
+        <div className="bg-white border border-gray-200 rounded p-6 text-sm text-gray-500">
+          Loading campaigns from Meta…
         </div>
       )}
 
@@ -106,18 +110,30 @@ export default function CampaignsPage() {
         <div className="text-sm text-red-600">{error}</div>
       )}
 
+      {/* ================= TABLE ================= */}
       {!loading && !error && (
         <div className="bg-white border border-gray-200 rounded overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="px-4 py-3 text-left">Campaign</th>
-                <th className="px-4 py-3 text-left">Objective</th>
-                <th className="px-4 py-3 text-left">Status</th>
-                <th className="px-4 py-3 text-left">AI</th>
-                <th />
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr className="text-gray-600">
+                <th className="px-4 py-3 text-left font-medium">
+                  Campaign
+                </th>
+                <th className="px-4 py-3 text-left font-medium">
+                  Objective
+                </th>
+                <th className="px-4 py-3 text-left font-medium">
+                  Status
+                </th>
+                <th className="px-4 py-3 text-left font-medium">
+                  AI Status
+                </th>
+                <th className="px-4 py-3 text-right font-medium">
+                  Insights
+                </th>
               </tr>
             </thead>
+
             <tbody>
               {campaigns.map((c) => (
                 <tr
@@ -125,20 +141,26 @@ export default function CampaignsPage() {
                   className="border-b last:border-b-0 hover:bg-gray-50 transition"
                 >
                   <td className="px-4 py-3">
-                    <div className="font-medium">{c.name}</div>
+                    <div className="font-medium text-gray-900">
+                      {c.name}
+                    </div>
                     <div className="text-xs text-gray-500">
-                      {c.id.slice(0, 8)}…
+                      ID: {c.id.slice(0, 8)}…
                     </div>
                   </td>
+
                   <td className="px-4 py-3">
                     <ObjectiveBadge value={c.objective} />
                   </td>
+
                   <td className="px-4 py-3">
                     <StatusBadge value={c.status} />
                   </td>
+
                   <td className="px-4 py-3">
                     <AIBadge active={c.ai_active} />
                   </td>
+
                   <td className="px-4 py-3 text-right">
                     <button
                       onClick={() => setSelectedCampaign(c)}
@@ -154,9 +176,9 @@ export default function CampaignsPage() {
                 <tr>
                   <td
                     colSpan={5}
-                    className="px-6 py-8 text-center text-gray-500"
+                    className="px-6 py-10 text-center text-gray-500"
                   >
-                    No campaigns found
+                    No campaigns found in this ad account.
                   </td>
                 </tr>
               )}
@@ -165,29 +187,31 @@ export default function CampaignsPage() {
         </div>
       )}
 
+      {/* ================= AI DRAWER ================= */}
       {selectedCampaign && (
-        <div className="fixed top-0 right-0 h-full w-[440px] bg-white border-l shadow-xl z-50">
-          <div className="h-16 flex items-center justify-between px-5 border-b">
+        <div className="fixed inset-y-0 right-0 w-[460px] bg-white border-l border-gray-200 shadow-2xl z-50">
+          <div className="h-16 flex items-center justify-between px-5 border-b border-gray-200">
             <div>
-              <h2 className="text-sm font-semibold">
+              <div className="text-sm font-semibold text-gray-900">
                 AI Insights
-              </h2>
-              <p className="text-xs text-gray-500">
+              </div>
+              <div className="text-xs text-gray-500">
                 {selectedCampaign.name}
-              </p>
+              </div>
             </div>
+
             <button
               onClick={() => setSelectedCampaign(null)}
-              className="text-gray-400 hover:text-gray-700"
+              className="text-gray-400 hover:text-gray-700 text-lg"
             >
-              ✕
+              ×
             </button>
           </div>
 
           <div className="p-5 space-y-6 text-sm overflow-y-auto h-[calc(100%-64px)]">
             {aiLoading && (
               <div className="text-gray-500">
-                Loading AI insights…
+                Analyzing campaign performance…
               </div>
             )}
 
@@ -199,19 +223,19 @@ export default function CampaignsPage() {
 
             {!aiLoading && aiActions.length > 0 && (
               <>
-                <Section
-                  title="Latest AI Suggestion"
+                <InfoBlock
+                  title="Latest Recommendation"
                   value={aiActions[0].action_type}
                   highlight
                 />
-                <Section
-                  title="Why AI suggests this"
+                <InfoBlock
+                  title="Reasoning"
                   value={
                     aiActions[0].reasoning ??
-                    "Insufficient reasoning data available."
+                    "Not enough data available."
                   }
                 />
-                <Section
+                <InfoBlock
                   title="Confidence"
                   value={
                     aiActions[0].confidence !== undefined
@@ -221,7 +245,7 @@ export default function CampaignsPage() {
                       : "N/A"
                   }
                 />
-                <Section
+                <InfoBlock
                   title="Generated At"
                   value={new Date(
                     aiActions[0].created_at
@@ -284,7 +308,7 @@ function AIBadge({ active }: { active: boolean }) {
   );
 }
 
-function Section({
+function InfoBlock({
   title,
   value,
   highlight,
