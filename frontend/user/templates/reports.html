@@ -22,34 +22,37 @@ Reports
     <!-- ================= Report Summary Cards ================= -->
     <div class="audience-grid">
 
-        <!-- Performance Summary -->
+        <!-- Total Campaigns -->
         <div class="audience-card info">
-            <h3>Performance Summary</h3>
-            <p class="audience-metric">Leads · Sales · Conversions</p>
+            <h3>Total Campaigns</h3>
+            <p class="audience-metric" id="total-campaigns">—</p>
             <p class="audience-note">
-                Aggregated performance metrics across AI-active campaigns.
+                All campaigns fetched from connected Meta ad accounts.
             </p>
-            <span class="confidence medium">Data Pending</span>
+            <span class="confidence medium">Live Data</span>
         </div>
 
-        <!-- AI Impact -->
+        <!-- AI Active Campaigns -->
         <div class="audience-card positive">
-            <h3>AI Impact</h3>
-            <p class="audience-metric">Before vs After</p>
+            <h3>AI-Active Campaigns</h3>
+            <p class="audience-metric" id="ai-active-campaigns">—</p>
             <p class="audience-note">
-                Shows measurable impact of AI-driven optimizations.
+                Campaigns currently optimized by AI.
             </p>
-            <span class="confidence medium">Coming Soon</span>
+            <span class="confidence high">High Confidence</span>
         </div>
 
-        <!-- Spend Overview -->
+        <!-- Lead vs Sales -->
         <div class="audience-card warning">
-            <h3>Spend Overview</h3>
-            <p class="audience-metric">Spend · ROAS · CPA</p>
-            <p class="audience-note">
-                Read-only spend and efficiency overview.
+            <h3>Lead vs Sales Split</h3>
+            <p class="audience-metric">
+                <span id="lead-campaigns">—</span> Leads ·
+                <span id="sales-campaigns">—</span> Sales
             </p>
-            <span class="confidence medium">Coming Soon</span>
+            <p class="audience-note">
+                Objective distribution across AI-active campaigns.
+            </p>
+            <span class="confidence medium">Derived</span>
         </div>
 
     </div>
@@ -59,14 +62,43 @@ Reports
         <h2 class="section-title">Detailed Reports</h2>
 
         <div class="empty-state">
-            <p>No reports available yet.</p>
+            <p>More detailed reports coming soon.</p>
             <p class="muted">
-                Reports will appear once campaigns generate sufficient data
-                and AI actions are executed.
+                This section will include campaign-level and time-based insights.
             </p>
         </div>
     </div>
 
 </div>
+
+<!-- ================= Reports API Integration ================= -->
+<script>
+(async function loadReportsOverview() {
+    try {
+        const response = await fetch("/api/reports/overview");
+        if (!response.ok) {
+            throw new Error("Failed to load reports");
+        }
+
+        const result = await response.json();
+        const data = result.data || {};
+
+        document.getElementById("total-campaigns").innerText =
+            data.total_campaigns ?? "0";
+
+        document.getElementById("ai-active-campaigns").innerText =
+            data.ai_active_campaigns ?? "0";
+
+        document.getElementById("lead-campaigns").innerText =
+            data.lead_campaigns ?? "0";
+
+        document.getElementById("sales-campaigns").innerText =
+            data.sales_campaigns ?? "0";
+
+    } catch (error) {
+        console.error("Reports load error:", error);
+    }
+})();
+</script>
 
 {% endblock %}
