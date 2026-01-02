@@ -198,16 +198,21 @@ async def _assign_trial_if_needed(
     user: User,
 ) -> None:
     """
-    Assign 7-day trial + 3-day grace period
-    ONLY if user has no subscription.
+    Assign 7-day trial + 3-day grace period.
+
+    Rules:
+    - Assign ONLY if user has no subscription at all
+    - NEVER override admin-assigned subscriptions
+    - Must be idempotent
     """
     result = await db.execute(
-        select(Subscription).where(
-            Subscription.user_id == user.id
-        )
+        select(Subscription)
+        .where(Subscription.user_id == user.id)
+        .order_by(Subscription.created_at.desc())
     )
     existing = result.scalars().first()
 
+    # 🔒 HARD RULE: never override existing subscriptions
     if existing:
         return
 
@@ -231,5 +236,4 @@ async def _assign_trial_if_needed(
     )
 
     db.add(subscription)
-    await db.flush()   # IMPORTANT: force DB write
     await db.commit()
