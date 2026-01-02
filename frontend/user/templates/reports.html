@@ -1,0 +1,72 @@
+{% extends "user/templates/user_base.html" %}
+
+{% block title %}Reports | Digital Growth Studio{% endblock %}
+
+{% block page_title %}
+Reports
+{% endblock %}
+
+{% block content %}
+
+<div class="audience-container">
+
+    <!-- ================= AI Explainability Banner ================= -->
+    <div class="ai-info-banner">
+        <strong>Performance & AI Reports</strong>
+        <p>
+            Reports provide read-only visibility into campaign performance,
+            AI actions, and outcome trends.
+        </p>
+    </div>
+
+    <!-- ================= Report Summary Cards ================= -->
+    <div class="audience-grid">
+
+        <!-- Performance Summary -->
+        <div class="audience-card info">
+            <h3>Performance Summary</h3>
+            <p class="audience-metric">Leads · Sales · Conversions</p>
+            <p class="audience-note">
+                Aggregated performance metrics across AI-active campaigns.
+            </p>
+            <span class="confidence medium">Data Pending</span>
+        </div>
+
+        <!-- AI Impact -->
+        <div class="audience-card positive">
+            <h3>AI Impact</h3>
+            <p class="audience-metric">Before vs After</p>
+            <p class="audience-note">
+                Shows measurable impact of AI-driven optimizations.
+            </p>
+            <span class="confidence medium">Coming Soon</span>
+        </div>
+
+        <!-- Spend Overview -->
+        <div class="audience-card warning">
+            <h3>Spend Overview</h3>
+            <p class="audience-metric">Spend · ROAS · CPA</p>
+            <p class="audience-note">
+                Read-only spend and efficiency overview.
+            </p>
+            <span class="confidence medium">Coming Soon</span>
+        </div>
+
+    </div>
+
+    <!-- ================= Detailed Reports Section ================= -->
+    <div class="audience-section">
+        <h2 class="section-title">Detailed Reports</h2>
+
+        <div class="empty-state">
+            <p>No reports available yet.</p>
+            <p class="muted">
+                Reports will appear once campaigns generate sufficient data
+                and AI actions are executed.
+            </p>
+        </div>
+    </div>
+
+</div>
+
+{% endblock %}
