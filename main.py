@@ -14,7 +14,7 @@ from app.auth.dependencies import require_user
 from app.users.models import User
 
 # =========================
-# ROUTERS
+# ROUTERS (API — LOGIC LATER)
 # =========================
 from app.auth.routes import router as auth_router
 from app.campaigns.routes import router as campaigns_router
@@ -55,14 +55,15 @@ app.mount(
 
 
 # =========================
-# FRONTEND — SINGLE TEMPLATE LOADER (CRITICAL)
+# FRONTEND — TEMPLATE LOADER (SINGLE SOURCE)
 # =========================
 templates = Jinja2Templates(directory="frontend")
 
 
 # =========================
-# UI ROUTES (NO LOGIC)
+# UI ROUTES — PHASE 5.1 (NO BUSINESS LOGIC)
 # =========================
+
 @app.get("/login")
 def login_page(request: Request):
     return templates.TemplateResponse(
@@ -76,10 +77,6 @@ def dashboard_page(
     request: Request,
     current_user: User = Depends(require_user),
 ):
-    """
-    User dashboard UI.
-    Requires authenticated session.
-    """
     return templates.TemplateResponse(
         "user/templates/dashboard.html",
         {
@@ -88,89 +85,93 @@ def dashboard_page(
         },
     )
 
-@app.get("/billing")
-def billing_page(
-    request: Request,
-    current_user: User = Depends(require_user),
-):
-    return user_templates.TemplateResponse(
-        "billing.html",
-        {"request": request, "user": current_user},
-    )
 
 @app.get("/campaigns")
 def campaigns_page(
     request: Request,
     current_user: User = Depends(require_user),
 ):
-    """
-    Campaign list UI.
-    Data will be connected later.
-    """
-    return user_templates.TemplateResponse(
-        "campaigns.html",
+    return templates.TemplateResponse(
+        "user/templates/campaigns.html",
         {
             "request": request,
             "user": current_user,
         },
     )
 
-@app.get("/ai-actions")
+
+@app.get("/ai/actions")
 def ai_actions_page(
     request: Request,
     current_user: User = Depends(require_user),
 ):
-    """
-    AI action history UI.
-    Shows explainable ML actions.
-    """
-    return user_templates.TemplateResponse(
-        "ai_actions.html",
+    return templates.TemplateResponse(
+        "user/templates/ai_actions.html",
         {
             "request": request,
             "user": current_user,
         },
     )
 
-@app.get("/audience-insights")
+
+@app.get("/audience/insights")
 def audience_insights_page(
     request: Request,
     current_user: User = Depends(require_user),
 ):
-    """
-    Audience insights UI.
-    AI-generated audience intelligence.
-    """
-    return user_templates.TemplateResponse(
-        "audience_insights.html",
+    return templates.TemplateResponse(
+        "user/templates/audience_insights.html",
         {
             "request": request,
             "user": current_user,
         },
     )
 
-@app.get("/buy-campaign")
+
+@app.get("/campaigns/buy")
 def buy_campaign_page(
     request: Request,
     current_user: User = Depends(require_user),
 ):
-    return user_templates.TemplateResponse(
-        "buy_campaign.html",
-        {"request": request, "user": current_user},
+    return templates.TemplateResponse(
+        "user/templates/buy_campaign.html",
+        {
+            "request": request,
+            "user": current_user,
+        },
     )
+
+
+@app.get("/billing")
+def billing_page(
+    request: Request,
+    current_user: User = Depends(require_user),
+):
+    return templates.TemplateResponse(
+        "user/templates/billing.html",
+        {
+            "request": request,
+            "user": current_user,
+        },
+    )
+
 
 @app.get("/settings")
 def settings_page(
     request: Request,
     current_user: User = Depends(require_user),
 ):
-    return user_templates.TemplateResponse(
-        "settings.html",
-        {"request": request, "user": current_user},
+    return templates.TemplateResponse(
+        "user/templates/settings.html",
+        {
+            "request": request,
+            "user": current_user,
+        },
     )
 
+
 # =========================
-# API ROUTERS
+# API ROUTERS (LOGIC COMES LATER)
 # =========================
 app.include_router(auth_router)
 app.include_router(campaigns_router)
