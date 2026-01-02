@@ -86,3 +86,16 @@ async def logout(
     )
 
     return response
+
+# =========================================================
+# AUTH SESSION CHECK (FRONTEND USE)
+# =========================================================
+@router.get("/me", response_model=None)
+async def auth_me(
+    user: User = Depends(require_user),
+):
+    return {
+        "id": user.id,
+        "email": user.email,
+        "role": user.role,
+    }
