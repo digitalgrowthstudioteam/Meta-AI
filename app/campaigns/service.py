@@ -4,7 +4,7 @@ from uuid import UUID
 from datetime import datetime
 
 from app.campaigns.models import Campaign
-from app.meta.models import MetaAdAccount
+from app.meta_api.models import MetaAdAccount, UserMetaAdAccount
 from app.campaigns.meta_client import MetaCampaignClient
 from app.plans.enforcement import (
     PlanEnforcementService,
@@ -20,7 +20,7 @@ class CampaignService:
     - Campaign visibility
     - Meta sync (read-only)
     - AI toggle orchestration
-    - Enforcement gateway (Phase 7.3)
+    - Enforcement gateway
     """
 
     # =====================================================
@@ -32,16 +32,24 @@ class CampaignService:
         user_id: UUID,
     ) -> list[Campaign]:
         """
-        Returns campaigns owned by the user's Meta ad accounts.
+        Returns campaigns visible to the user
+        via user_meta_ad_accounts mapping.
         """
+
         stmt = (
             select(Campaign)
             .join(
                 MetaAdAccount,
                 Campaign.ad_account_id == MetaAdAccount.id,
             )
-            .where(MetaAdAccount.user_id == user_id)
-            .where(Campaign.is_archived.is_(False))
+            .join(
+                UserMetaAdAccount,
+                UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
+            )
+            .where(
+                UserMetaAdAccount.user_id == user_id,
+                Campaign.is_archived.is_(False),
+            )
         )
 
         result = await db.execute(stmt)
@@ -64,11 +72,19 @@ class CampaignService:
         No enforcement.
         """
 
-        # 1️⃣ Get user's connected Meta ad accounts
-        stmt = select(MetaAdAccount).where(
-            MetaAdAccount.user_id == user_id,
-            MetaAdAccount.is_active.is_(True),
+        # 1️⃣ Fetch Meta ad accounts user has access to
+        stmt = (
+            select(MetaAdAccount)
+            .join(
+                UserMetaAdAccount,
+                UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
+            )
+            .where(
+                UserMetaAdAccount.user_id == user_id,
+                MetaAdAccount.is_active.is_(True),
+            )
         )
+
         result = await db.execute(stmt)
         ad_accounts = result.scalars().all()
 
@@ -111,11 +127,10 @@ class CampaignService:
                 synced_campaigns.append(campaign)
 
         await db.commit()
-
         return synced_campaigns
 
     # =====================================================
-    # AI TOGGLE (ENFORCEMENT COMES NEXT PHASE)
+    # AI TOGGLE (FULL ENFORCEMENT GATE)
     # =====================================================
     @staticmethod
     async def toggle_ai(
@@ -127,11 +142,6 @@ class CampaignService:
     ) -> Campaign:
         """
         Enables or disables AI for a campaign.
-
-        Phase 7.3 will add:
-        - Limits
-        - Trial logic
-        - Billing enforcement
         """
 
         stmt = (
@@ -140,9 +150,13 @@ class CampaignService:
                 MetaAdAccount,
                 Campaign.ad_account_id == MetaAdAccount.id,
             )
+            .join(
+                UserMetaAdAccount,
+                UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
+            )
             .where(
                 Campaign.id == campaign_id,
-                MetaAdAccount.user_id == user_id,
+                UserMetaAdAccount.user_id == user_id,
             )
         )
 
@@ -153,7 +167,7 @@ class CampaignService:
             raise ValueError("Campaign not found")
 
         # =================================================
-        # ENFORCEMENT (ONLY WHEN ENABLING)
+        # ENFORCEMENT (ONLY WHEN ENABLING AI)
         # =================================================
         if enable and not campaign.ai_active:
             try:
