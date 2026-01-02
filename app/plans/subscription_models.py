@@ -63,6 +63,12 @@ class Subscription(Base):
     starts_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     ends_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
+    # 🆕 GRACE PERIOD SUPPORT
+    grace_ends_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+
     ai_campaign_limit_snapshot: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
