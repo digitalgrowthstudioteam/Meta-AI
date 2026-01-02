@@ -1,8 +1,8 @@
 # Import ALL models here to register them with SQLAlchemy
-# ⚠️ This file MUST ONLY contain model imports
+# ⚠️ This file must contain ONLY model imports
 
 # ======================
-# Core Domain Models
+# Users
 # ======================
 from app.users.models import User
 
@@ -18,12 +18,16 @@ from app.plans.subscription_models import Subscription
 from app.auth.models import MagicLoginToken, Session
 
 # ======================
-# Meta API
+# Meta API (REAL FILE)
 # ======================
-from app.meta_api.models import MetaAdAccount, Campaign
+from app.meta_api.models import (
+    MetaAdAccount,
+    UserMetaAdAccount,
+    MetaOAuthToken,
+)
 
 # ======================
-# AI Engine
+# AI / Audience
 # ======================
 from app.ai.models import AIAction
 from app.ai.audience_models import AudienceInsight
