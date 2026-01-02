@@ -1,30 +1,24 @@
-# app/core/database.py
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-from sqlalchemy.orm import DeclarativeBase
+from app.core.base import Base  # ✅ SAFE IMPORT
 
-from app.core.config import settings
+DATABASE_URL = "postgresql+asyncpg://meta_ai_user:StrongPassword123@localhost:5432/meta_ai_db"
 
-# ✅ FORCE MODEL REGISTRATION
-import app.models  # DO NOT REMOVE
-
-
-class Base(DeclarativeBase):
-    pass
-
-
-engine = create_async_engine(
-    settings.DATABASE_URL,
+engine: AsyncEngine = create_async_engine(
+    DATABASE_URL,
     echo=False,
-    future=True,
 )
 
 AsyncSessionLocal = async_sessionmaker(
-    engine,
+    bind=engine,
+    class_=AsyncSession,
     expire_on_commit=False,
 )
 
-
-async def get_db():
-    async with AsyncSessionLocal() as session:
-        yield session
+# 🔒 CRITICAL: load models AFTER Base is fully defined
+import app.models  # DO NOT REMOVE
