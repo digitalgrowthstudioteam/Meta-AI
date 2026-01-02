@@ -1,7 +1,11 @@
 """
 Digital Growth Studio (Meta-AI)
 Main application entry point
+SAFE MODE:
+- Legacy Jinja UI preserved
+- API routes duplicated under /api
 """
+
 import app.models  # registers all SQLAlchemy models
 from fastapi import FastAPI, Request, Depends
 from fastapi.staticfiles import StaticFiles
@@ -14,13 +18,13 @@ from app.auth.dependencies import require_user
 from app.users.models import User
 
 # =========================
-# ROUTERS (API — LOGIC LATER)
+# ROUTERS (API LOGIC)
 # =========================
 from app.auth.routes import router as auth_router
 from app.campaigns.routes import router as campaigns_router
 from app.admin.routes import router as admin_router
 from app.meta_api.routes import router as meta_router
-from app.reports.routes import router as reports_router  # ✅ NEW
+from app.reports.routes import router as reports_router
 
 
 # =========================
@@ -34,7 +38,7 @@ app = FastAPI(
 
 
 # =========================
-# FRONTEND — STATIC FILES
+# FRONTEND — STATIC FILES (LEGACY UI)
 # =========================
 app.mount(
     "/static/shared",
@@ -56,13 +60,13 @@ app.mount(
 
 
 # =========================
-# FRONTEND — TEMPLATE LOADER (SINGLE SOURCE)
+# FRONTEND — TEMPLATE LOADER (LEGACY UI)
 # =========================
 templates = Jinja2Templates(directory="frontend")
 
 
 # =========================
-# UI ROUTES — PHASE 5.1 / 5.2 (NO BUSINESS LOGIC)
+# UI ROUTES — LEGACY (DO NOT REMOVE YET)
 # =========================
 
 @app.get("/login")
@@ -186,13 +190,23 @@ def reports_page(
 
 
 # =========================
-# API ROUTERS (LOGIC COMES LATER)
+# API ROUTERS — LEGACY (UNCHANGED)
 # =========================
 app.include_router(auth_router)
 app.include_router(campaigns_router)
 app.include_router(admin_router)
 app.include_router(meta_router)
-app.include_router(reports_router)  # ✅ NEW
+app.include_router(reports_router)
+
+
+# =========================
+# API ROUTERS — NEW /api PREFIX (SAFE MODE)
+# =========================
+app.include_router(auth_router, prefix="/api")
+app.include_router(campaigns_router, prefix="/api")
+app.include_router(admin_router, prefix="/api")
+app.include_router(meta_router, prefix="/api")
+app.include_router(reports_router, prefix="/api")
 
 
 # =========================
