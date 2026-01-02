@@ -227,6 +227,7 @@ async def _assign_trial_if_needed(
         ai_campaign_limit_snapshot=TRIAL_AI_LIMIT,
         is_active=True,
         created_by_admin=False,
+        assigned_by_admin=False,
     )
 
     db.add(subscription)
