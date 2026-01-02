@@ -1,5 +1,4 @@
-# Central SQLAlchemy model registry
-# Import order does NOT matter here
+# Import ALL models here to register them with SQLAlchemy
 
 from app.users.models import User
 
