@@ -1,4 +1,3 @@
-from app.plans.plan_models import Plan
 from datetime import datetime, date
 import uuid
 
@@ -12,7 +11,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.core.base import Base
+from app.core.database import Base
+from app.plans.models import Plan   # ✅ FIXED IMPORT
 
 
 class Subscription(Base):
@@ -26,7 +26,10 @@ class Subscription(Base):
 
     __tablename__ = "subscriptions"
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True,
+        default=uuid.uuid4,
+    )
 
     user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id"),
@@ -64,7 +67,7 @@ class Subscription(Base):
     starts_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     ends_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    # 🆕 GRACE PERIOD SUPPORT
+    # 🆕 Grace period
     grace_ends_at: Mapped[datetime | None] = mapped_column(
         DateTime,
         nullable=True,
@@ -85,3 +88,4 @@ class Subscription(Base):
 
     # Relationships
     user = relationship("User")
+    plan = relationship("Plan")
