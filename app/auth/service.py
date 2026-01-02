@@ -152,7 +152,6 @@ async def verify_magic_login(
     user = await _get_or_create_user(db, magic_token.email)
 
     # Assign trial if needed
-    await _assign_trial_if_needed(db, user)
 
     # Create session
     session = await create_session(db, user)
