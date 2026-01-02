@@ -1,84 +1,95 @@
 {% extends "user/templates/user_base.html" %}
 
-{% block title %}Buy Campaign | Digital Growth Studio{% endblock %}
+{% block title %}Settings | Digital Growth Studio{% endblock %}
 
 {% block page_title %}
-Buy Manual Campaigns
+Account Intelligence
 {% endblock %}
 
 {% block content %}
 
-<div class="buy-campaign-container">
+<div class="audience-container">
 
-    <div class="info-card">
-        <h2>Manual Campaign Purchase</h2>
-        <p class="muted">
-            Our team creates campaigns directly inside Meta Ads Manager.
-            Once live, they automatically appear in your dashboard and can be marked
-            <strong>AI-Active</strong>.
+    <!-- ================= AI Explainability Banner ================= -->
+    <div class="ai-info-banner">
+        <strong>Account Intelligence</strong>
+        <p>
+            Account settings are derived from your subscription state,
+            authentication model, and system security policies.
         </p>
     </div>
 
-    <div class="pricing-grid">
+    <!-- ================= Settings Intelligence Cards ================= -->
+    <div class="audience-grid">
 
-        <div class="pricing-card">
-            <h3>Starter Pack</h3>
-            <div class="price">₹999</div>
-            <p class="per-unit">per campaign</p>
+        <!-- Profile Intelligence -->
+        <div class="audience-card info">
+            <h3>Profile Intelligence</h3>
+            <p class="audience-metric">Identity · Role · Access</p>
+            <p class="audience-note">
+                This account is authenticated using secure email-based magic links.
+            </p>
 
-            <ul>
-                <li>0 – 5 campaigns</li>
-                <li>Validity: 3 Months</li>
-                <li>AI eligible</li>
-            </ul>
+            <p class="audience-note">
+                <strong>Email:</strong> {{ user.email }}<br>
+                <strong>Role:</strong> {{ user.role | capitalize }}
+            </p>
 
-            <button class="primary-btn" disabled>
-                Purchase (Coming Soon)
-            </button>
+            <span class="confidence high">Verified</span>
         </div>
 
-        <div class="pricing-card highlight">
-            <h3>Growth Pack</h3>
-            <div class="price">₹599</div>
-            <p class="per-unit">per campaign</p>
+        <!-- Subscription Intelligence -->
+        <div class="audience-card positive">
+            <h3>Subscription Intelligence</h3>
+            <p class="audience-metric">Plan · Limits · Eligibility</p>
+            <p class="audience-note">
+                Your current plan determines AI activation limits and access scope.
+            </p>
 
-            <ul>
-                <li>6 – 29 campaigns</li>
-                <li>Validity: 6 Months</li>
-                <li>Best for scaling</li>
-            </ul>
+            <p class="audience-note">
+                <strong>Plan:</strong> Starter<br>
+                <strong>AI-Active Limit:</strong> 3 Campaigns
+            </p>
 
-            <button class="primary-btn" disabled>
-                Purchase (Coming Soon)
-            </button>
+            <a href="/billing" class="link-btn">
+                View Billing & Plans →
+            </a>
+
+            <span class="confidence high">Active</span>
         </div>
 
-        <div class="pricing-card">
-            <h3>Agency Pack</h3>
-            <div class="price">₹333</div>
-            <p class="per-unit">per campaign</p>
+        <!-- Security Intelligence -->
+        <div class="audience-card positive">
+            <h3>Security Intelligence</h3>
+            <p class="audience-metric">Session · Authentication</p>
+            <p class="audience-note">
+                Sessions are short-lived and automatically revoked for safety.
+            </p>
 
-            <ul>
-                <li>30+ campaigns</li>
-                <li>Validity: 1 Year</li>
-                <li>Agency ready</li>
-            </ul>
+            <p class="audience-note">
+                <strong>Login Method:</strong> Magic Link (Email)<br>
+                <strong>Session Status:</strong> Active
+            </p>
 
-            <button class="primary-btn" disabled>
-                Purchase (Coming Soon)
-            </button>
+            <span class="confidence high">Secure</span>
         </div>
 
     </div>
 
-    <div class="rules-card">
-        <h4>Important Rules</h4>
-        <ul>
-            <li>Validity starts from purchase date</li>
-            <li>Expired campaigns have AI disabled</li>
-            <li>Re-purchase required after expiry</li>
-            <li>Admin may add complimentary campaigns</li>
-        </ul>
+    <!-- ================= Action Section ================= -->
+    <div class="audience-section">
+        <h2 class="section-title">Account Actions</h2>
+
+        <div class="empty-state">
+            <p>Logout is currently disabled.</p>
+            <p class="muted">
+                Session revocation controls will be available soon.
+            </p>
+
+            <button class="danger-btn" disabled>
+                Logout (Coming Soon)
+            </button>
+        </div>
     </div>
 
 </div>
