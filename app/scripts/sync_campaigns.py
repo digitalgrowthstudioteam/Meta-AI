@@ -8,8 +8,8 @@ SAFE TO RUN:
 
 Golden Rules:
 - Uses canonical async DB session
+- No FastAPI dependencies
 - No direct engine usage
-- No business logic duplication
 """
 
 import asyncio
@@ -19,7 +19,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.db_session import async_session
+from app.core.db_session import AsyncSessionLocal
 from app.users.models import User
 from app.meta.models import UserMetaAdAccount
 from app.campaigns.service import CampaignService
@@ -44,7 +44,7 @@ async def sync_all_users_campaigns() -> None:
     who have at least one Meta ad account connected.
     """
 
-    async with async_session() as db:  # type: AsyncSession
+    async with AsyncSessionLocal() as db:  # type: AsyncSession
         # -------------------------------------------------
         # 1️⃣ Fetch users with Meta access
         # -------------------------------------------------
