@@ -1,9 +1,9 @@
 {% extends "user/templates/user_base.html" %}
 
-{% block title %}Settings | Digital Growth Studio{% endblock %}
+{% block title %}Buy Campaign | Digital Growth Studio{% endblock %}
 
 {% block page_title %}
-Account Intelligence
+Buy Campaign
 {% endblock %}
 
 {% block content %}
@@ -12,83 +12,62 @@ Account Intelligence
 
     <!-- ================= AI Explainability Banner ================= -->
     <div class="ai-info-banner">
-        <strong>Account Intelligence</strong>
+        <strong>Manual Campaign Purchase</strong>
         <p>
-            Account settings are derived from your subscription state,
-            authentication model, and system security policies.
+            Campaigns are created manually by our team inside Meta Ads Manager
+            and synced automatically to your dashboard.
         </p>
     </div>
 
-    <!-- ================= Settings Intelligence Cards ================= -->
+    <!-- ================= Pricing Intelligence Cards ================= -->
     <div class="audience-grid">
 
-        <!-- Profile Intelligence -->
+        <!-- 0–5 Campaigns -->
         <div class="audience-card info">
-            <h3>Profile Intelligence</h3>
-            <p class="audience-metric">Identity · Role · Access</p>
+            <h3>Starter Block</h3>
+            <p class="audience-metric">0 – 5 Campaigns</p>
             <p class="audience-note">
-                This account is authenticated using secure email-based magic links.
+                ₹999 per campaign · Valid for 3 months
             </p>
-
-            <p class="audience-note">
-                <strong>Email:</strong> {{ user.email }}<br>
-                <strong>Role:</strong> {{ user.role | capitalize }}
-            </p>
-
-            <span class="confidence high">Verified</span>
+            <span class="confidence medium">AI Eligible</span>
         </div>
 
-        <!-- Subscription Intelligence -->
+        <!-- 6–29 Campaigns -->
         <div class="audience-card positive">
-            <h3>Subscription Intelligence</h3>
-            <p class="audience-metric">Plan · Limits · Eligibility</p>
+            <h3>Growth Block</h3>
+            <p class="audience-metric">6 – 29 Campaigns</p>
             <p class="audience-note">
-                Your current plan determines AI activation limits and access scope.
+                ₹599 per campaign · Valid for 6 months
             </p>
-
-            <p class="audience-note">
-                <strong>Plan:</strong> Starter<br>
-                <strong>AI-Active Limit:</strong> 3 Campaigns
-            </p>
-
-            <a href="/billing" class="link-btn">
-                View Billing & Plans →
-            </a>
-
-            <span class="confidence high">Active</span>
+            <span class="confidence high">Recommended</span>
         </div>
 
-        <!-- Security Intelligence -->
-        <div class="audience-card positive">
-            <h3>Security Intelligence</h3>
-            <p class="audience-metric">Session · Authentication</p>
+        <!-- 30+ Campaigns -->
+        <div class="audience-card warning">
+            <h3>Agency Block</h3>
+            <p class="audience-metric">30+ Campaigns</p>
             <p class="audience-note">
-                Sessions are short-lived and automatically revoked for safety.
+                ₹333 per campaign · Valid for 1 year
             </p>
-
-            <p class="audience-note">
-                <strong>Login Method:</strong> Magic Link (Email)<br>
-                <strong>Session Status:</strong> Active
-            </p>
-
-            <span class="confidence high">Secure</span>
+            <span class="confidence high">Agency Ready</span>
         </div>
 
     </div>
 
-    <!-- ================= Action Section ================= -->
+    <!-- ================= Rules & Admin Control ================= -->
     <div class="audience-section">
-        <h2 class="section-title">Account Actions</h2>
+        <h2 class="section-title">Purchase Rules & Admin Control</h2>
 
         <div class="empty-state">
-            <p>Logout is currently disabled.</p>
-            <p class="muted">
-                Session revocation controls will be available soon.
+            <p>
+                Campaign validity starts from the date of purchase.
+                Once expired, AI is automatically disabled.
             </p>
-
-            <button class="danger-btn" disabled>
-                Logout (Coming Soon)
-            </button>
+            <p class="muted">
+                Re-purchase is required after expiry.
+                Admin can add paid or complimentary campaigns manually.
+                Unlimited free bypass is not allowed.
+            </p>
         </div>
     </div>
 
