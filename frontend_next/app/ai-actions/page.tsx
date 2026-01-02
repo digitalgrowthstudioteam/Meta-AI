@@ -30,7 +30,7 @@ export default function AIActionsPage() {
         const data = await res.json();
         setActions(data);
       } catch {
-        setError("Unable to load AI actions");
+        setError("Unable to load AI actions.");
       } finally {
         setLoading(false);
       }
@@ -41,130 +41,95 @@ export default function AIActionsPage() {
 
   return (
     <div className="space-y-6">
-      {/* ===============================
-          PAGE HEADER
-      =============================== */}
-      <div>
-        <h1 className="text-xl font-semibold text-gray-900">
-          AI Actions
-        </h1>
-        <p className="text-sm text-gray-500">
-          Explainable AI recommendations across all campaigns
-        </p>
+      {/* ================= HEADER ================= */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900">
+            AI Actions
+          </h1>
+          <p className="text-sm text-gray-500">
+            Explainable AI recommendations across your Meta campaigns
+          </p>
+        </div>
+
+        <div className="text-xs text-gray-500">
+          Suggestions only • No auto-apply
+        </div>
       </div>
 
-      {/* ===============================
-          LOADING STATE
-      =============================== */}
+      {/* ================= STATES ================= */}
       {loading && (
-        <div className="bg-white border rounded p-6 text-sm text-gray-500">
-          Loading AI actions…
+        <div className="bg-white border border-gray-200 rounded p-6 text-sm text-gray-500">
+          Loading AI recommendations…
         </div>
       )}
 
-      {/* ===============================
-          ERROR STATE
-      =============================== */}
       {!loading && error && (
         <div className="text-sm text-red-600">{error}</div>
       )}
 
-      {/* ===============================
-          EMPTY STATE
-      =============================== */}
       {!loading && !error && actions.length === 0 && (
-        <div className="bg-white border rounded p-8 text-center text-sm text-gray-500">
-          No AI actions generated yet.
+        <div className="bg-white border border-gray-200 rounded p-10 text-center text-sm text-gray-500">
+          No AI actions have been generated yet.
         </div>
       )}
 
-      {/* ===============================
-          AI ACTIONS LIST
-      =============================== */}
+      {/* ================= ACTION CARDS ================= */}
       {!loading && !error && actions.length > 0 && (
-        <div className="bg-white border border-gray-200 rounded overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="px-4 py-3 text-left">
-                  Campaign
-                </th>
-                <th className="px-4 py-3 text-left">
-                  Action
-                </th>
-                <th className="px-4 py-3 text-left">
-                  Objective
-                </th>
-                <th className="px-4 py-3 text-left">
-                  Confidence
-                </th>
-                <th className="px-4 py-3 text-left">
-                  Generated
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {actions.map((action) => (
-                <tr
-                  key={action.id}
-                  className="border-b last:border-b-0 hover:bg-gray-50 transition"
-                >
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-gray-900">
-                      {action.campaign_name ??
-                        action.campaign_id.slice(0, 8) + "…"}
-                    </div>
-                  </td>
+        <div className="space-y-4">
+          {actions.map((action) => (
+            <div
+              key={action.id}
+              className="bg-white border border-gray-200 rounded p-5 hover:shadow-sm transition"
+            >
+              <div className="flex items-start justify-between">
+                <div className="space-y-1">
+                  <div className="text-sm font-semibold text-gray-900">
+                    {action.campaign_name ??
+                      `Campaign ${action.campaign_id.slice(0, 8)}…`}
+                  </div>
 
-                  <td className="px-4 py-3">
-                    <ActionBadge value={action.action_type} />
-                    {action.reasoning && (
-                      <div className="text-xs text-gray-500 mt-1">
-                        {action.reasoning.slice(0, 80)}
-                        {action.reasoning.length > 80
-                          ? "…"
-                          : ""}
-                      </div>
-                    )}
-                  </td>
-
-                  <td className="px-4 py-3">
+                  <div className="flex items-center gap-2 text-xs text-gray-500">
                     <ObjectiveBadge
                       value={action.objective ?? "—"}
                     />
-                  </td>
+                    <span>•</span>
+                    <span>
+                      {new Date(
+                        action.created_at
+                      ).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
 
-                  <td className="px-4 py-3">
-                    {action.confidence !== undefined
-                      ? `${Math.round(
-                          action.confidence * 100
-                        )}%`
-                      : "N/A"}
-                  </td>
+                <ConfidenceBadge
+                  confidence={action.confidence}
+                />
+              </div>
 
-                  <td className="px-4 py-3 text-gray-500">
-                    {new Date(
-                      action.created_at
-                    ).toLocaleString()}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+              <div className="mt-4 flex items-start gap-4">
+                <ActionBadge value={action.action_type} />
+
+                <div className="text-sm text-gray-700 leading-relaxed">
+                  {action.reasoning ??
+                    "No detailed reasoning available for this recommendation yet."}
+                </div>
+              </div>
+
+              <div className="mt-4 text-xs text-gray-400">
+                This is a recommendation only. Apply changes in
+                Meta Ads Manager.
+              </div>
+            </div>
+          ))}
         </div>
       )}
-
-      {/* FOOTNOTE */}
-      <div className="text-xs text-gray-400">
-        All AI actions are read-only. No changes are
-        auto-applied.
-      </div>
     </div>
   );
 }
 
 /* ===============================
-   UI BADGES
+   UI COMPONENTS
 =============================== */
 
 function ActionBadge({ value }: { value: string }) {
@@ -181,7 +146,7 @@ function ActionBadge({ value }: { value: string }) {
 
   return (
     <span
-      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${styles}`}
+      className={`inline-flex shrink-0 rounded-full px-3 py-1 text-xs font-medium ${styles}`}
     >
       {value}
     </span>
@@ -192,13 +157,42 @@ function ObjectiveBadge({ value }: { value: string }) {
   const isLead = value.toLowerCase().includes("lead");
   return (
     <span
-      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
+      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
         isLead
           ? "bg-purple-100 text-purple-700"
           : "bg-orange-100 text-orange-700"
       }`}
     >
       {value}
+    </span>
+  );
+}
+
+function ConfidenceBadge({
+  confidence,
+}: {
+  confidence?: number;
+}) {
+  if (confidence === undefined) {
+    return (
+      <span className="text-xs text-gray-400">
+        Confidence N/A
+      </span>
+    );
+  }
+
+  const pct = Math.round(confidence * 100);
+
+  let styles = "bg-gray-200 text-gray-700";
+  if (pct >= 80) styles = "bg-green-100 text-green-700";
+  else if (pct >= 50)
+    styles = "bg-yellow-100 text-yellow-800";
+
+  return (
+    <span
+      className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${styles}`}
+    >
+      {pct}% confidence
     </span>
   );
 }
