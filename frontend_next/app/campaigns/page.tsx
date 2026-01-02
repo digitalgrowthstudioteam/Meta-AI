@@ -26,6 +26,9 @@ export default function CampaignsPage() {
   const [selectedCampaign, setSelectedCampaign] =
     useState<Campaign | null>(null);
 
+  const [selectedCampaignId, setSelectedCampaignId] =
+    useState<string | null>(null);
+
   const [aiActions, setAiActions] = useState<AIAction[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
 
@@ -54,18 +57,16 @@ export default function CampaignsPage() {
   }, []);
 
   /* ===============================
-     FETCH AI ACTIONS (SAFE)
+     FETCH AI ACTIONS (100% SAFE)
   =============================== */
   useEffect(() => {
-    if (!selectedCampaign) return;
-
-    const campaignId = selectedCampaign.id;
+    if (!selectedCampaignId) return;
 
     async function fetchAiActions() {
       setAiLoading(true);
       try {
         const res = await fetch(
-          `/ai/campaign/${campaignId}/actions`,
+          `/ai/campaign/${selectedCampaignId}/actions`,
           { credentials: "include" }
         );
 
@@ -81,7 +82,7 @@ export default function CampaignsPage() {
     }
 
     fetchAiActions();
-  }, [selectedCampaign]);
+  }, [selectedCampaignId]);
 
   return (
     <div className="space-y-6">
@@ -165,7 +166,10 @@ export default function CampaignsPage() {
 
                   <td className="px-4 py-3 text-right">
                     <button
-                      onClick={() => setSelectedCampaign(c)}
+                      onClick={() => {
+                        setSelectedCampaign(c);
+                        setSelectedCampaignId(c.id);
+                      }}
                       className="text-blue-600 font-medium hover:text-blue-800"
                     >
                       View AI
@@ -203,7 +207,11 @@ export default function CampaignsPage() {
             </div>
 
             <button
-              onClick={() => setSelectedCampaign(null)}
+              onClick={() => {
+                setSelectedCampaign(null);
+                setSelectedCampaignId(null);
+                setAiActions([]);
+              }}
               className="text-gray-400 hover:text-gray-700 text-lg"
             >
               ×
