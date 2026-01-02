@@ -1,3 +1,4 @@
+from app.plans.plan_models import Plan
 from datetime import datetime, date
 import uuid
 
