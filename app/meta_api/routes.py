@@ -1,6 +1,8 @@
 import uuid
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.core.db_session import get_db
 from app.auth.dependencies import get_current_user
@@ -12,36 +14,72 @@ from app.meta_api.service import (
     MetaAdAccountService,
 )
 from app.meta_api.schemas import MetaConnectResponse
+from app.meta_api.models import MetaOAuthState
 
 router = APIRouter(prefix="/meta", tags=["Meta"])
 
 
 # ---------------------------------------------------------
-# CONNECT META (OAUTH)
+# CONNECT META (OAUTH) — STATE CREATION
 # ---------------------------------------------------------
 @router.get("/connect", response_model=MetaConnectResponse)
 async def connect_meta_account(
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    # Generate secure OAuth state
     state = str(uuid.uuid4())
+
+    # Persist state (CSRF protection)
+    oauth_state = MetaOAuthState(
+        user_id=current_user.id,
+        state=state,
+    )
+    db.add(oauth_state)
+    await db.commit()
+
+    # Build Meta OAuth URL
     redirect_url = build_meta_oauth_url(state)
     return {"redirect_url": redirect_url}
 
 
 # ---------------------------------------------------------
-# OAUTH CALLBACK
+# OAUTH CALLBACK — STATE VALIDATION (SESSION-SAFE)
 # ---------------------------------------------------------
 @router.get("/oauth/callback")
 async def meta_oauth_callback(
     code: str = Query(...),
     state: str = Query(...),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ):
+    # -----------------------------------------------------
+    # 1. Validate OAuth state
+    # -----------------------------------------------------
+    result = await db.execute(
+        select(MetaOAuthState).where(
+            MetaOAuthState.state == state,
+            MetaOAuthState.is_used.is_(False),
+            MetaOAuthState.expires_at > datetime.utcnow(),
+        )
+    )
+    oauth_state = result.scalar_one_or_none()
+
+    if not oauth_state:
+        raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
+
+    # -----------------------------------------------------
+    # 2. Mark state as used (one-time)
+    # -----------------------------------------------------
+    oauth_state.is_used = True
+    await db.commit()
+
+    # -----------------------------------------------------
+    # 3. Exchange code & store token for correct user
+    # -----------------------------------------------------
     try:
         await MetaOAuthService.store_token(
             db=db,
-            user_id=current_user.id,
+            user_id=oauth_state.user_id,
             code=code,
         )
     except Exception:
