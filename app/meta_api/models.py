@@ -7,7 +7,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
 
 from app.core.database import Base
@@ -99,6 +99,56 @@ class UserMetaAdAccount(Base):
     )
 
     connected_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+    )
+
+
+# =========================================================
+# META OAUTH STATE (CSRF & CALLBACK SAFETY)
+# =========================================================
+class MetaOAuthState(Base):
+    """
+    Temporary OAuth state storage for Meta OAuth flow.
+    Used to prevent CSRF and safely bind OAuth callbacks to users.
+    """
+
+    __tablename__ = "meta_oauth_states"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    state: Mapped[str] = mapped_column(
+        String,
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=lambda: datetime.utcnow() + timedelta(minutes=10),
+    )
+
+    is_used: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow,
         nullable=False,
