@@ -1,5 +1,4 @@
 from datetime import datetime, date
-import uuid
 
 from sqlalchemy import (
     String,
@@ -7,13 +6,11 @@ from sqlalchemy import (
     Boolean,
     ForeignKey,
     Date,
+    Integer,
 )
-from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.base import Base
-
-# ✅ CRITICAL: import Plan so mapper can resolve it
 from app.plans.models import Plan
 
 
@@ -23,21 +20,20 @@ class Subscription(Base):
     # =====================================================
     # CORE IDENTIFIERS
     # =====================================================
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+    id: Mapped[int] = mapped_column(
         primary_key=True,
-        default=uuid.uuid4,
+        autoincrement=True,
     )
 
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+    user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
-    plan_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
+    # 🔒 OPTION A — INTEGER PLAN ID (LOCKED)
+    plan_id: Mapped[int] = mapped_column(
+        Integer,
         ForeignKey("plans.id", ondelete="RESTRICT"),
         nullable=False,
         index=True,
@@ -63,7 +59,7 @@ class Subscription(Base):
     )
 
     # =====================================================
-    # TRIAL METADATA (OPTION B — LOCKED)
+    # TRIAL METADATA (OPTION A)
     # =====================================================
     is_trial: Mapped[bool] = mapped_column(
         Boolean,
@@ -90,6 +86,7 @@ class Subscription(Base):
     # SNAPSHOTS & FLAGS
     # =====================================================
     ai_campaign_limit_snapshot: Mapped[int] = mapped_column(
+        Integer,
         nullable=False,
         default=0,
     )
