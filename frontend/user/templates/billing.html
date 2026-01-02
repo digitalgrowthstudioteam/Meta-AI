@@ -8,59 +8,76 @@ Billing & Plans
 
 {% block content %}
 
-<div class="billing-container">
+<div class="audience-container">
 
-    <div class="current-plan-card">
-        <h2>Current Plan</h2>
-        <div class="plan-badge">Starter</div>
-
-        <div class="plan-price">₹999 / month</div>
-
-        <ul class="plan-features">
-            <li>✔ 3 AI-Active Campaigns</li>
-            <li>✔ 1 Meta Ad Account</li>
-            <li>✔ Lead OR Sales Ads</li>
-            <li>✖ Add-ons not allowed</li>
-        </ul>
-
-        <p class="muted">
-            Billing renews monthly. Invoices will be available here.
+    <!-- ================= AI Explainability Banner ================= -->
+    <div class="ai-info-banner">
+        <strong>Subscription & Billing Intelligence</strong>
+        <p>
+            Plans define AI activation limits, account access, and billing eligibility.
+            Trial and paid plans follow strict enforcement rules.
         </p>
     </div>
 
-    <div class="upgrade-section">
-        <h3>Upgrade Options</h3>
+    <!-- ================= Plans Grid ================= -->
+    <div class="audience-grid">
 
-        <div class="upgrade-grid">
+        <!-- Trial Plan -->
+        <div class="audience-card info">
+            <h3>Trial Plan</h3>
+            <p class="audience-metric">7 Days · 3 AI-Active Campaigns</p>
+            <p class="audience-note">
+                Available automatically for all new users.
+                Lead OR Sales objective allowed.
+            </p>
+            <span class="confidence medium">Trial Active</span>
+        </div>
 
-            <div class="upgrade-card highlight">
-                <h4>Pro</h4>
-                <div class="upgrade-price">₹1999 / month</div>
-                <ul>
-                    <li>25 AI-Active Campaigns</li>
-                    <li>Lead + Sales Ads</li>
-                    <li>Single Ad Account</li>
-                </ul>
+        <!-- Starter -->
+        <div class="audience-card positive">
+            <h3>Starter Plan</h3>
+            <p class="audience-metric">₹999 / month</p>
+            <p class="audience-note">
+                3 AI-Active Campaigns · 1 Ad Account · Lead OR Sales
+            </p>
+            <span class="confidence high">Current Plan</span>
+        </div>
 
-                <button class="primary-btn" disabled>
-                    Upgrade (Coming Soon)
-                </button>
-            </div>
+        <!-- Pro -->
+        <div class="audience-card info">
+            <h3>Pro Plan</h3>
+            <p class="audience-metric">₹1999 / month</p>
+            <p class="audience-note">
+                25 AI-Active Campaigns · Lead + Sales · 1 Ad Account
+            </p>
+            <span class="confidence medium">Upgrade Available</span>
+        </div>
 
-            <div class="upgrade-card">
-                <h4>Agency</h4>
-                <div class="upgrade-price">₹2999 / month</div>
-                <ul>
-                    <li>30 AI-Active Campaigns</li>
-                    <li>Multiple Ad Accounts</li>
-                    <li>Add-on campaigns allowed</li>
-                </ul>
+        <!-- Agency -->
+        <div class="audience-card warning">
+            <h3>Agency Plan</h3>
+            <p class="audience-metric">₹2999 / month</p>
+            <p class="audience-note">
+                30 AI-Active Campaigns · Multiple Ad Accounts · Add-ons allowed
+            </p>
+            <span class="confidence high">Agency Ready</span>
+        </div>
 
-                <button class="primary-btn" disabled>
-                    Upgrade (Coming Soon)
-                </button>
-            </div>
+    </div>
 
+    <!-- ================= Enforcement Rules ================= -->
+    <div class="audience-section">
+        <h2 class="section-title">Billing & Enforcement Rules</h2>
+
+        <div class="empty-state">
+            <p>
+                Trial access is valid for 7 days.
+                After expiry, AI is automatically disabled.
+            </p>
+            <p class="muted">
+                A 3-day grace period is provided to upgrade.
+                If no upgrade occurs, AI remains disabled until a plan is purchased.
+            </p>
         </div>
     </div>
 
