@@ -12,8 +12,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
-from app.core.base import Base
-
+from app.core.database import Base
 
 # =========================================================
 # AUTH SESSION MODEL (SERVER-SIDE SESSIONS)
