@@ -3,92 +3,65 @@
 {% block title %}Settings | Digital Growth Studio{% endblock %}
 
 {% block page_title %}
-Account Intelligence
+Settings
 {% endblock %}
 
 {% block content %}
 
 <div class="audience-container">
 
-    <!-- ================= AI Explainability Banner ================= -->
+    <!-- Top banner -->
     <div class="ai-info-banner">
-        <strong>Account Intelligence</strong>
+        <strong>Account Settings</strong>
         <p>
-            Account settings are derived from your subscription state,
-            authentication model, and system security policies.
+            View your account, subscription, and security status.
         </p>
     </div>
 
-    <!-- ================= Settings Intelligence Cards ================= -->
+    <!-- Cards grid -->
     <div class="audience-grid">
 
-        <!-- Profile Intelligence -->
+        <!-- Profile -->
         <div class="audience-card info">
-            <h3>Profile Intelligence</h3>
-            <p class="audience-metric">Identity · Role · Access</p>
+            <h3>Profile</h3>
+            <p class="audience-metric">Identity · Role</p>
             <p class="audience-note">
-                This account is authenticated using secure email-based magic links.
+                {{ user.email }} ({{ user.role | capitalize }})
             </p>
-
-            <p class="audience-note">
-                <strong>Email:</strong> {{ user.email }}<br>
-                <strong>Role:</strong> {{ user.role | capitalize }}
-            </p>
-
             <span class="confidence high">Verified</span>
         </div>
 
-        <!-- Subscription Intelligence -->
+        <!-- Subscription -->
         <div class="audience-card positive">
-            <h3>Subscription Intelligence</h3>
-            <p class="audience-metric">Plan · Limits · Eligibility</p>
+            <h3>Subscription</h3>
+            <p class="audience-metric">Plan · Limits</p>
             <p class="audience-note">
-                Your current plan determines AI activation limits and access scope.
+                Starter · 3 AI-Active Campaigns
             </p>
-
-            <p class="audience-note">
-                <strong>Plan:</strong> Starter<br>
-                <strong>AI-Active Limit:</strong> 3 Campaigns
-            </p>
-
-            <a href="/billing" class="link-btn">
-                View Billing & Plans →
-            </a>
-
             <span class="confidence high">Active</span>
         </div>
 
-        <!-- Security Intelligence -->
+        <!-- Security -->
         <div class="audience-card positive">
-            <h3>Security Intelligence</h3>
-            <p class="audience-metric">Session · Authentication</p>
+            <h3>Security</h3>
+            <p class="audience-metric">Authentication · Session</p>
             <p class="audience-note">
-                Sessions are short-lived and automatically revoked for safety.
+                Magic Link · Session Valid
             </p>
-
-            <p class="audience-note">
-                <strong>Login Method:</strong> Magic Link (Email)<br>
-                <strong>Session Status:</strong> Active
-            </p>
-
             <span class="confidence high">Secure</span>
         </div>
 
     </div>
 
-    <!-- ================= Action Section ================= -->
+    <!-- Bottom section -->
     <div class="audience-section">
         <h2 class="section-title">Account Actions</h2>
 
         <div class="empty-state">
-            <p>Logout is currently disabled.</p>
+            <p>Logout is not available yet.</p>
             <p class="muted">
-                Session revocation controls will be available soon.
+                Session controls will be enabled soon.
             </p>
-
-            <button class="danger-btn" disabled>
-                Logout (Coming Soon)
-            </button>
         </div>
     </div>
 
