@@ -2,43 +2,44 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type Campaign = {
   id: string;
   name: string;
-  objective: "LEAD" | "SALES";
-  status: "ACTIVE" | "PAUSED";
-  aiActive: boolean;
+  objective: string;
+  status: string;
+  ai_active: boolean;
 };
 
-const MOCK_CAMPAIGNS: Campaign[] = [
-  {
-    id: "cmp_001",
-    name: "Lead Gen – Website Form",
-    objective: "LEAD",
-    status: "ACTIVE",
-    aiActive: true,
-  },
-  {
-    id: "cmp_002",
-    name: "Sales – Retargeting",
-    objective: "SALES",
-    status: "ACTIVE",
-    aiActive: false,
-  },
-  {
-    id: "cmp_003",
-    name: "Lead Gen – WhatsApp",
-    objective: "LEAD",
-    status: "PAUSED",
-    aiActive: true,
-  },
-];
-
 export default function CampaignsPage() {
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selectedCampaign, setSelectedCampaign] =
     useState<Campaign | null>(null);
+
+  useEffect(() => {
+    async function fetchCampaigns() {
+      try {
+        const res = await fetch("/campaigns/", {
+          credentials: "include",
+        });
+
+        if (!res.ok) {
+          throw new Error("Failed to fetch campaigns");
+        }
+
+        const data = await res.json();
+        setCampaigns(data);
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchCampaigns();
+  }, []);
 
   return (
     <div className="relative">
@@ -53,53 +54,75 @@ export default function CampaignsPage() {
       </div>
 
       {/* ===============================
-          CAMPAIGNS TABLE
+          LOADING STATE
       =============================== */}
-      <div className="bg-white border border-gray-200 rounded">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th className="text-left px-4 py-3">Campaign</th>
-              <th className="text-left px-4 py-3">Objective</th>
-              <th className="text-left px-4 py-3">Status</th>
-              <th className="text-left px-4 py-3">AI</th>
-              <th className="px-4 py-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {MOCK_CAMPAIGNS.map((campaign) => (
-              <tr
-                key={campaign.id}
-                className="border-b last:border-b-0 hover:bg-gray-50"
-              >
-                <td className="px-4 py-3 font-medium">
-                  {campaign.name}
-                </td>
-                <td className="px-4 py-3">
-                  {campaign.objective === "LEAD" ? "Lead" : "Sales"}
-                </td>
-                <td className="px-4 py-3">
-                  <StatusBadge status={campaign.status} />
-                </td>
-                <td className="px-4 py-3">
-                  <AIBadge active={campaign.aiActive} />
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <button
-                    onClick={() => setSelectedCampaign(campaign)}
-                    className="text-blue-600 hover:underline text-sm"
-                  >
-                    View AI
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {loading && (
+        <div className="text-sm text-gray-500">
+          Loading campaigns…
+        </div>
+      )}
 
       {/* ===============================
-          AI DRAWER (RIGHT SIDE)
+          CAMPAIGNS TABLE
+      =============================== */}
+      {!loading && (
+        <div className="bg-white border border-gray-200 rounded">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="text-left px-4 py-3">Campaign</th>
+                <th className="text-left px-4 py-3">Objective</th>
+                <th className="text-left px-4 py-3">Status</th>
+                <th className="text-left px-4 py-3">AI</th>
+                <th className="px-4 py-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {campaigns.map((campaign) => (
+                <tr
+                  key={campaign.id}
+                  className="border-b last:border-b-0 hover:bg-gray-50"
+                >
+                  <td className="px-4 py-3 font-medium">
+                    {campaign.name}
+                  </td>
+                  <td className="px-4 py-3">
+                    {campaign.objective}
+                  </td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={campaign.status} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <AIBadge active={campaign.ai_active} />
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      onClick={() => setSelectedCampaign(campaign)}
+                      className="text-blue-600 hover:underline text-sm"
+                    >
+                      View AI
+                    </button>
+                  </td>
+                </tr>
+              ))}
+
+              {campaigns.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="px-4 py-6 text-center text-gray-500"
+                  >
+                    No campaigns found
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ===============================
+          AI DRAWER
       =============================== */}
       {selectedCampaign && (
         <div className="fixed top-0 right-0 h-full w-[420px] bg-white border-l border-gray-200 shadow-lg z-50">
@@ -124,16 +147,14 @@ export default function CampaignsPage() {
             <div>
               <div className="font-medium mb-1">Objective</div>
               <div className="text-gray-600">
-                {selectedCampaign.objective === "LEAD"
-                  ? "Lead Generation"
-                  : "Sales / Conversions"}
+                {selectedCampaign.objective}
               </div>
             </div>
 
             <div>
               <div className="font-medium mb-1">AI Status</div>
               <div className="text-gray-600">
-                {selectedCampaign.aiActive
+                {selectedCampaign.ai_active
                   ? "AI Active"
                   : "AI Inactive"}
               </div>
@@ -155,18 +176,12 @@ export default function CampaignsPage() {
 }
 
 /* ===============================
-   SMALL UI COMPONENTS
+   UI COMPONENTS
 =============================== */
 
-function StatusBadge({ status }: { status: "ACTIVE" | "PAUSED" }) {
+function StatusBadge({ status }: { status: string }) {
   return (
-    <span
-      className={`inline-block rounded px-2 py-1 text-xs ${
-        status === "ACTIVE"
-          ? "bg-green-100 text-green-700"
-          : "bg-gray-200 text-gray-700"
-      }`}
-    >
+    <span className="inline-block rounded px-2 py-1 text-xs bg-gray-100 text-gray-700">
       {status}
     </span>
   );
