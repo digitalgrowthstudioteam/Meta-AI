@@ -2,6 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
 from datetime import datetime
+import logging
 
 from app.campaigns.models import Campaign
 from app.meta_api.models import MetaAdAccount, UserMetaAdAccount
@@ -11,6 +12,8 @@ from app.plans.enforcement import (
     EnforcementError,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class CampaignService:
     """
@@ -18,7 +21,7 @@ class CampaignService:
 
     Responsibilities:
     - Campaign visibility
-    - Meta sync (read-only)
+    - Meta sync (read-only, resilient)
     - AI toggle orchestration
     - Enforcement gateway
     """
@@ -31,11 +34,6 @@ class CampaignService:
         db: AsyncSession,
         user_id: UUID,
     ) -> list[Campaign]:
-        """
-        Returns campaigns visible to the user
-        via user_meta_ad_accounts mapping.
-        """
-
         stmt = (
             select(Campaign)
             .join(
@@ -56,7 +54,7 @@ class CampaignService:
         return result.scalars().all()
 
     # =====================================================
-    # SYNC CAMPAIGNS FROM META (READ-ONLY, IDEMPOTENT)
+    # SYNC CAMPAIGNS FROM META (RESILIENT, IDEMPOTENT)
     # =====================================================
     @staticmethod
     async def sync_from_meta(
@@ -64,15 +62,14 @@ class CampaignService:
         user_id: UUID,
     ) -> list[Campaign]:
         """
-        Fetches ALL campaigns from Meta (read-only)
-        and upserts them idempotently.
+        Fetches ALL campaigns from Meta (read-only) and
+        upserts them idempotently.
 
-        No AI logic.
-        No billing logic.
-        No enforcement.
+        - Resilient to partial Meta failures
+        - Never crashes if one ad account fails
         """
 
-        # 1️⃣ Fetch Meta ad accounts user has access to
+        # 1️⃣ Fetch user's active Meta ad accounts
         stmt = (
             select(MetaAdAccount)
             .join(
@@ -93,13 +90,20 @@ class CampaignService:
 
         synced_campaigns: list[Campaign] = []
 
-        # 2️⃣ Fetch & upsert campaigns per ad account
+        # 2️⃣ Fetch campaigns per ad account (SAFE LOOP)
         for ad_account in ad_accounts:
-            meta_campaigns = await MetaCampaignClient.fetch_campaigns(
-                db=db,
-                user_id=user_id,
-                ad_account=ad_account,
-            )
+            try:
+                meta_campaigns = await MetaCampaignClient.fetch_campaigns(
+                    ad_account=ad_account,
+                )
+            except Exception as e:
+                # 🔴 DO NOT CRASH SYNC
+                logger.error(
+                    "Meta campaign sync failed for ad_account=%s : %s",
+                    ad_account.meta_account_id,
+                    str(e),
+                )
+                continue  # ⬅️ THIS IS THE FIX
 
             for meta in meta_campaigns:
                 stmt = select(Campaign).where(
@@ -110,7 +114,6 @@ class CampaignService:
                 campaign = result.scalar_one_or_none()
 
                 if campaign:
-                    # Update snapshot (idempotent)
                     campaign.name = meta["name"]
                     campaign.objective = meta["objective"]
                     campaign.status = meta["status"]
@@ -132,7 +135,7 @@ class CampaignService:
         return synced_campaigns
 
     # =====================================================
-    # AI TOGGLE (FULL ENFORCEMENT GATE)
+    # AI TOGGLE (ENFORCED)
     # =====================================================
     @staticmethod
     async def toggle_ai(
@@ -142,10 +145,6 @@ class CampaignService:
         campaign_id: UUID,
         enable: bool,
     ) -> Campaign:
-        """
-        Enables or disables AI for a campaign.
-        """
-
         stmt = (
             select(Campaign)
             .join(
@@ -168,9 +167,6 @@ class CampaignService:
         if not campaign:
             raise ValueError("Campaign not found")
 
-        # =================================================
-        # ENFORCEMENT (ONLY WHEN ENABLING AI)
-        # =================================================
         if enable and not campaign.ai_active:
             try:
                 await PlanEnforcementService.can_activate_ai(
@@ -180,9 +176,6 @@ class CampaignService:
             except EnforcementError as e:
                 raise ValueError(str(e))
 
-        # =================================================
-        # APPLY TOGGLE
-        # =================================================
         campaign.ai_active = enable
         campaign.ai_activated_at = datetime.utcnow() if enable else None
         campaign.ai_deactivated_at = None if enable else datetime.utcnow()
