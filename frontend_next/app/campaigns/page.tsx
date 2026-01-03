@@ -11,6 +11,8 @@ type Campaign = {
   last_meta_sync_at?: string;
 };
 
+const API_BASE = "https://meta-ai.digitalgrowthstudio.in";
+
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
@@ -18,20 +20,18 @@ export default function CampaignsPage() {
   const [error, setError] = useState<string | null>(null);
 
   // ===============================
-  // LOAD CAMPAIGNS (READ-ONLY)
+  // LOAD CAMPAIGNS
   // ===============================
   const loadCampaigns = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const res = await fetch("/api/campaigns/", {
+      const res = await fetch(`${API_BASE}/api/campaigns`, {
         credentials: "include",
       });
 
-      if (!res.ok) {
-        throw new Error();
-      }
+      if (!res.ok) throw new Error();
 
       const data = await res.json();
       setCampaigns(Array.isArray(data) ? data : []);
@@ -54,14 +54,12 @@ export default function CampaignsPage() {
     setSyncing(true);
 
     try {
-      const res = await fetch("/api/campaigns/sync", {
+      const res = await fetch(`${API_BASE}/api/campaigns/sync`, {
         method: "POST",
         credentials: "include",
       });
 
-      if (!res.ok) {
-        throw new Error();
-      }
+      if (!res.ok) throw new Error();
 
       await loadCampaigns();
     } catch {
@@ -73,7 +71,6 @@ export default function CampaignsPage() {
 
   return (
     <div className="space-y-8">
-      {/* HEADER */}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Campaigns</h1>
@@ -91,25 +88,21 @@ export default function CampaignsPage() {
         </button>
       </div>
 
-      {/* INFO */}
       <div className="bg-blue-50 border border-blue-100 rounded p-4 text-sm text-blue-700">
         Campaigns are managed in Meta Ads Manager. You cannot create or edit
         campaigns here.
       </div>
 
-      {/* LOADING */}
       {loading && (
         <div className="bg-white border border-gray-200 rounded p-6 text-sm text-gray-500">
           Loading campaigns from Meta…
         </div>
       )}
 
-      {/* ERROR */}
       {!loading && error && (
         <div className="text-sm text-red-600">{error}</div>
       )}
 
-      {/* EMPTY */}
       {!loading && !error && campaigns.length === 0 && (
         <div className="bg-white border border-gray-200 rounded p-10 text-center">
           <div className="text-sm text-gray-600 mb-3">
@@ -125,7 +118,6 @@ export default function CampaignsPage() {
         </div>
       )}
 
-      {/* TABLE */}
       {!loading && !error && campaigns.length > 0 && (
         <div className="bg-white border border-gray-200 rounded overflow-hidden">
           <table className="w-full text-sm">
@@ -140,10 +132,7 @@ export default function CampaignsPage() {
             </thead>
             <tbody>
               {campaigns.map((c) => (
-                <tr
-                  key={c.id}
-                  className="border-b last:border-b-0 hover:bg-gray-50"
-                >
+                <tr key={c.id} className="border-b last:border-b-0">
                   <td className="px-4 py-3">
                     <div className="font-medium text-gray-900">{c.name}</div>
                     <div className="text-xs text-gray-500">
@@ -166,10 +155,6 @@ export default function CampaignsPage() {
           </table>
         </div>
       )}
-
-      <div className="text-xs text-gray-400">
-        All data is read-only and synced directly from Meta Ads Manager.
-      </div>
     </div>
   );
 }
