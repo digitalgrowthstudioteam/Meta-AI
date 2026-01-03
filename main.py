@@ -82,12 +82,12 @@ def login_page(request: Request):
 # =========================
 # API ROUTERS — CANONICAL
 # =========================
-app.include_router(auth_router)
-app.include_router(campaigns_router)
-app.include_router(admin_router)
-app.include_router(meta_router)
-app.include_router(reports_router)
-app.include_router(dashboard_router)
+app.include_router(auth_router, prefix="/api")
+app.include_router(campaigns_router, prefix="/api")
+app.include_router(admin_router, prefix="/api")
+app.include_router(meta_router, prefix="/api")
+app.include_router(reports_router, prefix="/api")
+app.include_router(dashboard_router, prefix="/api")
 
 
 # =========================
