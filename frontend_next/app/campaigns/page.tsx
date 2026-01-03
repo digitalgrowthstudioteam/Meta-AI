@@ -17,28 +17,33 @@ export default function CampaignsPage() {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const API_BASE =
+    typeof window !== "undefined"
+      ? window.location.origin
+      : "";
+
   // ===============================
-  // FETCH CAMPAIGNS (SAFE EMPTY LOAD)
+  // LOAD CAMPAIGNS (READ-ONLY)
   // ===============================
   const loadCampaigns = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const res = await fetch("/api/campaigns/", {
-        credentials: "include",
-      });
+      const res = await fetch(
+        `${API_BASE}/api/campaigns/`,
+        { credentials: "include" }
+      );
 
       if (!res.ok) {
-        throw new Error("fetch_failed");
+        throw new Error(`HTTP ${res.status}`);
       }
 
       const data = await res.json();
       setCampaigns(Array.isArray(data) ? data : []);
-    } catch {
-      // Do NOT block UI for empty / first-time users
-      setCampaigns([]);
+    } catch (err) {
       setError("Unable to load campaigns from Meta.");
+      setCampaigns([]);
     } finally {
       setLoading(false);
     }
@@ -49,25 +54,27 @@ export default function CampaignsPage() {
   }, []);
 
   // ===============================
-  // SYNC CAMPAIGNS (CORRECT ENDPOINT)
+  // SYNC CAMPAIGNS
   // ===============================
   const syncCampaigns = async () => {
     setSyncing(true);
-    setError(null);
 
     try {
-      const res = await fetch("/api/campaigns/sync", {
-        method: "POST",
-        credentials: "include",
-      });
+      const res = await fetch(
+        `${API_BASE}/api/campaigns/sync`,
+        {
+          method: "POST",
+          credentials: "include",
+        }
+      );
 
       if (!res.ok) {
-        throw new Error("sync_failed");
+        throw new Error(`HTTP ${res.status}`);
       }
 
       await loadCampaigns();
     } catch {
-      setError("Failed to sync campaigns. Please try again.");
+      alert("Failed to sync campaigns. Please try again.");
     } finally {
       setSyncing(false);
     }
@@ -75,14 +82,14 @@ export default function CampaignsPage() {
 
   return (
     <div className="space-y-8">
-      {/* ================= HEADER ================= */}
+      {/* HEADER */}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">
             Campaigns
           </h1>
           <p className="text-sm text-gray-500">
-            Read-only view of campaigns synced from Meta Ads Manager
+            Synced from Meta Ads Manager • Read-only
           </p>
         </div>
 
@@ -95,28 +102,26 @@ export default function CampaignsPage() {
         </button>
       </div>
 
-      {/* ================= INFO ================= */}
+      {/* INFO */}
       <div className="bg-blue-50 border border-blue-100 rounded p-4 text-sm text-blue-700">
         Campaigns are managed in Meta Ads Manager. You cannot create or edit
         campaigns here.
       </div>
 
-      {/* ================= ERROR (NON-BLOCKING) ================= */}
-      {error && (
-        <div className="text-sm text-red-600">
-          {error}
-        </div>
-      )}
-
-      {/* ================= LOADING ================= */}
+      {/* LOADING */}
       {loading && (
         <div className="bg-white border border-gray-200 rounded p-6 text-sm text-gray-500">
           Loading campaigns from Meta…
         </div>
       )}
 
-      {/* ================= EMPTY STATE ================= */}
-      {!loading && campaigns.length === 0 && (
+      {/* ERROR */}
+      {!loading && error && (
+        <div className="text-sm text-red-600">{error}</div>
+      )}
+
+      {/* EMPTY STATE */}
+      {!loading && !error && campaigns.length === 0 && (
         <div className="bg-white border border-gray-200 rounded p-10 text-center">
           <div className="text-sm text-gray-600 mb-3">
             No campaigns synced yet.
@@ -131,8 +136,8 @@ export default function CampaignsPage() {
         </div>
       )}
 
-      {/* ================= TABLE ================= */}
-      {!loading && campaigns.length > 0 && (
+      {/* TABLE */}
+      {!loading && !error && campaigns.length > 0 && (
         <div className="bg-white border border-gray-200 rounded overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
@@ -170,21 +175,16 @@ export default function CampaignsPage() {
                     </div>
                   </td>
 
+                  <td className="px-4 py-3">{c.objective}</td>
+                  <td className="px-4 py-3">{c.status}</td>
                   <td className="px-4 py-3">
-                    <ObjectiveBadge value={c.objective} />
+                    {c.ai_active ? "AI Active" : "AI Inactive"}
                   </td>
-
-                  <td className="px-4 py-3">
-                    <StatusBadge value={c.status} />
-                  </td>
-
-                  <td className="px-4 py-3">
-                    <AIBadge active={c.ai_active} />
-                  </td>
-
                   <td className="px-4 py-3 text-xs text-gray-500">
                     {c.last_meta_sync_at
-                      ? new Date(c.last_meta_sync_at).toLocaleString()
+                      ? new Date(
+                          c.last_meta_sync_at
+                        ).toLocaleString()
                       : "—"}
                   </td>
                 </tr>
@@ -198,53 +198,5 @@ export default function CampaignsPage() {
         All data is read-only and synced directly from Meta Ads Manager.
       </div>
     </div>
-  );
-}
-
-/* ===============================
-   UI COMPONENTS
-=============================== */
-
-function StatusBadge({ value }: { value: string }) {
-  const active = value.toLowerCase() === "active";
-  return (
-    <span
-      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-        active
-          ? "bg-green-100 text-green-700"
-          : "bg-gray-200 text-gray-700"
-      }`}
-    >
-      {value}
-    </span>
-  );
-}
-
-function ObjectiveBadge({ value }: { value: string }) {
-  const isLead = value.toLowerCase().includes("lead");
-  return (
-    <span
-      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-        isLead
-          ? "bg-purple-100 text-purple-700"
-          : "bg-orange-100 text-orange-700"
-      }`}
-    >
-      {value}
-    </span>
-  );
-}
-
-function AIBadge({ active }: { active: boolean }) {
-  return (
-    <span
-      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${
-        active
-          ? "bg-blue-100 text-blue-700"
-          : "bg-gray-200 text-gray-600"
-      }`}
-    >
-      {active ? "AI Active" : "AI Inactive"}
-    </span>
   );
 }
