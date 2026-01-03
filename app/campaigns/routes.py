@@ -10,6 +10,7 @@ from app.users.models import User
 from app.campaigns.service import CampaignService
 from app.campaigns.schemas import CampaignResponse, ToggleAIRequest
 from app.plans.enforcement import EnforcementError
+from app.meta_api.models import MetaOAuthToken
 
 
 router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
@@ -24,7 +25,7 @@ async def get_dev_user(db: AsyncSession) -> Optional[User]:
 
 
 # =========================================================
-# LIST CAMPAIGNS (READ-ONLY, FAIL-SAFE)
+# LIST CAMPAIGNS (READ-ONLY, CONSISTENT)
 # =========================================================
 @router.get(
     "/",
@@ -38,18 +39,44 @@ async def list_campaigns(
     if not current_user:
         return []
 
+    # -----------------------------------------
+    # META NOT CONNECTED → SIGNAL FRONTEND
+    # -----------------------------------------
+    result = await db.execute(
+        select(MetaOAuthToken)
+        .where(
+            MetaOAuthToken.user_id == current_user.id,
+            MetaOAuthToken.is_active.is_(True),
+        )
+        .limit(1)
+    )
+    token = result.scalar_one_or_none()
+
+    if not token:
+        # IMPORTANT:
+        # - Campaigns page
+        # - AI Actions page
+        # must detect Meta not connected
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Meta account not connected",
+        )
+
+    # -----------------------------------------
+    # SAFE LIST (EMPTY IS VALID)
+    # -----------------------------------------
     try:
         return await CampaignService.list_campaigns(
             db=db,
             user_id=current_user.id,
         )
     except Exception:
-        # IMPORTANT: Campaigns page must NEVER crash
+        # NEVER crash UI
         return []
 
 
 # =========================================================
-# SYNC CAMPAIGNS FROM META
+# SYNC CAMPAIGNS FROM META (MANUAL)
 # =========================================================
 @router.post(
     "/sync",
@@ -79,7 +106,7 @@ async def sync_campaigns_from_meta(
 
 
 # =========================================================
-# AI TOGGLE (UNCHANGED)
+# AI TOGGLE (READ-ONLY META SAFE)
 # =========================================================
 @router.post(
     "/{campaign_id}/ai-toggle",
