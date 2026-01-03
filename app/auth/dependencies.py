@@ -6,9 +6,6 @@ from app.core.db_session import get_db
 from app.core.config import settings
 from app.users.models import User
 
-# -----------------------------
-# AUTH DEPENDENCIES
-# -----------------------------
 
 async def get_current_user(
     db: AsyncSession = Depends(get_db),
