@@ -25,50 +25,49 @@ export default function RootLayout({ children }: Props) {
   const router = useRouter();
   const pathname = usePathname();
 
-  const [checkingSession, setCheckingSession] = useState(true);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
 
-  const isPublicPage = pathname?.startsWith("/login");
+  const isLoginPage = pathname?.startsWith("/login");
 
   /* ======================================================
-     SESSION VERIFICATION (FIXED)
+     AUTH CHECK — SINGLE RUN, NO RACE
   ====================================================== */
   useEffect(() => {
     if (!pathname) return;
 
-    if (isPublicPage) {
-      setCheckingSession(false);
+    if (isLoginPage) {
+      setAuthChecked(true);
       return;
     }
 
-    async function verifySession() {
+    (async () => {
       try {
         const res = await fetch("/api/auth/me", {
           credentials: "include",
         });
 
-        if (!res.ok) {
+        if (res.ok) {
+          setIsAuthenticated(true);
+        } else {
           router.replace("/login");
-          return;
         }
       } catch {
         router.replace("/login");
-        return;
       } finally {
-        setCheckingSession(false);
+        setAuthChecked(true);
       }
-    }
-
-    verifySession();
-  }, [pathname, isPublicPage, router]);
+    })();
+  }, [pathname, isLoginPage, router]);
 
   /* ======================================================
-     META STATUS
+     META STATUS (ONLY AFTER AUTH)
   ====================================================== */
   useEffect(() => {
-    if (isPublicPage || checkingSession) return;
+    if (!isAuthenticated) return;
 
-    async function loadMetaStatus() {
+    (async () => {
       try {
         const res = await fetch("/api/dashboard/summary", {
           credentials: "include",
@@ -84,15 +83,13 @@ export default function RootLayout({ children }: Props) {
       } catch {
         setMetaConnected(false);
       }
-    }
-
-    loadMetaStatus();
-  }, [isPublicPage, checkingSession]);
+    })();
+  }, [isAuthenticated]);
 
   /* ======================================================
-     LOADING
+     WAIT FOR AUTH CHECK
   ====================================================== */
-  if (checkingSession) {
+  if (!authChecked) {
     return (
       <html lang="en">
         <body className="bg-gray-50 text-gray-900">
@@ -107,9 +104,9 @@ export default function RootLayout({ children }: Props) {
   }
 
   /* ======================================================
-     PUBLIC LOGIN
+     LOGIN PAGE (NO LAYOUT)
   ====================================================== */
-  if (isPublicPage) {
+  if (isLoginPage) {
     return (
       <html lang="en">
         <body className="bg-gray-50 text-gray-900">
@@ -120,7 +117,7 @@ export default function RootLayout({ children }: Props) {
   }
 
   /* ======================================================
-     APP LAYOUT
+     MAIN APP LAYOUT
   ====================================================== */
   return (
     <html lang="en">
@@ -139,7 +136,10 @@ export default function RootLayout({ children }: Props) {
                   key={item.href}
                   href={item.href}
                   label={item.label}
-                  active={pathname === item.href || pathname?.startsWith(item.href + "/")}
+                  active={
+                    pathname === item.href ||
+                    pathname?.startsWith(item.href + "/")
+                  }
                   primary={item.primary}
                 />
               ))}
@@ -157,9 +157,13 @@ export default function RootLayout({ children }: Props) {
                 {metaConnected === null ? (
                   <span className="text-gray-400">Checking…</span>
                 ) : metaConnected ? (
-                  <span className="font-medium text-green-600">Connected</span>
+                  <span className="font-medium text-green-600">
+                    Connected
+                  </span>
                 ) : (
-                  <span className="font-medium text-red-600">Not Connected</span>
+                  <span className="font-medium text-red-600">
+                    Not Connected
+                  </span>
                 )}
               </div>
             </header>
@@ -174,6 +178,9 @@ export default function RootLayout({ children }: Props) {
   );
 }
 
+/* ======================================================
+   SIDEBAR LINK
+====================================================== */
 function SidebarLink({
   href,
   label,
