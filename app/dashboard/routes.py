@@ -3,7 +3,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from app.core.db_session import get_db
-from app.auth.dependencies import get_current_user
+
+# AUTH IS TEMPORARILY DISABLED (DEV MODE)
+# get_current_user WILL BE REINTRODUCED LATER VIA NEXT.JS
 from app.users.models import User
 
 from app.meta_api.models import (
@@ -20,20 +22,57 @@ router = APIRouter(
 )
 
 
+# --------------------------------------------------
+# DEV MODE USER RESOLUTION (TEMPORARY)
+# --------------------------------------------------
+async def get_dev_user(db: AsyncSession) -> User | None:
+    """
+    Temporary user resolver while auth is disabled.
+    Uses first available user in database.
+
+    THIS WILL BE REMOVED when auth middleware is enabled.
+    """
+    result = await db.execute(select(User).limit(1))
+    return result.scalar_one_or_none()
+
+
 @router.get("/summary")
 async def dashboard_summary(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ):
     """
-    Phase 1 dashboard summary (READ-ONLY)
+    Dashboard Summary (READ-ONLY)
 
-    Returns:
-    - Meta connection status
-    - Number of linked ad accounts
-    - Total campaigns (synced)
-    - AI-active campaigns (0 for Phase 1)
+    FINAL CONTRACT — DO NOT CHANGE SHAPE
+
+    Auth: Disabled (Development Mode)
     """
+
+    # --------------------------------------------------
+    # Resolve user (DEV MODE)
+    # --------------------------------------------------
+    current_user = await get_dev_user(db)
+
+    if not current_user:
+        # No users exist yet — return empty safe dashboard
+        return {
+            "meta_connected": False,
+            "ad_accounts": 0,
+            "campaigns": {
+                "total": 0,
+                "ai_active": 0,
+                "ai_limit": 0,
+            },
+            "ai": {
+                "engine_status": "off",
+                "last_action_at": None,
+            },
+            "subscription": {
+                "plan": "none",
+                "expires_at": None,
+                "manual_campaign_credits": 0,
+            },
+        }
 
     # --------------------------------------------------
     # 1. Meta connection status
@@ -59,7 +98,7 @@ async def dashboard_summary(
     ad_accounts = result.scalar() or 0
 
     # --------------------------------------------------
-    # 3. Campaign count (CORRECT OWNERSHIP MODEL)
+    # 3. Campaign count
     # campaigns → meta_ad_accounts → user_meta_ad_accounts → user
     # --------------------------------------------------
     result = await db.execute(
@@ -78,16 +117,32 @@ async def dashboard_summary(
             Campaign.is_archived.is_(False),
         )
     )
-    campaigns = result.scalar() or 0
+    total_campaigns = result.scalar() or 0
 
     # --------------------------------------------------
-    # 4. AI-active campaigns (Phase 1 = 0)
+    # 4. AI rules (Phase 1)
     # --------------------------------------------------
     ai_active = 0
+    ai_limit = 3  # TEMP: will come from subscription later
 
+    # --------------------------------------------------
+    # FINAL RESPONSE (LOCKED)
+    # --------------------------------------------------
     return {
         "meta_connected": meta_connected,
         "ad_accounts": ad_accounts,
-        "campaigns": campaigns,
-        "ai_active": ai_active,
+        "campaigns": {
+            "total": total_campaigns,
+            "ai_active": ai_active,
+            "ai_limit": ai_limit,
+        },
+        "ai": {
+            "engine_status": "off",
+            "last_action_at": None,
+        },
+        "subscription": {
+            "plan": "starter",
+            "expires_at": None,
+            "manual_campaign_credits": 0,
+        },
     }
