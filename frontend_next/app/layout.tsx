@@ -41,7 +41,7 @@ export default function RootLayout({ children }: Props) {
 
     async function verifySession() {
       try {
-        const res = await fetch("/auth/me", {
+        const res = await fetch("/api/auth/me", {
           credentials: "include",
         });
 
