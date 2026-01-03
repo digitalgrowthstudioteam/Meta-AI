@@ -7,7 +7,7 @@ type Campaign = {
   name: string;
   status: string;
   objective?: string;
-  ai_enabled?: boolean;
+  ai_active?: boolean;
 };
 
 export default function CampaignsPage() {
@@ -21,8 +21,10 @@ export default function CampaignsPage() {
         setLoading(true);
         setError(null);
 
-        const res = await fetch("/api/campaigns", {
+        const res = await fetch("/api/campaigns/", {
+          method: "GET",
           credentials: "include",
+          cache: "no-store",
         });
 
         if (!res.ok) {
@@ -31,13 +33,12 @@ export default function CampaignsPage() {
 
         const data = await res.json();
 
-        // ✅ EMPTY ARRAY IS A VALID STATE
         if (Array.isArray(data)) {
           setCampaigns(data);
         } else {
           throw new Error("Invalid response format");
         }
-      } catch (err: any) {
+      } catch (err) {
         console.error("Campaign fetch failed:", err);
         setError("Unable to load campaigns from Meta.");
       } finally {
@@ -55,17 +56,12 @@ export default function CampaignsPage() {
         Synced from Meta Ads Manager · Read-only
       </p>
 
-      {/* LOADING */}
-      {loading && (
-        <p className="text-gray-600">Loading campaigns…</p>
-      )}
+      {loading && <p className="text-gray-600">Loading campaigns…</p>}
 
-      {/* ERROR — ONLY REAL ERRORS */}
       {!loading && error && (
         <p className="text-red-600 font-medium">{error}</p>
       )}
 
-      {/* EMPTY STATE — NORMAL */}
       {!loading && !error && campaigns.length === 0 && (
         <div className="rounded border border-dashed p-6 text-gray-600">
           <p className="font-medium">No campaigns found</p>
@@ -75,7 +71,6 @@ export default function CampaignsPage() {
         </div>
       )}
 
-      {/* CAMPAIGN LIST */}
       {!loading && !error && campaigns.length > 0 && (
         <div className="space-y-2">
           {campaigns.map((c) => (
@@ -92,12 +87,12 @@ export default function CampaignsPage() {
 
               <span
                 className={`text-xs px-2 py-1 rounded ${
-                  c.ai_enabled
+                  c.ai_active
                     ? "bg-green-100 text-green-700"
                     : "bg-gray-100 text-gray-600"
                 }`}
               >
-                {c.ai_enabled ? "AI Active" : "AI Inactive"}
+                {c.ai_active ? "AI Active" : "AI Inactive"}
               </span>
             </div>
           ))}
