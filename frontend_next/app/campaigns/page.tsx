@@ -22,7 +22,8 @@ export default function CampaignsPage() {
   // ===============================
   const loadCampaigns = async () => {
     try {
-      const res = await fetch("/api/campaigns", {
+      setError(null);
+      const res = await fetch("/api/campaigns/", {
         credentials: "include",
       });
 
@@ -42,18 +43,19 @@ export default function CampaignsPage() {
   }, []);
 
   // ===============================
-  // SYNC CAMPAIGNS
+  // SYNC CAMPAIGNS (FIXED ENDPOINT)
   // ===============================
   const syncCampaigns = async () => {
     setSyncing(true);
     try {
-      const res = await fetch("/api/campaigns/sync", {
+      const res = await fetch("/campaigns/sync", {
         method: "POST",
         credentials: "include",
       });
 
       if (!res.ok) throw new Error();
 
+      // Reload campaigns after successful sync
       await loadCampaigns();
     } catch {
       alert("Failed to sync campaigns. Please try again.");
@@ -109,9 +111,10 @@ export default function CampaignsPage() {
           </div>
           <button
             onClick={syncCampaigns}
-            className="px-4 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
+            disabled={syncing}
+            className="px-4 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            Sync Campaigns
+            {syncing ? "Syncing…" : "Sync Campaigns"}
           </button>
         </div>
       )}
