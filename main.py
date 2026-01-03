@@ -2,19 +2,22 @@
 Digital Growth Studio (Meta-AI)
 Main application entry point
 
-PHASE 1.6 — BACKEND UI CUTOVER
-- FastAPI is API-only
-- Legacy Jinja UI routes disabled (not deleted)
-- /api/* is the single source of truth
+PHASE 1.7 — API-ONLY MODE (LOCKED)
+
+RULES:
+- FastAPI serves APIs ONLY
+- NO HTML rendering
+- NO /login, /dashboard, or UI routes
+- Next.js is the ONLY frontend
 """
 
 import app.models  # registers all SQLAlchemy models
-from fastapi import FastAPI, Request
+
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 
 # =========================
-# ROUTERS (API LOGIC)
+# ROUTERS (API ONLY)
 # =========================
 from app.auth.routes import router as auth_router
 from app.campaigns.routes import router as campaigns_router
@@ -35,7 +38,8 @@ app = FastAPI(
 
 
 # =========================
-# STATIC FILES (LEGACY — SAFE TO KEEP)
+# STATIC FILES (OPTIONAL)
+# Can be removed later if unused
 # =========================
 app.mount(
     "/static/shared",
@@ -57,24 +61,7 @@ app.mount(
 
 
 # =========================
-# TEMPLATE LOADER (LOGIN ONLY)
-# =========================
-templates = Jinja2Templates(directory="frontend")
-
-
-# =========================
-# LEGACY LOGIN PAGE (ONLY)
-# =========================
-@app.get("/login")
-def login_page(request: Request):
-    return templates.TemplateResponse(
-        "shared/templates/login.html",
-        {"request": request},
-    )
-
-
-# =========================
-# API ROUTERS — SINGLE SOURCE
+# API ROUTERS — SINGLE SOURCE OF TRUTH
 # =========================
 app.include_router(auth_router, prefix="/api")
 app.include_router(campaigns_router, prefix="/api")
@@ -85,8 +72,8 @@ app.include_router(dashboard_router, prefix="/api")
 
 
 # =========================
-# HEALTH CHECK
+# HEALTH CHECK (API SAFE)
 # =========================
-@app.get("/")
+@app.get("/api/health")
 def health_check():
     return {"status": "ok"}
