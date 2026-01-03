@@ -18,20 +18,26 @@ export default function CampaignsPage() {
   const [error, setError] = useState<string | null>(null);
 
   // ===============================
-  // FETCH CAMPAIGNS
+  // FETCH CAMPAIGNS (SAFE EMPTY LOAD)
   // ===============================
   const loadCampaigns = async () => {
+    setLoading(true);
+    setError(null);
+
     try {
-      setError(null);
       const res = await fetch("/api/campaigns/", {
         credentials: "include",
       });
 
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        throw new Error("fetch_failed");
+      }
 
       const data = await res.json();
-      setCampaigns(data);
+      setCampaigns(Array.isArray(data) ? data : []);
     } catch {
+      // Do NOT block UI for empty / first-time users
+      setCampaigns([]);
       setError("Unable to load campaigns from Meta.");
     } finally {
       setLoading(false);
@@ -43,22 +49,25 @@ export default function CampaignsPage() {
   }, []);
 
   // ===============================
-  // SYNC CAMPAIGNS (FIXED ENDPOINT)
+  // SYNC CAMPAIGNS (CORRECT ENDPOINT)
   // ===============================
   const syncCampaigns = async () => {
     setSyncing(true);
+    setError(null);
+
     try {
-      const res = await fetch("/campaigns/sync", {
+      const res = await fetch("/api/campaigns/sync", {
         method: "POST",
         credentials: "include",
       });
 
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        throw new Error("sync_failed");
+      }
 
-      // Reload campaigns after successful sync
       await loadCampaigns();
     } catch {
-      alert("Failed to sync campaigns. Please try again.");
+      setError("Failed to sync campaigns. Please try again.");
     } finally {
       setSyncing(false);
     }
@@ -86,25 +95,28 @@ export default function CampaignsPage() {
         </button>
       </div>
 
-      {/* ================= INFO BAR ================= */}
+      {/* ================= INFO ================= */}
       <div className="bg-blue-50 border border-blue-100 rounded p-4 text-sm text-blue-700">
         Campaigns are managed in Meta Ads Manager. You cannot create or edit
         campaigns here.
       </div>
 
-      {/* ================= STATES ================= */}
+      {/* ================= ERROR (NON-BLOCKING) ================= */}
+      {error && (
+        <div className="text-sm text-red-600">
+          {error}
+        </div>
+      )}
+
+      {/* ================= LOADING ================= */}
       {loading && (
         <div className="bg-white border border-gray-200 rounded p-6 text-sm text-gray-500">
           Loading campaigns from Meta…
         </div>
       )}
 
-      {!loading && error && (
-        <div className="text-sm text-red-600">{error}</div>
-      )}
-
       {/* ================= EMPTY STATE ================= */}
-      {!loading && !error && campaigns.length === 0 && (
+      {!loading && campaigns.length === 0 && (
         <div className="bg-white border border-gray-200 rounded p-10 text-center">
           <div className="text-sm text-gray-600 mb-3">
             No campaigns synced yet.
@@ -120,7 +132,7 @@ export default function CampaignsPage() {
       )}
 
       {/* ================= TABLE ================= */}
-      {!loading && !error && campaigns.length > 0 && (
+      {!loading && campaigns.length > 0 && (
         <div className="bg-white border border-gray-200 rounded overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
