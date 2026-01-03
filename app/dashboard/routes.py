@@ -7,7 +7,6 @@ from sqlalchemy import select, func
 from app.core.db_session import get_db
 
 # AUTH IS TEMPORARILY DISABLED (DEV MODE)
-# get_current_user WILL BE REINTRODUCED LATER VIA NEXT.JS
 from app.users.models import User
 
 from app.meta_api.models import (
@@ -28,12 +27,6 @@ router = APIRouter(
 # DEV MODE USER RESOLUTION (TEMPORARY)
 # --------------------------------------------------
 async def get_dev_user(db: AsyncSession) -> Optional[User]:
-    """
-    Temporary user resolver while auth is disabled.
-    Uses first available user in database.
-
-    THIS WILL BE REMOVED when auth middleware is enabled.
-    """
     result = await db.execute(select(User).limit(1))
     return result.scalar_one_or_none()
 
@@ -46,8 +39,6 @@ async def dashboard_summary(
     Dashboard Summary (READ-ONLY)
 
     FINAL CONTRACT — DO NOT CHANGE SHAPE
-
-    Auth: Disabled (Development Mode)
     """
 
     # --------------------------------------------------
@@ -56,7 +47,6 @@ async def dashboard_summary(
     current_user = await get_dev_user(db)
 
     if not current_user:
-        # No users exist yet — return empty safe dashboard
         return {
             "meta_connected": False,
             "ad_accounts": 0,
@@ -100,8 +90,7 @@ async def dashboard_summary(
     ad_accounts = result.scalar() or 0
 
     # --------------------------------------------------
-    # 3. Campaign count
-    # campaigns → meta_ad_accounts → user_meta_ad_accounts → user
+    # 3. Total campaigns
     # --------------------------------------------------
     result = await db.execute(
         select(func.count())
@@ -122,10 +111,31 @@ async def dashboard_summary(
     total_campaigns = result.scalar() or 0
 
     # --------------------------------------------------
-    # 4. AI rules (Phase 1)
+    # 4. AI-ACTIVE CAMPAIGNS (REAL COUNT)
     # --------------------------------------------------
-    ai_active = 0
-    ai_limit = 3  # TEMP: will come from subscription later
+    result = await db.execute(
+        select(func.count())
+        .select_from(Campaign)
+        .join(
+            MetaAdAccount,
+            Campaign.ad_account_id == MetaAdAccount.id,
+        )
+        .join(
+            UserMetaAdAccount,
+            UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
+        )
+        .where(
+            UserMetaAdAccount.user_id == current_user.id,
+            Campaign.is_archived.is_(False),
+            Campaign.ai_active.is_(True),
+        )
+    )
+    ai_active = result.scalar() or 0
+
+    # --------------------------------------------------
+    # 5. AI LIMIT (PHASE 1 — TEMP)
+    # --------------------------------------------------
+    ai_limit = 3
 
     # --------------------------------------------------
     # FINAL RESPONSE (LOCKED)
