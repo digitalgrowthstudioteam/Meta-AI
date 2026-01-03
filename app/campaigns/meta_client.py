@@ -47,7 +47,7 @@ class MetaCampaignClient:
         if not token:
             raise RuntimeError("No active Meta OAuth token found")
 
-        url = f"{cls.GRAPH_BASE_URL}/act_{ad_account.meta_account_id}/campaigns"
+        url = f"{cls.GRAPH_BASE_URL}/{ad_account.meta_account_id}/campaigns"
 
         params = {
             "fields": "id,name,objective,effective_status",
