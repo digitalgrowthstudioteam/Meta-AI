@@ -1,7 +1,7 @@
 """add last_meta_sync_at to campaigns
 
 Revision ID: add_last_meta_sync_at
-Revises: <PUT_PREVIOUS_HEAD_REVISION_ID_HERE>
+Revises: d1ec4e28cfe4
 Create Date: 2026-01-03
 """
 
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "add_last_meta_sync_at"
-down_revision = "<PUT_PREVIOUS_HEAD_REVISION_ID_HERE>"
+down_revision = "d1ec4e28cfe4"
 branch_labels = None
 depends_on = None
 
