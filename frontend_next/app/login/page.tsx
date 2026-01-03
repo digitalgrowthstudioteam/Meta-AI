@@ -20,7 +20,7 @@ export default function LoginPage() {
       const body = new URLSearchParams();
       body.append("email", email);
 
-      const res = await fetch("/auth/login", {
+      const res = await fetch("/api/auth/login", {
         method: "POST",
         credentials: "include",
         headers: {
@@ -44,7 +44,6 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100">
       <div className="w-full max-w-md bg-white border border-gray-200 rounded-lg shadow-sm p-8">
-        
         <div className="mb-6 text-center">
           <h1 className="text-xl font-semibold text-gray-900">
             Digital Growth Studio
