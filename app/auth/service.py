@@ -6,12 +6,11 @@ Responsibilities:
 - Verify magic link token
 - Auto-create user on first login
 - Create server-side session
-- Assign trial subscription on first successful login
 
-Rules:
-- NO routes here
-- NO billing enforcement
-- NO Meta / AI logic
+IMPORTANT (LOCKED DESIGN):
+- Trial subscription assignment is INTENTIONALLY DISABLED
+- Plan & billing logic will be re-enabled in Phase 5
+- Code is preserved but execution is disabled explicitly
 """
 
 from datetime import datetime, timedelta
@@ -31,14 +30,18 @@ from app.auth.tokens import (
 )
 from app.auth.sessions import create_session
 from app.users.models import User
-from app.plans.subscription_models import Subscription
-from app.plans.plan_models import Plan
+
+# 🚫 PHASE 5 ONLY — DO NOT ENABLE NOW
+# from app.plans.subscription_models import Subscription
+# from app.plans.plan_models import Plan
 
 
 # =========================================================
 # CONSTANTS (LOCKED)
 # =========================================================
 IST_ZONE = ZoneInfo("Asia/Kolkata")
+
+# Trial-related constants are preserved for Phase 5
 TRIAL_DAYS = 7
 GRACE_DAYS = 3
 TRIAL_AI_LIMIT = 3
@@ -113,7 +116,6 @@ async def request_magic_login(
 
     subject = build_magic_link_subject()
 
-    # ✅ CRITICAL FIX — MUST GO THROUGH /api
     magic_link = (
         f"https://meta-ai.digitalgrowthstudio.in"
         f"/api/auth/verify?token={raw_token}"
@@ -154,8 +156,8 @@ async def verify_magic_login(
     # Fetch or create user
     user = await _get_or_create_user(db, magic_token.email)
 
-    # ✅ ASSIGN TRIAL IF FIRST LOGIN
-    await _assign_trial_if_needed(db, user)
+    # 🚫 TRIAL ASSIGNMENT DISABLED (PHASE 5)
+    # await _assign_trial_if_needed(db, user)
 
     # Create session
     session = await create_session(db, user)
@@ -196,54 +198,14 @@ async def _get_or_create_user(
     return user
 
 
-async def _assign_trial_if_needed(
-    db: AsyncSession,
-    user: User,
-) -> None:
-    """
-    Assign 7-day trial + 3-day grace period.
-
-    Rules:
-    - Assign ONLY if user has no subscription
-    - Must never fail silently
-    """
-
-    result = await db.execute(
-        select(Subscription)
-        .where(Subscription.user_id == user.id)
-        .order_by(Subscription.created_at.desc())
-    )
-    existing = result.scalars().first()
-    if existing:
-        return
-
-    plan_result = await db.execute(
-        select(Plan).where(Plan.is_trial_allowed.is_(True))
-    )
-    trial_plan = plan_result.scalar_one_or_none()
-
-    if not trial_plan:
-        raise RuntimeError("No trial plan found in plans table")
-
-    now = datetime.utcnow()
-    trial_end = now + timedelta(days=TRIAL_DAYS)
-    grace_end = trial_end + timedelta(days=GRACE_DAYS)
-
-    subscription = Subscription(
-        user_id=user.id,
-        plan_id=trial_plan.id,
-        status="trial",
-        starts_at=now,
-        ends_at=trial_end,
-        is_trial=True,
-        trial_start_date=now.date(),
-        trial_end_date=trial_end.date(),
-        grace_ends_at=grace_end,
-        ai_campaign_limit_snapshot=TRIAL_AI_LIMIT,
-        is_active=True,
-        created_by_admin=False,
-        assigned_by_admin=False,
-    )
-
-    db.add(subscription)
-    await db.commit()
+# =========================================================
+# PHASE 5 — TRIAL ASSIGNMENT (INTENTIONALLY DISABLED)
+# =========================================================
+# This function is preserved to avoid rework later.
+# It MUST NOT be executed until:
+# - plans tables exist
+# - billing rules are finalized
+# - Phase 5 is explicitly started
+#
+# async def _assign_trial_if_needed(db: AsyncSession, user: User) -> None:
+#     ...
