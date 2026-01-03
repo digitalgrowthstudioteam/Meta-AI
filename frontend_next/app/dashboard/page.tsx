@@ -2,37 +2,59 @@
 
 import { useEffect, useState } from "react";
 
+/**
+ * FINAL Dashboard Contract (future-proof)
+ * Backend may return partial data in Phase-1
+ */
 type DashboardSummary = {
   meta_connected: boolean;
   ad_accounts: number;
-  campaigns: number;
-  ai_active: number;
+
+  campaigns?: {
+    total: number;
+    ai_active: number;
+    ai_limit: number;
+  };
+
+  ai?: {
+    engine_status: "on" | "off";
+    last_action_at: string | null;
+  };
+
+  subscription?: {
+    plan: string;
+    expires_at: string;
+    manual_campaign_credits: number;
+  };
 };
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // --------------------------------------------------
-  // LOAD DASHBOARD SUMMARY (SOURCE OF TRUTH)
+  // LOAD DASHBOARD SUMMARY (READ-ONLY)
   // --------------------------------------------------
   const loadSummary = async () => {
+    setLoading(true);
+    setError(null);
+
     try {
       const res = await fetch("/api/dashboard/summary", {
         credentials: "include",
       });
 
       if (!res.ok) {
-        throw new Error("Failed to load dashboard");
+        throw new Error("Dashboard API failed");
       }
 
       const json = await res.json();
       setData(json);
     } catch {
-      setError("Failed to load dashboard data");
+      setError("Unable to load dashboard data");
     } finally {
       setLoading(false);
     }
@@ -43,18 +65,22 @@ export default function DashboardPage() {
   }, []);
 
   // --------------------------------------------------
-  // CONNECT META
+  // META CONNECT
   // --------------------------------------------------
   const connectMeta = async () => {
-    const res = await fetch("/api/meta/connect", {
-      credentials: "include",
-    });
+    try {
+      const res = await fetch("/api/meta/connect", {
+        credentials: "include",
+      });
 
-    if (!res.ok) return;
+      if (!res.ok) return;
 
-    const json = await res.json();
-    if (json?.redirect_url) {
-      window.location.href = json.redirect_url;
+      const json = await res.json();
+      if (json?.redirect_url) {
+        window.location.href = json.redirect_url;
+      }
+    } catch {
+      setMessage("Failed to initiate Meta connection");
     }
   };
 
@@ -63,7 +89,7 @@ export default function DashboardPage() {
   // --------------------------------------------------
   const syncAdAccounts = async () => {
     setSyncing(true);
-    setSyncResult(null);
+    setMessage(null);
 
     try {
       const res = await fetch("/api/meta/adaccounts/sync", {
@@ -72,45 +98,56 @@ export default function DashboardPage() {
       });
 
       if (!res.ok) {
-        throw new Error("Sync failed");
+        throw new Error();
       }
 
       const json = await res.json();
-      setSyncResult(
-        `Synced ${json.ad_accounts_processed} ad accounts successfully`
-      );
-
+      setMessage(`Synced ${json.ad_accounts_processed} ad accounts`);
       await loadSummary();
     } catch {
-      setSyncResult("Sync failed. Please try again.");
+      setMessage("Ad account sync failed");
     } finally {
       setSyncing(false);
     }
   };
 
   // --------------------------------------------------
-  // RENDER STATES
+  // UI STATES
   // --------------------------------------------------
   if (loading) {
-    return <div className="text-sm text-gray-500">Loading dashboard…</div>;
-  }
-
-  if (error || !data) {
     return (
-      <div className="text-sm text-red-600">
-        {error ?? "Failed to load dashboard data"}
+      <div className="space-y-4">
+        <DevBanner />
+        <div className="text-sm text-gray-500">Loading dashboard…</div>
       </div>
     );
   }
 
+  if (error || !data) {
+    return (
+      <div className="space-y-4">
+        <DevBanner />
+        <div className="text-sm text-red-600">
+          {error ?? "Dashboard unavailable"}
+        </div>
+      </div>
+    );
+  }
+
+  const campaignsTotal = data.campaigns?.total ?? 0;
+  const aiActive = data.campaigns?.ai_active ?? 0;
+  const aiLimit = data.campaigns?.ai_limit ?? 0;
+
   return (
     <div className="space-y-8">
+      <DevBanner />
+
       {/* ================= HEADER ================= */}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Dashboard</h1>
           <p className="text-sm text-gray-500">
-            Overview of your Meta Ads and AI activity
+            Command overview of Meta Ads & AI status
           </p>
         </div>
 
@@ -127,7 +164,7 @@ export default function DashboardPage() {
       {/* ================= META ACTION BAR ================= */}
       <div className="bg-white border border-gray-200 rounded p-4 flex items-center justify-between">
         <div className="text-sm text-gray-600">
-          Meta Ads connection is required to sync campaigns and enable AI.
+          Meta connection is required to sync campaigns and enable AI.
         </div>
 
         <div className="flex gap-3">
@@ -152,38 +189,51 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {syncResult && (
-        <div className="text-sm text-green-600">{syncResult}</div>
-      )}
+      {message && <div className="text-sm text-green-600">{message}</div>}
 
-      {/* ================= KPI CARDS ================= */}
+      {/* ================= KPI GRID ================= */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
           label="Ad Accounts"
           value={String(data.ad_accounts)}
-          hint="Connected Meta ad accounts"
+          hint="Linked Meta ad accounts"
         />
+
         <KpiCard
           label="Total Campaigns"
-          value={String(data.campaigns)}
-          hint="Synced from Meta"
+          value={String(campaignsTotal)}
+          hint="Fetched from Meta"
         />
+
         <KpiCard
           label="AI-Active Campaigns"
-          value={String(data.ai_active)}
-          hint="Phase 1 = 0"
+          value={`${aiActive} / ${aiLimit}`}
+          hint="Plan enforced"
         />
+
         <KpiCard
-          label="Account Status"
-          value={data.meta_connected ? "Connected" : "Disconnected"}
-          hint="Meta Ads"
-          warning={!data.meta_connected}
+          label="AI Engine"
+          value={data.ai?.engine_status ?? "off"}
+          hint="Global AI status"
+          warning={data.ai?.engine_status !== "on"}
         />
       </div>
 
       <div className="text-xs text-gray-400">
-        All data is read-only and synced from Meta Ads Manager.
+        Dashboard is read-only. Performance analytics are available in Reports.
       </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------- */
+/* COMPONENTS                                         */
+/* -------------------------------------------------- */
+
+function DevBanner() {
+  return (
+    <div className="text-xs bg-yellow-50 border border-yellow-200 rounded px-3 py-2 text-yellow-800">
+      Meta Ads AI • Development Mode | Auth: Disabled
     </div>
   );
 }
