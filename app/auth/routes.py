@@ -31,7 +31,7 @@ async def login_request(
 
 
 # =========================================================
-# VERIFY MAGIC LINK (SET COOKIE + REDIRECT)
+# VERIFY MAGIC LINK (SET COOKIE + REDIRECT → NEXT.JS)
 # =========================================================
 @router.get("/verify")
 async def verify_login(
@@ -46,12 +46,14 @@ async def verify_login(
             detail="Invalid or expired login link",
         )
 
+    # 🚨 IMPORTANT:
+    # Redirect MUST go to Next.js route, NOT legacy FastAPI UI
     response = RedirectResponse(
-        url="/dashboard",   # ✅ relative path (important)
+        url="/dashboard",
         status_code=status.HTTP_302_FOUND,
     )
 
-    # 🔐 ISOLATED COOKIE — META AI ONLY
+    # 🔐 AUTH COOKIE (USED BY require_user)
     response.set_cookie(
         key="meta_ai_session",
         value=session_token,
@@ -67,7 +69,7 @@ async def verify_login(
 
 
 # =========================================================
-# AUTH SESSION CHECK (USED BY FRONTEND)
+# AUTH SESSION CHECK (USED BY NEXT.JS)
 # =========================================================
 @router.get("/me")
 async def auth_me(
