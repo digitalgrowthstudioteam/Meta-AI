@@ -2,29 +2,29 @@
 
 import { useEffect, useState } from "react";
 
-type MetaStatus = "unknown" | "connected" | "disconnected";
+type DashboardSummary = {
+  meta_connected: boolean;
+  ad_accounts: number;
+  campaigns: number;
+  ai_active: number;
+};
 
 export default function DashboardPage() {
-  const [metaStatus, setMetaStatus] = useState<MetaStatus>("unknown");
+  const [data, setData] = useState<DashboardSummary | null>(null);
+  const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
 
   // --------------------------------------------------
-  // CHECK META CONNECTION (SERVER SOURCE OF TRUTH)
+  // LOAD DASHBOARD SUMMARY (SOURCE OF TRUTH)
   // --------------------------------------------------
   useEffect(() => {
-    fetch("/meta/adaccounts/sync", {
-      method: "POST",
+    fetch("/api/dashboard/summary", {
       credentials: "include",
     })
-      .then((r) => {
-        if (r.ok) {
-          setMetaStatus("connected");
-        } else {
-          setMetaStatus("disconnected");
-        }
-      })
-      .catch(() => setMetaStatus("disconnected"));
+      .then((r) => r.json())
+      .then(setData)
+      .finally(() => setLoading(false));
   }, []);
 
   // --------------------------------------------------
@@ -34,15 +34,14 @@ export default function DashboardPage() {
     const res = await fetch("/meta/connect", {
       credentials: "include",
     });
-    const data = await res.json();
-
-    if (data?.redirect_url) {
-      window.location.href = data.redirect_url;
+    const json = await res.json();
+    if (json?.redirect_url) {
+      window.location.href = json.redirect_url;
     }
   };
 
   // --------------------------------------------------
-  // SYNC AD ACCOUNTS (MANUAL)
+  // SYNC AD ACCOUNTS
   // --------------------------------------------------
   const syncAdAccounts = async () => {
     setSyncing(true);
@@ -53,39 +52,63 @@ export default function DashboardPage() {
         method: "POST",
         credentials: "include",
       });
-      const data = await res.json();
-
-      setMetaStatus("connected");
+      const json = await res.json();
       setSyncResult(
-        `Synced ${data.ad_accounts_processed} ad accounts successfully`
+        `Synced ${json.ad_accounts_processed} ad accounts successfully`
       );
+
+      // Refresh dashboard data after sync
+      const refreshed = await fetch("/api/dashboard/summary", {
+        credentials: "include",
+      }).then((r) => r.json());
+
+      setData(refreshed);
     } catch {
-      setMetaStatus("disconnected");
       setSyncResult("Sync failed. Please try again.");
     } finally {
       setSyncing(false);
     }
   };
 
+  if (loading) {
+    return (
+      <div className="text-sm text-gray-500">
+        Loading dashboard…
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <div className="text-sm text-red-600">
+        Failed to load dashboard data
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       {/* ================= HEADER ================= */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Dashboard</h1>
+          <h1 className="text-xl font-semibold text-gray-900">
+            Dashboard
+          </h1>
           <p className="text-sm text-gray-500">
             Overview of your Meta Ads and AI activity
           </p>
         </div>
 
-        <div className="text-xs text-gray-500">
+        <div className="text-xs">
           Meta account:{" "}
-          {metaStatus === "connected" ? (
-            <span className="text-green-600 font-medium">Connected</span>
-          ) : metaStatus === "disconnected" ? (
-            <span className="text-red-600 font-medium">Not connected</span>
+          {data.meta_connected ? (
+            <span className="text-green-600 font-medium">
+              Connected
+            </span>
           ) : (
-            "Checking…"
+            <span className="text-red-600 font-medium">
+              Not connected
+            </span>
           )}
         </div>
       </div>
@@ -97,7 +120,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex gap-3">
-          {metaStatus === "disconnected" && (
+          {!data.meta_connected && (
             <button
               onClick={connectMeta}
               className="px-4 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
@@ -106,7 +129,7 @@ export default function DashboardPage() {
             </button>
           )}
 
-          {metaStatus === "connected" && (
+          {data.meta_connected && (
             <button
               onClick={syncAdAccounts}
               disabled={syncing}
@@ -119,27 +142,33 @@ export default function DashboardPage() {
       </div>
 
       {syncResult && (
-        <div className="text-sm text-green-600">{syncResult}</div>
+        <div className="text-sm text-green-600">
+          {syncResult}
+        </div>
       )}
 
       {/* ================= KPI CARDS ================= */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard label="Total Campaigns" value="—" hint="Synced from Meta" />
         <KpiCard
-          label="AI-Active Campaigns"
-          value="—"
-          hint="Counts toward your plan"
+          label="Ad Accounts"
+          value={String(data.ad_accounts)}
+          hint="Connected Meta ad accounts"
         />
         <KpiCard
-          label="Latest AI Action"
-          value="—"
-          hint="Most recent recommendation"
+          label="Total Campaigns"
+          value={String(data.campaigns)}
+          hint="Synced from Meta"
+        />
+        <KpiCard
+          label="AI-Active Campaigns"
+          value={String(data.ai_active)}
+          hint="Phase 1 = 0"
         />
         <KpiCard
           label="Account Status"
-          value={metaStatus === "connected" ? "Connected" : "Disconnected"}
-          hint="Meta Ads account"
-          warning={metaStatus !== "connected"}
+          value={data.meta_connected ? "Connected" : "Disconnected"}
+          hint="Meta Ads"
+          warning={!data.meta_connected}
         />
       </div>
 
