@@ -2,28 +2,29 @@
 
 import { useEffect, useState } from "react";
 
-type AIAction = {
+type CampaignAI = {
   id: string;
-  campaign_name: string;
-  recommendation: string;
-  confidence?: number;
+  name: string;
+  status: string;
+  objective?: string;
+  ai_active: boolean;
 };
 
 export default function AIActionsPage() {
-  const [actions, setActions] = useState<AIAction[]>([]);
+  const [campaigns, setCampaigns] = useState<CampaignAI[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
 
   // -----------------------------------
-  // LOAD AI ACTIONS
+  // LOAD AI ACTION CAMPAIGNS
   // -----------------------------------
-  const loadActions = async () => {
+  const loadAICampaigns = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const res = await fetch("/api/ai-actions", {
+      const res = await fetch("/api/campaigns", {
         credentials: "include",
       });
 
@@ -34,11 +35,11 @@ export default function AIActionsPage() {
       const data = await res.json();
 
       // EMPTY ARRAY IS VALID
-      setActions(Array.isArray(data) ? data : []);
+      setCampaigns(Array.isArray(data) ? data : []);
       setMetaConnected(true);
     } catch (err) {
-      console.error("AI actions fetch failed", err);
-      setError("Unable to load AI actions.");
+      console.error("AI Actions load failed:", err);
+      setError("Unable to reach AI campaign service.");
       setMetaConnected(false);
     } finally {
       setLoading(false);
@@ -46,7 +47,7 @@ export default function AIActionsPage() {
   };
 
   useEffect(() => {
-    loadActions();
+    loadAICampaigns();
   }, []);
 
   // -----------------------------------
@@ -64,6 +65,22 @@ export default function AIActionsPage() {
   };
 
   // -----------------------------------
+  // TOGGLE AI (SAFE)
+  // -----------------------------------
+  const toggleAI = async (campaignId: string, enable: boolean) => {
+    await fetch(`/api/campaigns/${campaignId}/ai-toggle`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ enable }),
+    });
+
+    loadAICampaigns();
+  };
+
+  // -----------------------------------
   // RENDER
   // -----------------------------------
   return (
@@ -71,14 +88,12 @@ export default function AIActionsPage() {
       <div>
         <h1 className="text-xl font-semibold">AI Actions</h1>
         <p className="text-sm text-gray-500">
-          Explainable AI recommendations · Suggestions only
+          Control which campaigns AI can optimize
         </p>
       </div>
 
       {/* LOADING */}
-      {loading && (
-        <div className="text-gray-600">Loading AI actions…</div>
-      )}
+      {loading && <div className="text-gray-600">Loading AI actions…</div>}
 
       {/* REAL ERROR ONLY */}
       {!loading && error && (
@@ -89,7 +104,7 @@ export default function AIActionsPage() {
       {!loading && !error && metaConnected === false && (
         <div className="border rounded p-6 bg-white">
           <p className="font-medium mb-2">
-            Connect Meta Ads to enable AI insights
+            Connect your Meta Ads account to enable AI
           </p>
           <button
             onClick={connectMeta}
@@ -100,43 +115,50 @@ export default function AIActionsPage() {
         </div>
       )}
 
-      {/* EMPTY STATE (NO AI ACTIONS YET) */}
-      {!loading && !error && metaConnected && actions.length === 0 && (
+      {/* EMPTY STATE (CONNECTED, NO CAMPAIGNS) */}
+      {!loading && !error && metaConnected && campaigns.length === 0 && (
         <div className="border rounded p-6 bg-white">
-          <p className="font-medium mb-2">
-            No AI actions available yet
-          </p>
+          <p className="font-medium mb-1">No campaigns available</p>
           <p className="text-sm text-gray-500">
-            AI recommendations will appear once campaigns are synced
-            and AI is enabled on eligible campaigns.
+            Sync campaigns from Meta Ads Manager first.
           </p>
         </div>
       )}
 
-      {/* AI ACTION LIST */}
-      {!loading && !error && actions.length > 0 && (
-        <div className="space-y-3">
-          {actions.map((a) => (
-            <div
-              key={a.id}
-              className="border rounded p-4 bg-white"
-            >
-              <div className="flex justify-between">
-                <div>
-                  <p className="font-medium">{a.campaign_name}</p>
-                  <p className="text-sm text-gray-600 mt-1">
-                    {a.recommendation}
-                  </p>
-                </div>
-
-                {a.confidence !== undefined && (
-                  <span className="text-xs px-2 py-1 rounded bg-green-100 text-green-700">
-                    {Math.round(a.confidence * 100)}% confidence
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
+      {/* AI ACTION TABLE */}
+      {!loading && !error && campaigns.length > 0 && (
+        <div className="bg-white border rounded overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b">
+              <tr>
+                <th className="px-4 py-3 text-left">Campaign</th>
+                <th className="px-4 py-3 text-left">Objective</th>
+                <th className="px-4 py-3 text-left">Status</th>
+                <th className="px-4 py-3 text-left">AI Control</th>
+              </tr>
+            </thead>
+            <tbody>
+              {campaigns.map((c) => (
+                <tr key={c.id} className="border-b last:border-0">
+                  <td className="px-4 py-3 font-medium">{c.name}</td>
+                  <td className="px-4 py-3">{c.objective ?? "—"}</td>
+                  <td className="px-4 py-3">{c.status}</td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => toggleAI(c.id, !c.ai_active)}
+                      className={`px-3 py-1 rounded text-xs font-medium ${
+                        c.ai_active
+                          ? "bg-green-100 text-green-700"
+                          : "bg-gray-100 text-gray-600"
+                      }`}
+                    >
+                      {c.ai_active ? "AI Active" : "AI Inactive"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
