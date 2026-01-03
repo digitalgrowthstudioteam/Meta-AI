@@ -32,6 +32,7 @@ from app.auth.tokens import (
 from app.auth.sessions import create_session
 from app.users.models import User
 from app.plans.subscription_models import Subscription
+from app.plans.plan_models import Plan
 
 
 # =========================================================
@@ -47,9 +48,6 @@ TRIAL_AI_LIMIT = 3
 # EMAIL SUBJECT (LOCKED FORMAT)
 # =========================================================
 def build_magic_link_subject() -> str:
-    """
-    Build unique email subject with IST timestamp.
-    """
     now_ist = datetime.now(IST_ZONE)
     return (
         f"Digital Growth Studio Login | "
@@ -58,7 +56,7 @@ def build_magic_link_subject() -> str:
 
 
 # =========================================================
-# PLACEHOLDER EMAIL SENDER
+# EMAIL SENDER
 # =========================================================
 def send_magic_link_email(
     to_email: str,
@@ -114,7 +112,12 @@ async def request_magic_login(
     await db.commit()
 
     subject = build_magic_link_subject()
-    magic_link = f"https://meta-ai.digitalgrowthstudio.in/auth/verify?token={raw_token}"
+
+    # ✅ CRITICAL FIX — MUST GO THROUGH /api
+    magic_link = (
+        f"https://meta-ai.digitalgrowthstudio.in"
+        f"/api/auth/verify?token={raw_token}"
+    )
 
     send_magic_link_email(
         to_email=email,
@@ -151,7 +154,8 @@ async def verify_magic_login(
     # Fetch or create user
     user = await _get_or_create_user(db, magic_token.email)
 
-    # Assign trial if needed
+    # ✅ ASSIGN TRIAL IF FIRST LOGIN
+    await _assign_trial_if_needed(db, user)
 
     # Create session
     session = await create_session(db, user)
@@ -191,20 +195,19 @@ async def _get_or_create_user(
 
     return user
 
+
 async def _assign_trial_if_needed(
     db: AsyncSession,
     user: User,
 ) -> None:
     """
-    Assign 7-day trial + 3-day grace period (OPTION A).
+    Assign 7-day trial + 3-day grace period.
 
     Rules:
     - Assign ONLY if user has no subscription
-    - Use INTEGER plan_id
     - Must never fail silently
     """
 
-    # 1️⃣ Check existing subscription
     result = await db.execute(
         select(Subscription)
         .where(Subscription.user_id == user.id)
@@ -214,7 +217,6 @@ async def _assign_trial_if_needed(
     if existing:
         return
 
-    # 2️⃣ Fetch trial plan (MANDATORY)
     plan_result = await db.execute(
         select(Plan).where(Plan.is_trial_allowed.is_(True))
     )
@@ -223,14 +225,13 @@ async def _assign_trial_if_needed(
     if not trial_plan:
         raise RuntimeError("No trial plan found in plans table")
 
-    # 3️⃣ Create subscription
     now = datetime.utcnow()
     trial_end = now + timedelta(days=TRIAL_DAYS)
     grace_end = trial_end + timedelta(days=GRACE_DAYS)
 
     subscription = Subscription(
         user_id=user.id,
-        plan_id=trial_plan.id,          # ✅ FIX
+        plan_id=trial_plan.id,
         status="trial",
         starts_at=now,
         ends_at=trial_end,
@@ -246,4 +247,3 @@ async def _assign_trial_if_needed(
 
     db.add(subscription)
     await db.commit()
-
