@@ -31,8 +31,8 @@ async def dashboard_summary(
     Returns:
     - Meta connection status
     - Number of linked ad accounts
-    - Total campaigns (synced, non-archived)
-    - AI-active campaigns (Phase 1 = 0)
+    - Total campaigns (synced)
+    - AI-active campaigns (0 for Phase 1)
     """
 
     # --------------------------------------------------
@@ -46,7 +46,7 @@ async def dashboard_summary(
             MetaOAuthToken.is_active.is_(True),
         )
     )
-    meta_connected = result.scalar() > 0
+    meta_connected = (result.scalar() or 0) > 0
 
     # --------------------------------------------------
     # 2. Ad accounts count
@@ -59,7 +59,8 @@ async def dashboard_summary(
     ad_accounts = result.scalar() or 0
 
     # --------------------------------------------------
-    # 3. Campaign count (JOIN-based, correct ownership)
+    # 3. Campaign count (CORRECT OWNERSHIP MODEL)
+    # campaigns → meta_ad_accounts → user_meta_ad_accounts → user
     # --------------------------------------------------
     result = await db.execute(
         select(func.count())
