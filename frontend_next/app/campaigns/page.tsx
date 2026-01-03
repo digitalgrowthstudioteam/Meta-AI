@@ -14,88 +14,146 @@ export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
+
+  // -----------------------------------
+  // LOAD CAMPAIGNS
+  // -----------------------------------
+  const loadCampaigns = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const res = await fetch("/api/campaigns", {
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+
+      // EMPTY ARRAY IS VALID
+      setCampaigns(Array.isArray(data) ? data : []);
+      setMetaConnected(true);
+    } catch (err) {
+      console.error("Campaign load failed", err);
+      setError("Unable to reach campaign service.");
+      setMetaConnected(false);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const loadCampaigns = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const res = await fetch("/api/campaigns/", {
-          method: "GET",
-          credentials: "include",
-          cache: "no-store",
-        });
-
-        if (!res.ok) {
-          throw new Error(`API failed with status ${res.status}`);
-        }
-
-        const data = await res.json();
-
-        if (Array.isArray(data)) {
-          setCampaigns(data);
-        } else {
-          throw new Error("Invalid response format");
-        }
-      } catch (err) {
-        console.error("Campaign fetch failed:", err);
-        setError("Unable to load campaigns from Meta.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
     loadCampaigns();
   }, []);
 
+  // -----------------------------------
+  // CONNECT META
+  // -----------------------------------
+  const connectMeta = async () => {
+    const res = await fetch("/api/meta/connect", {
+      credentials: "include",
+    });
+
+    const data = await res.json();
+    if (data?.redirect_url) {
+      window.location.href = data.redirect_url;
+    }
+  };
+
+  // -----------------------------------
+  // SYNC CAMPAIGNS
+  // -----------------------------------
+  const syncCampaigns = async () => {
+    await fetch("/api/campaigns/sync", {
+      method: "POST",
+      credentials: "include",
+    });
+
+    loadCampaigns();
+  };
+
+  // -----------------------------------
+  // RENDER
+  // -----------------------------------
   return (
-    <div className="p-6">
-      <h1 className="text-xl font-semibold mb-1">Campaigns</h1>
-      <p className="text-sm text-gray-500 mb-4">
-        Synced from Meta Ads Manager · Read-only
-      </p>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-xl font-semibold">Campaigns</h1>
+        <p className="text-sm text-gray-500">
+          Synced from Meta Ads Manager · Read-only
+        </p>
+      </div>
 
-      {loading && <p className="text-gray-600">Loading campaigns…</p>}
-
-      {!loading && error && (
-        <p className="text-red-600 font-medium">{error}</p>
+      {/* LOADING */}
+      {loading && (
+        <div className="text-gray-600">Loading campaigns…</div>
       )}
 
-      {!loading && !error && campaigns.length === 0 && (
-        <div className="rounded border border-dashed p-6 text-gray-600">
-          <p className="font-medium">No campaigns found</p>
-          <p className="text-sm mt-1">
-            Connect a Meta Ad Account or sync campaigns to get started.
+      {/* REAL ERROR ONLY */}
+      {!loading && error && (
+        <div className="text-red-600 font-medium">{error}</div>
+      )}
+
+      {/* META NOT CONNECTED */}
+      {!loading && !error && metaConnected === false && (
+        <div className="border rounded p-6 bg-white">
+          <p className="font-medium mb-2">
+            Connect your Meta Ads account to get started
           </p>
+          <button
+            onClick={connectMeta}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Connect Meta Ads
+          </button>
         </div>
       )}
 
-      {!loading && !error && campaigns.length > 0 && (
-        <div className="space-y-2">
-          {campaigns.map((c) => (
-            <div
-              key={c.id}
-              className="flex items-center justify-between rounded border p-3 bg-white"
-            >
-              <div>
-                <p className="font-medium">{c.name}</p>
-                <p className="text-xs text-gray-500">
-                  {c.status} · {c.objective ?? "—"}
-                </p>
-              </div>
+      {/* EMPTY STATE (CONNECTED BUT NO CAMPAIGNS) */}
+      {!loading && !error && metaConnected && campaigns.length === 0 && (
+        <div className="border rounded p-6 bg-white">
+          <p className="font-medium mb-2">No campaigns synced yet</p>
+          <p className="text-sm text-gray-500 mb-4">
+            Fetch your campaigns from Meta Ads Manager.
+          </p>
+          <button
+            onClick={syncCampaigns}
+            className="px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800"
+          >
+            Sync Campaigns
+          </button>
+        </div>
+      )}
 
-              <span
-                className={`text-xs px-2 py-1 rounded ${
-                  c.ai_active
-                    ? "bg-green-100 text-green-700"
-                    : "bg-gray-100 text-gray-600"
-                }`}
-              >
-                {c.ai_active ? "AI Active" : "AI Inactive"}
-              </span>
-            </div>
-          ))}
+      {/* CAMPAIGN LIST */}
+      {!loading && !error && campaigns.length > 0 && (
+        <div className="bg-white border rounded overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b">
+              <tr>
+                <th className="px-4 py-3 text-left">Campaign</th>
+                <th className="px-4 py-3 text-left">Objective</th>
+                <th className="px-4 py-3 text-left">Status</th>
+                <th className="px-4 py-3 text-left">AI</th>
+              </tr>
+            </thead>
+            <tbody>
+              {campaigns.map((c) => (
+                <tr key={c.id} className="border-b last:border-0">
+                  <td className="px-4 py-3">{c.name}</td>
+                  <td className="px-4 py-3">{c.objective ?? "—"}</td>
+                  <td className="px-4 py-3">{c.status}</td>
+                  <td className="px-4 py-3">
+                    {c.ai_active ? "AI Active" : "AI Inactive"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
