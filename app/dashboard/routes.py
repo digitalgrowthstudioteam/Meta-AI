@@ -9,6 +9,7 @@ from app.users.models import User
 from app.meta_api.models import (
     MetaOAuthToken,
     UserMetaAdAccount,
+    MetaAdAccount,
 )
 from app.campaigns.models import Campaign
 
@@ -30,8 +31,8 @@ async def dashboard_summary(
     Returns:
     - Meta connection status
     - Number of linked ad accounts
-    - Total campaigns (synced)
-    - AI-active campaigns (0 for Phase 1)
+    - Total campaigns (synced, non-archived)
+    - AI-active campaigns (Phase 1 = 0)
     """
 
     # --------------------------------------------------
@@ -58,12 +59,23 @@ async def dashboard_summary(
     ad_accounts = result.scalar() or 0
 
     # --------------------------------------------------
-    # 3. Campaign count (if table exists / empty safe)
+    # 3. Campaign count (JOIN-based, correct ownership)
     # --------------------------------------------------
     result = await db.execute(
         select(func.count())
         .select_from(Campaign)
-        .where(Campaign.user_id == current_user.id)
+        .join(
+            MetaAdAccount,
+            Campaign.ad_account_id == MetaAdAccount.id,
+        )
+        .join(
+            UserMetaAdAccount,
+            UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
+        )
+        .where(
+            UserMetaAdAccount.user_id == current_user.id,
+            Campaign.is_archived.is_(False),
+        )
     )
     campaigns = result.scalar() or 0
 
