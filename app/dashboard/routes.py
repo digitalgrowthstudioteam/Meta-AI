@@ -1,12 +1,9 @@
-from typing import Optional
-
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from app.core.db_session import get_db
-
-# AUTH IS TEMPORARILY DISABLED (DEV MODE)
+from app.auth.dependencies import get_current_user
 from app.users.models import User
 
 from app.meta_api.models import (
@@ -23,48 +20,15 @@ router = APIRouter(
 )
 
 
-# --------------------------------------------------
-# DEV MODE USER RESOLUTION (TEMPORARY)
-# --------------------------------------------------
-async def get_dev_user(db: AsyncSession) -> Optional[User]:
-    result = await db.execute(select(User).limit(1))
-    return result.scalar_one_or_none()
-
-
 @router.get("/summary")
 async def dashboard_summary(
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Dashboard Summary (READ-ONLY)
-
     FINAL CONTRACT — DO NOT CHANGE SHAPE
     """
-
-    # --------------------------------------------------
-    # Resolve user (DEV MODE)
-    # --------------------------------------------------
-    current_user = await get_dev_user(db)
-
-    if not current_user:
-        return {
-            "meta_connected": False,
-            "ad_accounts": 0,
-            "campaigns": {
-                "total": 0,
-                "ai_active": 0,
-                "ai_limit": 0,
-            },
-            "ai": {
-                "engine_status": "off",
-                "last_action_at": None,
-            },
-            "subscription": {
-                "plan": "none",
-                "expires_at": None,
-                "manual_campaign_credits": 0,
-            },
-        }
 
     # --------------------------------------------------
     # 1. Meta connection status
@@ -111,7 +75,7 @@ async def dashboard_summary(
     total_campaigns = result.scalar() or 0
 
     # --------------------------------------------------
-    # 4. AI-ACTIVE CAMPAIGNS (REAL COUNT)
+    # 4. AI-ACTIVE campaigns
     # --------------------------------------------------
     result = await db.execute(
         select(func.count())
@@ -132,14 +96,8 @@ async def dashboard_summary(
     )
     ai_active = result.scalar() or 0
 
-    # --------------------------------------------------
-    # 5. AI LIMIT (PHASE 1 — TEMP)
-    # --------------------------------------------------
-    ai_limit = 3
+    ai_limit = 3  # phase-1 temp
 
-    # --------------------------------------------------
-    # FINAL RESPONSE (LOCKED)
-    # --------------------------------------------------
     return {
         "meta_connected": meta_connected,
         "ad_accounts": ad_accounts,
