@@ -26,7 +26,6 @@ export default function DashboardPage() {
       });
 
       if (res.status === 401 || res.status === 403) {
-        // Session expired or invalid
         window.location.href = "/login";
         return;
       }
@@ -37,7 +36,7 @@ export default function DashboardPage() {
 
       const json = await res.json();
       setData(json);
-    } catch (err) {
+    } catch {
       setError("Failed to load dashboard data");
     } finally {
       setLoading(false);
@@ -52,7 +51,7 @@ export default function DashboardPage() {
   // CONNECT META
   // --------------------------------------------------
   const connectMeta = async () => {
-    const res = await fetch("/meta/connect", {
+    const res = await fetch("/api/meta/connect", {
       credentials: "include",
     });
 
@@ -72,7 +71,7 @@ export default function DashboardPage() {
     setSyncResult(null);
 
     try {
-      const res = await fetch("/meta/adaccounts/sync", {
+      const res = await fetch("/api/meta/adaccounts/sync", {
         method: "POST",
         credentials: "include",
       });
@@ -98,11 +97,7 @@ export default function DashboardPage() {
   // RENDER STATES
   // --------------------------------------------------
   if (loading) {
-    return (
-      <div className="text-sm text-gray-500">
-        Loading dashboard…
-      </div>
-    );
+    return <div className="text-sm text-gray-500">Loading dashboard…</div>;
   }
 
   if (error || !data) {
@@ -118,9 +113,7 @@ export default function DashboardPage() {
       {/* ================= HEADER ================= */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">
-            Dashboard
-          </h1>
+          <h1 className="text-xl font-semibold text-gray-900">Dashboard</h1>
           <p className="text-sm text-gray-500">
             Overview of your Meta Ads and AI activity
           </p>
@@ -129,13 +122,9 @@ export default function DashboardPage() {
         <div className="text-xs">
           Meta account:{" "}
           {data.meta_connected ? (
-            <span className="text-green-600 font-medium">
-              Connected
-            </span>
+            <span className="text-green-600 font-medium">Connected</span>
           ) : (
-            <span className="text-red-600 font-medium">
-              Not connected
-            </span>
+            <span className="text-red-600 font-medium">Not connected</span>
           )}
         </div>
       </div>
@@ -169,16 +158,26 @@ export default function DashboardPage() {
       </div>
 
       {syncResult && (
-        <div className="text-sm text-green-600">
-          {syncResult}
-        </div>
+        <div className="text-sm text-green-600">{syncResult}</div>
       )}
 
       {/* ================= KPI CARDS ================= */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard label="Ad Accounts" value={String(data.ad_accounts)} hint="Connected Meta ad accounts" />
-        <KpiCard label="Total Campaigns" value={String(data.campaigns)} hint="Synced from Meta" />
-        <KpiCard label="AI-Active Campaigns" value={String(data.ai_active)} hint="Phase 1 = 0" />
+        <KpiCard
+          label="Ad Accounts"
+          value={String(data.ad_accounts)}
+          hint="Connected Meta ad accounts"
+        />
+        <KpiCard
+          label="Total Campaigns"
+          value={String(data.campaigns)}
+          hint="Synced from Meta"
+        />
+        <KpiCard
+          label="AI-Active Campaigns"
+          value={String(data.ai_active)}
+          hint="Phase 1 = 0"
+        />
         <KpiCard
           label="Account Status"
           value={data.meta_connected ? "Connected" : "Disconnected"}
@@ -208,7 +207,11 @@ function KpiCard({
   return (
     <div className="bg-white border border-gray-200 rounded p-5 space-y-1">
       <div className="text-xs text-gray-500">{label}</div>
-      <div className={`text-xl font-semibold ${warning ? "text-red-600" : "text-gray-900"}`}>
+      <div
+        className={`text-xl font-semibold ${
+          warning ? "text-red-600" : "text-gray-900"
+        }`}
+      >
         {value}
       </div>
       <div className="text-xs text-gray-400">{hint}</div>
