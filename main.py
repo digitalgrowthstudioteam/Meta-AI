@@ -25,6 +25,7 @@ from app.campaigns.routes import router as campaigns_router
 from app.admin.routes import router as admin_router
 from app.meta_api.routes import router as meta_router
 from app.reports.routes import router as reports_router
+from app.dashboard.routes import router as dashboard_router
 
 
 # =========================
@@ -197,6 +198,7 @@ app.include_router(campaigns_router)
 app.include_router(admin_router)
 app.include_router(meta_router)
 app.include_router(reports_router)
+app.include_router(dashboard_router)
 
 
 # =========================
@@ -207,6 +209,7 @@ app.include_router(campaigns_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
 app.include_router(meta_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")
+app.include_router(dashboard_router, prefix="/api")
 
 
 # =========================
