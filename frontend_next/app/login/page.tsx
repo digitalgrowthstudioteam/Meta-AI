@@ -29,7 +29,8 @@ export default function LoginPage() {
         body: body.toString(),
       });
 
-      if (!res.ok) {
+      // ✅ ACCEPT 204 AS SUCCESS
+      if (res.status !== 204) {
         throw new Error();
       }
 
