@@ -61,11 +61,11 @@ export default function RootLayout({ children }: Props) {
   }, [router, isPublicPage]);
 
   /* ======================================================
-     META CONNECTION (SINGLE SOURCE OF TRUTH)
-     Uses SAME API as dashboard
+     META CONNECTION
+     Runs ONLY after session is verified
   ====================================================== */
   useEffect(() => {
-    if (isPublicPage) return;
+    if (isPublicPage || checkingSession) return;
 
     async function loadMetaStatus() {
       try {
@@ -86,7 +86,7 @@ export default function RootLayout({ children }: Props) {
     }
 
     loadMetaStatus();
-  }, [isPublicPage]);
+  }, [isPublicPage, checkingSession]);
 
   /* ======================================================
      LOADING STATE
@@ -140,7 +140,10 @@ export default function RootLayout({ children }: Props) {
                   key={item.href}
                   href={item.href}
                   label={item.label}
-                  active={pathname.startsWith(item.href)}
+                  active={
+                    pathname === item.href ||
+                    pathname.startsWith(item.href + "/")
+                  }
                   primary={item.primary}
                 />
               ))}
