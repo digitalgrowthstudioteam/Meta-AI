@@ -3,27 +3,26 @@
 import { useEffect, useState } from "react";
 
 /**
- * FINAL Dashboard Contract (future-proof)
- * Backend may return partial data in Phase-1
+ * FINAL Dashboard Contract (LOCKED)
  */
 type DashboardSummary = {
   meta_connected: boolean;
   ad_accounts: number;
 
-  campaigns?: {
+  campaigns: {
     total: number;
     ai_active: number;
     ai_limit: number;
   };
 
-  ai?: {
+  ai: {
     engine_status: "on" | "off";
     last_action_at: string | null;
   };
 
-  subscription?: {
+  subscription: {
     plan: string;
-    expires_at: string;
+    expires_at: string | null;
     manual_campaign_credits: number;
   };
 };
@@ -36,7 +35,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   // --------------------------------------------------
-  // LOAD DASHBOARD SUMMARY (READ-ONLY)
+  // LOAD DASHBOARD SUMMARY
   // --------------------------------------------------
   const loadSummary = async () => {
     setLoading(true);
@@ -47,9 +46,7 @@ export default function DashboardPage() {
         credentials: "include",
       });
 
-      if (!res.ok) {
-        throw new Error("Dashboard API failed");
-      }
+      if (!res.ok) throw new Error();
 
       const json = await res.json();
       setData(json);
@@ -97,9 +94,7 @@ export default function DashboardPage() {
         credentials: "include",
       });
 
-      if (!res.ok) {
-        throw new Error();
-      }
+      if (!res.ok) throw new Error();
 
       const json = await res.json();
       setMessage(`Synced ${json.ad_accounts_processed} ad accounts`);
@@ -134,20 +129,16 @@ export default function DashboardPage() {
     );
   }
 
-  const campaignsTotal = data.campaigns?.total ?? 0;
-  const aiActive = data.campaigns?.ai_active ?? 0;
-  const aiLimit = data.campaigns?.ai_limit ?? 0;
-
   return (
     <div className="space-y-8">
       <DevBanner />
 
-      {/* ================= HEADER ================= */}
+      {/* HEADER */}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Dashboard</h1>
           <p className="text-sm text-gray-500">
-            Command overview of Meta Ads & AI status
+            Overview of your Meta Ads and AI activity
           </p>
         </div>
 
@@ -161,73 +152,71 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ================= META ACTION BAR ================= */}
+      {/* META ACTION BAR */}
       <div className="bg-white border border-gray-200 rounded p-4 flex items-center justify-between">
         <div className="text-sm text-gray-600">
-          Meta connection is required to sync campaigns and enable AI.
+          Meta Ads connection is required to sync campaigns and enable AI.
         </div>
 
-        <div className="flex gap-3">
-          {!data.meta_connected && (
-            <button
-              onClick={connectMeta}
-              className="px-4 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
-            >
-              Connect Meta
-            </button>
-          )}
+        {!data.meta_connected && (
+          <button
+            onClick={connectMeta}
+            className="px-4 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
+          >
+            Connect Meta
+          </button>
+        )}
 
-          {data.meta_connected && (
-            <button
-              onClick={syncAdAccounts}
-              disabled={syncing}
-              className="px-4 py-2 text-sm rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
-            >
-              {syncing ? "Syncing…" : "Sync Ad Accounts"}
-            </button>
-          )}
-        </div>
+        {data.meta_connected && (
+          <button
+            onClick={syncAdAccounts}
+            disabled={syncing}
+            className="px-4 py-2 text-sm rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
+          >
+            {syncing ? "Syncing…" : "Sync Ad Accounts"}
+          </button>
+        )}
       </div>
 
       {message && <div className="text-sm text-green-600">{message}</div>}
 
-      {/* ================= KPI GRID ================= */}
+      {/* KPI GRID */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
           label="Ad Accounts"
-          value={String(data.ad_accounts)}
-          hint="Linked Meta ad accounts"
+          value={data.ad_accounts}
+          hint="Connected Meta ad accounts"
         />
 
         <KpiCard
           label="Total Campaigns"
-          value={String(campaignsTotal)}
-          hint="Fetched from Meta"
+          value={data.campaigns.total}
+          hint="Synced from Meta"
         />
 
         <KpiCard
           label="AI-Active Campaigns"
-          value={`${aiActive} / ${aiLimit}`}
-          hint="Plan enforced"
+          value={`${data.campaigns.ai_active} / ${data.campaigns.ai_limit}`}
+          hint="Phase 1 limits"
         />
 
         <KpiCard
-          label="AI Engine"
-          value={data.ai?.engine_status ?? "off"}
-          hint="Global AI status"
-          warning={data.ai?.engine_status !== "on"}
+          label="Account Status"
+          value={data.meta_connected ? "Connected" : "Disconnected"}
+          hint="Meta Ads"
+          warning={!data.meta_connected}
         />
       </div>
 
       <div className="text-xs text-gray-400">
-        Dashboard is read-only. Performance analytics are available in Reports.
+        All data is read-only and synced from Meta Ads Manager.
       </div>
     </div>
   );
 }
 
 /* -------------------------------------------------- */
-/* COMPONENTS                                         */
+/* COMPONENTS */
 /* -------------------------------------------------- */
 
 function DevBanner() {
@@ -245,7 +234,7 @@ function KpiCard({
   warning,
 }: {
   label: string;
-  value: string;
+  value: string | number;
   hint: string;
   warning?: boolean;
 }) {
