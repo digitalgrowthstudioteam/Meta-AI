@@ -17,7 +17,7 @@ export default function AIActionsPage() {
   const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
 
   // -----------------------------------
-  // LOAD AI ACTION CAMPAIGNS (SAME AS CAMPAIGNS PAGE)
+  // LOAD AI ACTION CAMPAIGNS
   // -----------------------------------
   const loadAICampaigns = async () => {
     try {
@@ -28,7 +28,6 @@ export default function AIActionsPage() {
         credentials: "include",
       });
 
-      // META NOT CONNECTED (EXPECTED STATE)
       if (res.status === 409) {
         setCampaigns([]);
         setMetaConnected(false);
@@ -40,8 +39,6 @@ export default function AIActionsPage() {
       }
 
       const data = await res.json();
-
-      // EMPTY DATA IS VALID
       setCampaigns(Array.isArray(data) ? data : []);
       setMetaConnected(true);
     } catch (err) {
@@ -71,7 +68,7 @@ export default function AIActionsPage() {
   };
 
   // -----------------------------------
-  // TOGGLE AI (SAFE, READ-ONLY META)
+  // TOGGLE AI
   // -----------------------------------
   const toggleAI = async (campaignId: string, enable: boolean) => {
     await fetch(`/api/campaigns/${campaignId}/ai-toggle`, {
@@ -91,6 +88,7 @@ export default function AIActionsPage() {
   // -----------------------------------
   return (
     <div className="space-y-6">
+      {/* HEADER */}
       <div>
         <h1 className="text-xl font-semibold">AI Actions</h1>
         <p className="text-sm text-gray-500">
@@ -99,7 +97,9 @@ export default function AIActionsPage() {
       </div>
 
       {/* LOADING */}
-      {loading && <div className="text-gray-600">Loading AI actions…</div>}
+      {loading && (
+        <div className="text-gray-600">Loading AI actions…</div>
+      )}
 
       {/* REAL ERROR ONLY */}
       {!loading && error && (
@@ -108,14 +108,14 @@ export default function AIActionsPage() {
 
       {/* META NOT CONNECTED */}
       {!loading && !error && metaConnected === false && (
-        <div className="border rounded p-6 bg-white">
-          <p className="font-medium mb-2">
-            Connect your Meta Ads account to enable AI
+        <div className="empty-state">
+          <p className="empty-state-title mb-2">
+            Connect your Meta Ads account
           </p>
-          <button
-            onClick={connectMeta}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
+          <p className="empty-state-sub mb-4">
+            Meta connection is required to enable AI optimization.
+          </p>
+          <button onClick={connectMeta} className="btn-primary">
             Connect Meta Ads
           </button>
         </div>
@@ -123,9 +123,11 @@ export default function AIActionsPage() {
 
       {/* EMPTY STATE */}
       {!loading && !error && metaConnected && campaigns.length === 0 && (
-        <div className="border rounded p-6 bg-white">
-          <p className="font-medium mb-1">No campaigns available</p>
-          <p className="text-sm text-gray-500">
+        <div className="empty-state">
+          <p className="empty-state-title mb-1">
+            No campaigns available
+          </p>
+          <p className="empty-state-sub">
             Campaigns will appear here once synced from Meta.
           </p>
         </div>
@@ -133,9 +135,9 @@ export default function AIActionsPage() {
 
       {/* AI ACTIONS TABLE */}
       {!loading && !error && campaigns.length > 0 && (
-        <div className="bg-white border rounded overflow-hidden">
+        <div className="surface overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b">
+            <thead className="border-b">
               <tr>
                 <th className="px-4 py-3 text-left">Campaign</th>
                 <th className="px-4 py-3 text-left">Objective</th>
