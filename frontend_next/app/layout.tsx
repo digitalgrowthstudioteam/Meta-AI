@@ -24,12 +24,14 @@ const NAV_ITEMS = [
 export default function RootLayout({ children }: Props) {
   const router = useRouter();
   const pathname = usePathname();
+
   const [checkingSession, setCheckingSession] = useState(true);
+  const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
 
   const isPublicPage = pathname === "/login";
 
   /* ======================================================
-     SESSION VERIFICATION (DO NOT TOUCH)
+     SESSION VERIFICATION (LOCKED)
   ====================================================== */
   useEffect(() => {
     if (isPublicPage) {
@@ -59,6 +61,33 @@ export default function RootLayout({ children }: Props) {
   }, [router, isPublicPage]);
 
   /* ======================================================
+     META CONNECTION STATUS (SINGLE SOURCE OF TRUTH)
+  ====================================================== */
+  useEffect(() => {
+    if (isPublicPage) return;
+
+    async function checkMetaConnection() {
+      try {
+        const res = await fetch("/api/meta/accounts", {
+          credentials: "include",
+        });
+
+        if (!res.ok) {
+          setMetaConnected(false);
+          return;
+        }
+
+        const data = await res.json();
+        setMetaConnected(Array.isArray(data) && data.length > 0);
+      } catch {
+        setMetaConnected(false);
+      }
+    }
+
+    checkMetaConnection();
+  }, [isPublicPage]);
+
+  /* ======================================================
      LOADING STATE
   ====================================================== */
   if (checkingSession) {
@@ -76,7 +105,7 @@ export default function RootLayout({ children }: Props) {
   }
 
   /* ======================================================
-     PUBLIC (LOGIN) LAYOUT
+     PUBLIC (LOGIN)
   ====================================================== */
   if (isPublicPage) {
     return (
@@ -89,14 +118,14 @@ export default function RootLayout({ children }: Props) {
   }
 
   /* ======================================================
-     PROTECTED APP LAYOUT
+     APP LAYOUT
   ====================================================== */
   return (
     <html lang="en">
       <body className="bg-gray-50 text-gray-900">
         <div className="flex h-screen w-screen overflow-hidden">
           
-          {/* ================= SIDEBAR ================= */}
+          {/* SIDEBAR */}
           <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
             <div className="h-16 flex items-center px-6 border-b border-gray-200">
               <div className="font-semibold text-base tracking-tight">
@@ -117,7 +146,7 @@ export default function RootLayout({ children }: Props) {
             </nav>
           </aside>
 
-          {/* ================= MAIN ================= */}
+          {/* MAIN */}
           <div className="flex flex-col flex-1 min-w-0">
             
             {/* HEADER */}
@@ -127,8 +156,18 @@ export default function RootLayout({ children }: Props) {
               </div>
 
               <div className="text-sm text-gray-700">
-                {/* Placeholder for Meta Account + User */}
-                Account: <span className="font-medium">Not Connected</span>
+                Account:{" "}
+                {metaConnected === null ? (
+                  <span className="text-gray-400">Checking…</span>
+                ) : metaConnected ? (
+                  <span className="font-medium text-green-600">
+                    Connected
+                  </span>
+                ) : (
+                  <span className="font-medium text-red-600">
+                    Not Connected
+                  </span>
+                )}
               </div>
             </header>
 
