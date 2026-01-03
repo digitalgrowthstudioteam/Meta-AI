@@ -12,6 +12,7 @@ from app.meta_api.oauth import build_meta_oauth_url
 from app.meta_api.service import (
     MetaOAuthService,
     MetaAdAccountService,
+    MetaCampaignService,
 )
 from app.meta_api.schemas import MetaConnectResponse
 from app.meta_api.models import MetaOAuthState
@@ -27,10 +28,8 @@ async def connect_meta_account(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Generate secure OAuth state
     state = str(uuid.uuid4())
 
-    # Persist state (CSRF protection)
     oauth_state = MetaOAuthState(
         user_id=current_user.id,
         state=state,
@@ -38,13 +37,12 @@ async def connect_meta_account(
     db.add(oauth_state)
     await db.commit()
 
-    # Build Meta OAuth URL
     redirect_url = build_meta_oauth_url(state)
     return {"redirect_url": redirect_url}
 
 
 # ---------------------------------------------------------
-# OAUTH CALLBACK — STATE VALIDATION (SESSION-SAFE)
+# OAUTH CALLBACK — STATE VALIDATION
 # ---------------------------------------------------------
 @router.get("/oauth/callback")
 async def meta_oauth_callback(
@@ -52,9 +50,6 @@ async def meta_oauth_callback(
     state: str = Query(...),
     db: AsyncSession = Depends(get_db),
 ):
-    # -----------------------------------------------------
-    # 1. Validate OAuth state
-    # -----------------------------------------------------
     result = await db.execute(
         select(MetaOAuthState).where(
             MetaOAuthState.state == state,
@@ -67,15 +62,9 @@ async def meta_oauth_callback(
     if not oauth_state:
         raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
 
-    # -----------------------------------------------------
-    # 2. Mark state as used (one-time)
-    # -----------------------------------------------------
     oauth_state.is_used = True
     await db.commit()
 
-    # -----------------------------------------------------
-    # 3. Exchange code & store token for correct user
-    # -----------------------------------------------------
     try:
         await MetaOAuthService.store_token(
             db=db,
@@ -107,4 +96,26 @@ async def sync_meta_ad_accounts(
     return {
         "status": "success",
         "ad_accounts_processed": count,
+    }
+
+
+# ---------------------------------------------------------
+# SYNC META CAMPAIGNS (READ-ONLY, MANUAL)
+# ---------------------------------------------------------
+@router.post("/campaigns/sync")
+async def sync_meta_campaigns(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        count = await MetaCampaignService.sync_campaigns_for_user(
+            db=db,
+            user_id=current_user.id,
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {
+        "status": "success",
+        "campaigns_synced": count,
     }
