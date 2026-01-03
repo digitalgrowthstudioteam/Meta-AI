@@ -2,8 +2,8 @@
 
 import "./globals.css";
 import Link from "next/link";
-import { ReactNode, useEffect, useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { ReactNode } from "react";
+import { usePathname } from "next/navigation";
 import clsx from "clsx";
 
 type Props = {
@@ -22,103 +22,17 @@ const NAV_ITEMS = [
 ];
 
 export default function RootLayout({ children }: Props) {
-  const router = useRouter();
   const pathname = usePathname();
+  const isLogin = pathname?.startsWith("/login");
 
-  const [authChecked, setAuthChecked] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
-
-  const isLoginPage = pathname?.startsWith("/login");
-
-  /* ======================================================
-     AUTH CHECK — SINGLE RUN, NO RACE
-  ====================================================== */
-  useEffect(() => {
-    if (!pathname) return;
-
-    if (isLoginPage) {
-      setAuthChecked(true);
-      return;
-    }
-
-    (async () => {
-      try {
-        const res = await fetch("/api/auth/me", {
-          credentials: "include",
-        });
-
-        if (res.ok) {
-          setIsAuthenticated(true);
-        } else {
-          router.replace("/login");
-        }
-      } catch {
-        router.replace("/login");
-      } finally {
-        setAuthChecked(true);
-      }
-    })();
-  }, [pathname, isLoginPage, router]);
-
-  /* ======================================================
-     META STATUS (ONLY AFTER AUTH)
-  ====================================================== */
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    (async () => {
-      try {
-        const res = await fetch("/api/dashboard/summary", {
-          credentials: "include",
-        });
-
-        if (!res.ok) {
-          setMetaConnected(false);
-          return;
-        }
-
-        const json = await res.json();
-        setMetaConnected(!!json.meta_connected);
-      } catch {
-        setMetaConnected(false);
-      }
-    })();
-  }, [isAuthenticated]);
-
-  /* ======================================================
-     WAIT FOR AUTH CHECK
-  ====================================================== */
-  if (!authChecked) {
+  if (isLogin) {
     return (
       <html lang="en">
-        <body className="bg-gray-50 text-gray-900">
-          <div className="flex items-center justify-center h-screen">
-            <div className="text-sm text-gray-500">
-              Verifying secure session…
-            </div>
-          </div>
-        </body>
+        <body className="bg-gray-50 text-gray-900">{children}</body>
       </html>
     );
   }
 
-  /* ======================================================
-     LOGIN PAGE (NO LAYOUT)
-  ====================================================== */
-  if (isLoginPage) {
-    return (
-      <html lang="en">
-        <body className="bg-gray-50 text-gray-900">
-          {children}
-        </body>
-      </html>
-    );
-  }
-
-  /* ======================================================
-     MAIN APP LAYOUT
-  ====================================================== */
   return (
     <html lang="en">
       <body className="bg-gray-50 text-gray-900">
@@ -149,22 +63,7 @@ export default function RootLayout({ children }: Props) {
           <div className="flex flex-col flex-1 min-w-0">
             <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6">
               <div className="text-sm text-gray-600">
-                Meta Ads AI • Read-only Intelligence Mode
-              </div>
-
-              <div className="text-sm">
-                Account:{" "}
-                {metaConnected === null ? (
-                  <span className="text-gray-400">Checking…</span>
-                ) : metaConnected ? (
-                  <span className="font-medium text-green-600">
-                    Connected
-                  </span>
-                ) : (
-                  <span className="font-medium text-red-600">
-                    Not Connected
-                  </span>
-                )}
+                Meta Ads AI • Dev Mode (Auth Disabled)
               </div>
             </header>
 
@@ -178,9 +77,6 @@ export default function RootLayout({ children }: Props) {
   );
 }
 
-/* ======================================================
-   SIDEBAR LINK
-====================================================== */
 function SidebarLink({
   href,
   label,
