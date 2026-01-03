@@ -20,7 +20,7 @@ export default function LoginPage() {
       const body = new URLSearchParams();
       body.append("email", email);
 
-      const res = await fetch("https://meta-ai.digitalgrowthstudio.in/api/auth/login", {
+      const res = await fetch("/api/auth/login", {
         method: "POST",
         credentials: "include",
         headers: {
