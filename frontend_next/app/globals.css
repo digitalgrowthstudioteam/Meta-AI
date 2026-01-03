@@ -2,12 +2,86 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Global base styles */
+/* --------------------------------------------------
+   GLOBAL BASE — WARM, PREMIUM, WORDPRESS-LIKE
+-------------------------------------------------- */
+
 html,
 body {
   height: 100%;
 }
 
 body {
-  @apply bg-gray-100 text-gray-900 antialiased;
+  @apply bg-amber-50 text-gray-900 antialiased;
+}
+
+/* --------------------------------------------------
+   TYPOGRAPHY POLISH
+-------------------------------------------------- */
+
+h1,
+h2,
+h3,
+h4 {
+  @apply text-gray-900;
+}
+
+p {
+  @apply text-gray-700;
+}
+
+/* --------------------------------------------------
+   CARD / SURFACE DEFAULTS
+-------------------------------------------------- */
+
+.surface {
+  @apply bg-white border border-amber-100 rounded-lg;
+}
+
+/* --------------------------------------------------
+   BUTTON BASE (CONSISTENT FEEL)
+-------------------------------------------------- */
+
+.btn-primary {
+  @apply bg-amber-600 text-white hover:bg-amber-700 rounded px-4 py-2 text-sm font-medium;
+}
+
+.btn-secondary {
+  @apply bg-white border border-amber-200 text-gray-800 hover:bg-amber-50 rounded px-4 py-2 text-sm;
+}
+
+/* --------------------------------------------------
+   TABLE POLISH
+-------------------------------------------------- */
+
+table {
+  @apply border-collapse;
+}
+
+thead {
+  @apply bg-amber-50;
+}
+
+th {
+  @apply text-xs font-medium text-gray-600;
+}
+
+td {
+  @apply text-sm text-gray-800;
+}
+
+/* --------------------------------------------------
+   EMPTY STATE FEEL
+-------------------------------------------------- */
+
+.empty-state {
+  @apply bg-white border border-dashed border-amber-200 rounded-lg p-8 text-center;
+}
+
+.empty-state-title {
+  @apply font-medium text-gray-900;
+}
+
+.empty-state-sub {
+  @apply text-sm text-gray-500;
 }
