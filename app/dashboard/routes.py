@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -25,7 +27,7 @@ router = APIRouter(
 # --------------------------------------------------
 # DEV MODE USER RESOLUTION (TEMPORARY)
 # --------------------------------------------------
-async def get_dev_user(db: AsyncSession) -> User | None:
+async def get_dev_user(db: AsyncSession) -> Optional[User]:
     """
     Temporary user resolver while auth is disabled.
     Uses first available user in database.
