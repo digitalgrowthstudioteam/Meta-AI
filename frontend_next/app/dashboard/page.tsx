@@ -1,6 +1,66 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
+type MetaStatus = "unknown" | "connected" | "disconnected";
+
 export default function DashboardPage() {
+  const [metaStatus, setMetaStatus] = useState<MetaStatus>("unknown");
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
+
+  // --------------------------------------------------
+  // CHECK META CONNECTION (DERIVED FROM TOKEN PRESENCE)
+  // --------------------------------------------------
+  useEffect(() => {
+    fetch("/meta/connect", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.redirect_url) {
+          setMetaStatus("disconnected");
+        } else {
+          setMetaStatus("connected");
+        }
+      })
+      .catch(() => setMetaStatus("disconnected"));
+  }, []);
+
+  // --------------------------------------------------
+  // CONNECT META
+  // --------------------------------------------------
+  const connectMeta = async () => {
+    const res = await fetch("/meta/connect", {
+      credentials: "include",
+    });
+    const data = await res.json();
+    if (data?.redirect_url) {
+      window.location.href = data.redirect_url;
+    }
+  };
+
+  // --------------------------------------------------
+  // SYNC AD ACCOUNTS
+  // --------------------------------------------------
+  const syncAdAccounts = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+
+    try {
+      const res = await fetch("/meta/adaccounts/sync", {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json();
+      setSyncResult(
+        `Synced ${data.ad_accounts_processed} ad accounts successfully`
+      );
+    } catch {
+      setSyncResult("Sync failed. Please try again.");
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* ================= HEADER ================= */}
@@ -15,17 +75,58 @@ export default function DashboardPage() {
         </div>
 
         <div className="text-xs text-gray-500">
-          Meta account: Not connected
+          Meta account:{" "}
+          {metaStatus === "connected" ? (
+            <span className="text-green-600 font-medium">
+              Connected
+            </span>
+          ) : metaStatus === "disconnected" ? (
+            <span className="text-red-600 font-medium">
+              Not connected
+            </span>
+          ) : (
+            "Checking…"
+          )}
         </div>
       </div>
 
+      {/* ================= META ACTION BAR ================= */}
+      <div className="bg-white border border-gray-200 rounded p-4 flex items-center justify-between">
+        <div className="text-sm text-gray-600">
+          Meta Ads connection is required to sync campaigns and enable AI.
+        </div>
+
+        <div className="flex gap-3">
+          {metaStatus === "disconnected" && (
+            <button
+              onClick={connectMeta}
+              className="px-4 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
+            >
+              Connect Meta
+            </button>
+          )}
+
+          {metaStatus === "connected" && (
+            <button
+              onClick={syncAdAccounts}
+              disabled={syncing}
+              className="px-4 py-2 text-sm rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
+            >
+              {syncing ? "Syncing…" : "Sync Ad Accounts"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {syncResult && (
+        <div className="text-sm text-green-600">
+          {syncResult}
+        </div>
+      )}
+
       {/* ================= KPI CARDS ================= */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard
-          label="Total Campaigns"
-          value="—"
-          hint="Synced from Meta"
-        />
+        <KpiCard label="Total Campaigns" value="—" hint="Synced from Meta" />
         <KpiCard
           label="AI-Active Campaigns"
           value="—"
@@ -38,53 +139,10 @@ export default function DashboardPage() {
         />
         <KpiCard
           label="Account Status"
-          value="Disconnected"
+          value={metaStatus === "connected" ? "Connected" : "Disconnected"}
           hint="Meta Ads account"
-          warning
+          warning={metaStatus !== "connected"}
         />
-      </div>
-
-      {/* ================= AI ACTIVITY ================= */}
-      <div className="bg-white border border-gray-200 rounded p-6 space-y-4">
-        <div>
-          <h2 className="text-sm font-semibold text-gray-900">
-            Recent AI Activity
-          </h2>
-          <p className="text-xs text-gray-500">
-            Latest AI recommendations generated for your campaigns
-          </p>
-        </div>
-
-        <div className="space-y-3 text-sm">
-          <EmptyRow text="No AI actions generated yet." />
-        </div>
-      </div>
-
-      {/* ================= CAMPAIGN SNAPSHOT ================= */}
-      <div className="bg-white border border-gray-200 rounded p-6 space-y-4">
-        <div>
-          <h2 className="text-sm font-semibold text-gray-900">
-            Campaign Snapshot
-          </h2>
-          <p className="text-xs text-gray-500">
-            High-level breakdown by objective and status
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <SnapshotItem
-            label="Lead Campaigns"
-            value="—"
-          />
-          <SnapshotItem
-            label="Sales Campaigns"
-            value="—"
-          />
-          <SnapshotItem
-            label="Paused Campaigns"
-            value="—"
-          />
-        </div>
       </div>
 
       {/* ================= FOOTNOTE ================= */}
@@ -113,9 +171,7 @@ function KpiCard({
 }) {
   return (
     <div className="bg-white border border-gray-200 rounded p-5 space-y-1">
-      <div className="text-xs text-gray-500">
-        {label}
-      </div>
+      <div className="text-xs text-gray-500">{label}</div>
       <div
         className={`text-xl font-semibold ${
           warning ? "text-red-600" : "text-gray-900"
@@ -123,36 +179,7 @@ function KpiCard({
       >
         {value}
       </div>
-      <div className="text-xs text-gray-400">
-        {hint}
-      </div>
-    </div>
-  );
-}
-
-function SnapshotItem({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="border border-gray-200 rounded p-4">
-      <div className="text-xs text-gray-500">
-        {label}
-      </div>
-      <div className="text-lg font-semibold text-gray-900">
-        {value}
-      </div>
-    </div>
-  );
-}
-
-function EmptyRow({ text }: { text: string }) {
-  return (
-    <div className="border border-dashed border-gray-200 rounded p-4 text-gray-500">
-      {text}
+      <div className="text-xs text-gray-400">{hint}</div>
     </div>
   );
 }
