@@ -1,4 +1,3 @@
-from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -6,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.db_session import get_db
+from app.auth.dependencies import get_current_user
 from app.users.models import User
 from app.campaigns.service import CampaignService
 from app.campaigns.schemas import CampaignResponse, ToggleAIRequest
@@ -17,31 +17,17 @@ router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
 
 
 # =========================================================
-# DEV MODE USER RESOLUTION (TEMPORARY)
-# =========================================================
-async def get_dev_user(db: AsyncSession) -> Optional[User]:
-    result = await db.execute(select(User).limit(1))
-    return result.scalar_one_or_none()
-
-
-# =========================================================
-# LIST CAMPAIGNS (READ-ONLY, CONSISTENT)
+# LIST CAMPAIGNS
 # =========================================================
 @router.get(
-    "/",
+    "",
     response_model=list[CampaignResponse],
     status_code=status.HTTP_200_OK,
 )
 async def list_campaigns(
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    current_user = await get_dev_user(db)
-    if not current_user:
-        return []
-
-    # -----------------------------------------
-    # META NOT CONNECTED → SIGNAL FRONTEND
-    # -----------------------------------------
     result = await db.execute(
         select(MetaOAuthToken)
         .where(
@@ -53,30 +39,19 @@ async def list_campaigns(
     token = result.scalar_one_or_none()
 
     if not token:
-        # IMPORTANT:
-        # - Campaigns page
-        # - AI Actions page
-        # must detect Meta not connected
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Meta account not connected",
         )
 
-    # -----------------------------------------
-    # SAFE LIST (EMPTY IS VALID)
-    # -----------------------------------------
-    try:
-        return await CampaignService.list_campaigns(
-            db=db,
-            user_id=current_user.id,
-        )
-    except Exception:
-        # NEVER crash UI
-        return []
+    return await CampaignService.list_campaigns(
+        db=db,
+        user_id=current_user.id,
+    )
 
 
 # =========================================================
-# SYNC CAMPAIGNS FROM META (MANUAL)
+# SYNC CAMPAIGNS FROM META
 # =========================================================
 @router.post(
     "/sync",
@@ -85,28 +60,16 @@ async def list_campaigns(
 )
 async def sync_campaigns_from_meta(
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    current_user = await get_dev_user(db)
-    if not current_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No user available in development mode",
-        )
-
-    try:
-        return await CampaignService.sync_from_meta(
-            db=db,
-            user_id=current_user.id,
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+    return await CampaignService.sync_from_meta(
+        db=db,
+        user_id=current_user.id,
+    )
 
 
 # =========================================================
-# AI TOGGLE (READ-ONLY META SAFE)
+# AI TOGGLE
 # =========================================================
 @router.post(
     "/{campaign_id}/ai-toggle",
@@ -117,14 +80,8 @@ async def toggle_ai(
     campaign_id: UUID,
     payload: ToggleAIRequest,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    current_user = await get_dev_user(db)
-    if not current_user:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No user available in development mode",
-        )
-
     try:
         return await CampaignService.toggle_ai(
             db=db,
