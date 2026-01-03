@@ -14,17 +14,38 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // --------------------------------------------------
   // LOAD DASHBOARD SUMMARY (SOURCE OF TRUTH)
   // --------------------------------------------------
+  const loadSummary = async () => {
+    try {
+      const res = await fetch("/api/dashboard/summary", {
+        credentials: "include",
+      });
+
+      if (res.status === 401 || res.status === 403) {
+        // Session expired or invalid
+        window.location.href = "/login";
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error("Failed to load dashboard");
+      }
+
+      const json = await res.json();
+      setData(json);
+    } catch (err) {
+      setError("Failed to load dashboard data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    fetch("/api/dashboard/summary", {
-      credentials: "include",
-    })
-      .then((r) => r.json())
-      .then(setData)
-      .finally(() => setLoading(false));
+    loadSummary();
   }, []);
 
   // --------------------------------------------------
@@ -34,6 +55,9 @@ export default function DashboardPage() {
     const res = await fetch("/meta/connect", {
       credentials: "include",
     });
+
+    if (!res.ok) return;
+
     const json = await res.json();
     if (json?.redirect_url) {
       window.location.href = json.redirect_url;
@@ -52,17 +76,17 @@ export default function DashboardPage() {
         method: "POST",
         credentials: "include",
       });
+
+      if (!res.ok) {
+        throw new Error("Sync failed");
+      }
+
       const json = await res.json();
       setSyncResult(
         `Synced ${json.ad_accounts_processed} ad accounts successfully`
       );
 
-      // Refresh dashboard data after sync
-      const refreshed = await fetch("/api/dashboard/summary", {
-        credentials: "include",
-      }).then((r) => r.json());
-
-      setData(refreshed);
+      await loadSummary();
     } catch {
       setSyncResult("Sync failed. Please try again.");
     } finally {
@@ -70,6 +94,9 @@ export default function DashboardPage() {
     }
   };
 
+  // --------------------------------------------------
+  // RENDER STATES
+  // --------------------------------------------------
   if (loading) {
     return (
       <div className="text-sm text-gray-500">
@@ -78,10 +105,10 @@ export default function DashboardPage() {
     );
   }
 
-  if (!data) {
+  if (error || !data) {
     return (
       <div className="text-sm text-red-600">
-        Failed to load dashboard data
+        {error ?? "Failed to load dashboard data"}
       </div>
     );
   }
@@ -149,21 +176,9 @@ export default function DashboardPage() {
 
       {/* ================= KPI CARDS ================= */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KpiCard
-          label="Ad Accounts"
-          value={String(data.ad_accounts)}
-          hint="Connected Meta ad accounts"
-        />
-        <KpiCard
-          label="Total Campaigns"
-          value={String(data.campaigns)}
-          hint="Synced from Meta"
-        />
-        <KpiCard
-          label="AI-Active Campaigns"
-          value={String(data.ai_active)}
-          hint="Phase 1 = 0"
-        />
+        <KpiCard label="Ad Accounts" value={String(data.ad_accounts)} hint="Connected Meta ad accounts" />
+        <KpiCard label="Total Campaigns" value={String(data.campaigns)} hint="Synced from Meta" />
+        <KpiCard label="AI-Active Campaigns" value={String(data.ai_active)} hint="Phase 1 = 0" />
         <KpiCard
           label="Account Status"
           value={data.meta_connected ? "Connected" : "Disconnected"}
@@ -172,18 +187,12 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* ================= FOOTNOTE ================= */}
       <div className="text-xs text-gray-400">
         All data is read-only and synced from Meta Ads Manager.
-        Changes are applied directly inside Meta.
       </div>
     </div>
   );
 }
-
-/* ===============================
-   UI COMPONENTS
-=============================== */
 
 function KpiCard({
   label,
@@ -199,11 +208,7 @@ function KpiCard({
   return (
     <div className="bg-white border border-gray-200 rounded p-5 space-y-1">
       <div className="text-xs text-gray-500">{label}</div>
-      <div
-        className={`text-xl font-semibold ${
-          warning ? "text-red-600" : "text-gray-900"
-        }`}
-      >
+      <div className={`text-xl font-semibold ${warning ? "text-red-600" : "text-gray-900"}`}>
         {value}
       </div>
       <div className="text-xs text-gray-400">{hint}</div>
