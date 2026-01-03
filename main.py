@@ -2,17 +2,13 @@
 Digital Growth Studio (Meta-AI)
 Main application entry point
 
-PHASE 1.7 — API-ONLY MODE (LOCKED)
-
-RULES:
-- FastAPI serves APIs ONLY
-- NO HTML rendering
-- NO /login, /dashboard, or UI routes
-- Next.js is the ONLY frontend
+PHASE 1.7 — FULL FRONTEND CONTROL
+- FastAPI is API-only
+- NO frontend routes served by backend
+- Next.js owns ALL UI routes
 """
 
 import app.models  # registers all SQLAlchemy models
-
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
@@ -38,30 +34,26 @@ app = FastAPI(
 
 
 # =========================
-# STATIC FILES (OPTIONAL)
-# Can be removed later if unused
+# STATIC FILES (KEEP — UNUSED)
 # =========================
 app.mount(
-    "/static/shared",
-    StaticFiles(directory="frontend/shared/assets"),
-    name="static-shared",
-)
-
-app.mount(
-    "/static/user",
-    StaticFiles(directory="frontend/user/assets"),
-    name="static-user",
-)
-
-app.mount(
-    "/static/admin",
-    StaticFiles(directory="frontend/admin/assets"),
-    name="static-admin",
+    "/static",
+    StaticFiles(directory="frontend", check_dir=False),
+    name="static",
 )
 
 
 # =========================
-# API ROUTERS — SINGLE SOURCE OF TRUTH
+# 🚫 LEGACY UI ROUTES DISABLED
+# =========================
+# NOTE:
+# /login and any UI routes are intentionally REMOVED.
+# Next.js is the ONLY frontend.
+# This is required to avoid route hijacking.
+
+
+# =========================
+# API ROUTERS — SINGLE SOURCE
 # =========================
 app.include_router(auth_router, prefix="/api")
 app.include_router(campaigns_router, prefix="/api")
@@ -72,7 +64,7 @@ app.include_router(dashboard_router, prefix="/api")
 
 
 # =========================
-# HEALTH CHECK (API SAFE)
+# HEALTH CHECK
 # =========================
 @app.get("/api/health")
 def health_check():
