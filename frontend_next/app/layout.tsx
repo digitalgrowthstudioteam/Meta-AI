@@ -24,27 +24,10 @@ const NAV_ITEMS = [
 export default function RootLayout({ children }: Props) {
   const pathname = usePathname();
 
-  const isPublicPage = pathname?.startsWith("/login");
-
-  /* ======================================================
-     🚨 AUTH DISABLED — NO REDIRECTS, NO CHECKS
-  ====================================================== */
-
-  if (isPublicPage) {
-    return (
-      <html lang="en">
-        <body className="bg-gray-50 text-gray-900">
-          {children}
-        </body>
-      </html>
-    );
-  }
-
   return (
     <html lang="en">
       <body className="bg-gray-50 text-gray-900">
         <div className="flex h-screen w-screen overflow-hidden">
-          {/* SIDEBAR */}
           <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
             <div className="h-16 flex items-center px-6 border-b border-gray-200">
               <div className="font-semibold text-base tracking-tight">
@@ -68,11 +51,10 @@ export default function RootLayout({ children }: Props) {
             </nav>
           </aside>
 
-          {/* MAIN */}
           <div className="flex flex-col flex-1 min-w-0">
             <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6">
               <div className="text-sm text-gray-600">
-                Meta Ads AI • Development Mode (Auth Disabled)
+                Meta Ads AI • Open Development Mode
               </div>
             </header>
 
