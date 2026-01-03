@@ -3,20 +3,34 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.db_session import get_db
-from app.core.config import settings
 from app.users.models import User
 
 
+# -------------------------------------------------
+# DEV-SAFE CURRENT USER RESOLUTION
+# -------------------------------------------------
 async def get_current_user(
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    if settings.DEV_MODE:
-        result = await db.execute(
-            select(User).order_by(User.created_at.asc()).limit(1)
-        )
-        return result.scalar_one()
+    """
+    DEV MODE:
+    - Always resolve to first real user in DB
+    - No env flags
+    - No fake IDs
+    """
 
-    raise HTTPException(status_code=401, detail="Authentication required")
+    result = await db.execute(
+        select(User).order_by(User.created_at.asc()).limit(1)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(
+            status_code=500,
+            detail="No user found in database",
+        )
+
+    return user
 
 
 async def require_user(
