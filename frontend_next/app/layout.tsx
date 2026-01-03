@@ -28,12 +28,14 @@ export default function RootLayout({ children }: Props) {
   const [checkingSession, setCheckingSession] = useState(true);
   const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
 
-  const isPublicPage = pathname === "/login";
+  const isPublicPage = pathname?.startsWith("/login");
 
   /* ======================================================
-     SESSION VERIFICATION (LOCKED)
+     SESSION VERIFICATION (FIXED)
   ====================================================== */
   useEffect(() => {
+    if (!pathname) return;
+
     if (isPublicPage) {
       setCheckingSession(false);
       return;
@@ -58,11 +60,10 @@ export default function RootLayout({ children }: Props) {
     }
 
     verifySession();
-  }, [router, isPublicPage]);
+  }, [pathname, isPublicPage, router]);
 
   /* ======================================================
-     META CONNECTION
-     Runs ONLY after session is verified
+     META STATUS
   ====================================================== */
   useEffect(() => {
     if (isPublicPage || checkingSession) return;
@@ -89,7 +90,7 @@ export default function RootLayout({ children }: Props) {
   }, [isPublicPage, checkingSession]);
 
   /* ======================================================
-     LOADING STATE
+     LOADING
   ====================================================== */
   if (checkingSession) {
     return (
@@ -106,7 +107,7 @@ export default function RootLayout({ children }: Props) {
   }
 
   /* ======================================================
-     PUBLIC (LOGIN)
+     PUBLIC LOGIN
   ====================================================== */
   if (isPublicPage) {
     return (
@@ -125,8 +126,6 @@ export default function RootLayout({ children }: Props) {
     <html lang="en">
       <body className="bg-gray-50 text-gray-900">
         <div className="flex h-screen w-screen overflow-hidden">
-          
-          {/* SIDEBAR */}
           <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
             <div className="h-16 flex items-center px-6 border-b border-gray-200">
               <div className="font-semibold text-base tracking-tight">
@@ -140,20 +139,14 @@ export default function RootLayout({ children }: Props) {
                   key={item.href}
                   href={item.href}
                   label={item.label}
-                  active={
-                    pathname === item.href ||
-                    pathname.startsWith(item.href + "/")
-                  }
+                  active={pathname === item.href || pathname?.startsWith(item.href + "/")}
                   primary={item.primary}
                 />
               ))}
             </nav>
           </aside>
 
-          {/* MAIN */}
           <div className="flex flex-col flex-1 min-w-0">
-            
-            {/* HEADER */}
             <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6">
               <div className="text-sm text-gray-600">
                 Meta Ads AI • Read-only Intelligence Mode
@@ -164,18 +157,13 @@ export default function RootLayout({ children }: Props) {
                 {metaConnected === null ? (
                   <span className="text-gray-400">Checking…</span>
                 ) : metaConnected ? (
-                  <span className="font-medium text-green-600">
-                    Connected
-                  </span>
+                  <span className="font-medium text-green-600">Connected</span>
                 ) : (
-                  <span className="font-medium text-red-600">
-                    Not Connected
-                  </span>
+                  <span className="font-medium text-red-600">Not Connected</span>
                 )}
               </div>
             </header>
 
-            {/* CONTENT */}
             <main className="flex-1 overflow-y-auto p-6">
               {children}
             </main>
@@ -186,9 +174,6 @@ export default function RootLayout({ children }: Props) {
   );
 }
 
-/* ======================================================
-   SIDEBAR LINK
-====================================================== */
 function SidebarLink({
   href,
   label,
