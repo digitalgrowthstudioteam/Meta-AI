@@ -8,84 +8,62 @@ type Campaign = {
   objective: string;
   status: string;
   ai_active: boolean;
-};
-
-type AIAction = {
-  id: string;
-  action_type: string;
-  reasoning?: string;
-  confidence?: number;
-  created_at: string;
+  last_meta_sync_at?: string;
 };
 
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [selectedCampaign, setSelectedCampaign] =
-    useState<Campaign | null>(null);
+  // ===============================
+  // FETCH CAMPAIGNS
+  // ===============================
+  const loadCampaigns = async () => {
+    try {
+      const res = await fetch("/api/campaigns", {
+        credentials: "include",
+      });
 
-  const [selectedCampaignId, setSelectedCampaignId] =
-    useState<string | null>(null);
+      if (!res.ok) throw new Error();
 
-  const [aiActions, setAiActions] = useState<AIAction[]>([]);
-  const [aiLoading, setAiLoading] = useState(false);
-
-  /* ===============================
-     FETCH CAMPAIGNS
-  =============================== */
-  useEffect(() => {
-    async function fetchCampaigns() {
-      try {
-        const res = await fetch("/campaigns/", {
-          credentials: "include",
-        });
-
-        if (!res.ok) throw new Error();
-
-        const data = await res.json();
-        setCampaigns(data);
-      } catch {
-        setError("Unable to load campaigns from Meta.");
-      } finally {
-        setLoading(false);
-      }
+      const data = await res.json();
+      setCampaigns(data);
+    } catch {
+      setError("Unable to load campaigns from Meta.");
+    } finally {
+      setLoading(false);
     }
+  };
 
-    fetchCampaigns();
+  useEffect(() => {
+    loadCampaigns();
   }, []);
 
-  /* ===============================
-     FETCH AI ACTIONS (100% SAFE)
-  =============================== */
-  useEffect(() => {
-    if (!selectedCampaignId) return;
+  // ===============================
+  // SYNC CAMPAIGNS
+  // ===============================
+  const syncCampaigns = async () => {
+    setSyncing(true);
+    try {
+      const res = await fetch("/api/campaigns/sync", {
+        method: "POST",
+        credentials: "include",
+      });
 
-    async function fetchAiActions() {
-      setAiLoading(true);
-      try {
-        const res = await fetch(
-          `/ai/campaign/${selectedCampaignId}/actions`,
-          { credentials: "include" }
-        );
+      if (!res.ok) throw new Error();
 
-        if (!res.ok) throw new Error();
-
-        const data = await res.json();
-        setAiActions(data);
-      } catch {
-        setAiActions([]);
-      } finally {
-        setAiLoading(false);
-      }
+      await loadCampaigns();
+    } catch {
+      alert("Failed to sync campaigns. Please try again.");
+    } finally {
+      setSyncing(false);
     }
-
-    fetchAiActions();
-  }, [selectedCampaignId]);
+  };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* ================= HEADER ================= */}
       <div className="flex items-start justify-between">
         <div>
@@ -93,13 +71,23 @@ export default function CampaignsPage() {
             Campaigns
           </h1>
           <p className="text-sm text-gray-500">
-            Synced from Meta Ads Manager • Read-only
+            Read-only view of campaigns synced from Meta Ads Manager
           </p>
         </div>
 
-        <div className="text-xs text-gray-500">
-          Managed in Meta
-        </div>
+        <button
+          onClick={syncCampaigns}
+          disabled={syncing}
+          className="px-4 py-2 text-sm rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
+        >
+          {syncing ? "Syncing…" : "Sync Campaigns"}
+        </button>
+      </div>
+
+      {/* ================= INFO BAR ================= */}
+      <div className="bg-blue-50 border border-blue-100 rounded p-4 text-sm text-blue-700">
+        Campaigns are managed in Meta Ads Manager. You cannot create or edit
+        campaigns here.
       </div>
 
       {/* ================= STATES ================= */}
@@ -113,8 +101,23 @@ export default function CampaignsPage() {
         <div className="text-sm text-red-600">{error}</div>
       )}
 
+      {/* ================= EMPTY STATE ================= */}
+      {!loading && !error && campaigns.length === 0 && (
+        <div className="bg-white border border-gray-200 rounded p-10 text-center">
+          <div className="text-sm text-gray-600 mb-3">
+            No campaigns synced yet.
+          </div>
+          <button
+            onClick={syncCampaigns}
+            className="px-4 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
+          >
+            Sync Campaigns
+          </button>
+        </div>
+      )}
+
       {/* ================= TABLE ================= */}
-      {!loading && !error && (
+      {!loading && !error && campaigns.length > 0 && (
         <div className="bg-white border border-gray-200 rounded overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
@@ -131,8 +134,8 @@ export default function CampaignsPage() {
                 <th className="px-4 py-3 text-left font-medium">
                   AI Status
                 </th>
-                <th className="px-4 py-3 text-right font-medium">
-                  Insights
+                <th className="px-4 py-3 text-left font-medium">
+                  Last Synced
                 </th>
               </tr>
             </thead>
@@ -164,108 +167,21 @@ export default function CampaignsPage() {
                     <AIBadge active={c.ai_active} />
                   </td>
 
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => {
-                        setSelectedCampaign(c);
-                        setSelectedCampaignId(c.id);
-                      }}
-                      className="text-blue-600 font-medium hover:text-blue-800"
-                    >
-                      View AI
-                    </button>
+                  <td className="px-4 py-3 text-xs text-gray-500">
+                    {c.last_meta_sync_at
+                      ? new Date(c.last_meta_sync_at).toLocaleString()
+                      : "—"}
                   </td>
                 </tr>
               ))}
-
-              {campaigns.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="px-6 py-10 text-center text-gray-500"
-                  >
-                    No campaigns found in this ad account.
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
       )}
 
-      {/* ================= AI DRAWER ================= */}
-      {selectedCampaign && (
-        <div className="fixed inset-y-0 right-0 w-[460px] bg-white border-l border-gray-200 shadow-2xl z-50">
-          <div className="h-16 flex items-center justify-between px-5 border-b border-gray-200">
-            <div>
-              <div className="text-sm font-semibold text-gray-900">
-                AI Insights
-              </div>
-              <div className="text-xs text-gray-500">
-                {selectedCampaign.name}
-              </div>
-            </div>
-
-            <button
-              onClick={() => {
-                setSelectedCampaign(null);
-                setSelectedCampaignId(null);
-                setAiActions([]);
-              }}
-              className="text-gray-400 hover:text-gray-700 text-lg"
-            >
-              ×
-            </button>
-          </div>
-
-          <div className="p-5 space-y-6 text-sm overflow-y-auto h-[calc(100%-64px)]">
-            {aiLoading && (
-              <div className="text-gray-500">
-                Analyzing campaign performance…
-              </div>
-            )}
-
-            {!aiLoading && aiActions.length === 0 && (
-              <div className="text-gray-500">
-                No AI suggestions generated yet.
-              </div>
-            )}
-
-            {!aiLoading && aiActions.length > 0 && (
-              <>
-                <InfoBlock
-                  title="Latest Recommendation"
-                  value={aiActions[0].action_type}
-                  highlight
-                />
-                <InfoBlock
-                  title="Reasoning"
-                  value={
-                    aiActions[0].reasoning ??
-                    "Not enough data available."
-                  }
-                />
-                <InfoBlock
-                  title="Confidence"
-                  value={
-                    aiActions[0].confidence !== undefined
-                      ? `${Math.round(
-                          aiActions[0].confidence * 100
-                        )}%`
-                      : "N/A"
-                  }
-                />
-                <InfoBlock
-                  title="Generated At"
-                  value={new Date(
-                    aiActions[0].created_at
-                  ).toLocaleString()}
-                />
-              </>
-            )}
-          </div>
-        </div>
-      )}
+      <div className="text-xs text-gray-400">
+        All data is read-only and synced directly from Meta Ads Manager.
+      </div>
     </div>
   );
 }
@@ -315,32 +231,5 @@ function AIBadge({ active }: { active: boolean }) {
     >
       {active ? "AI Active" : "AI Inactive"}
     </span>
-  );
-}
-
-function InfoBlock({
-  title,
-  value,
-  highlight,
-}: {
-  title: string;
-  value: string;
-  highlight?: boolean;
-}) {
-  return (
-    <div>
-      <div className="text-xs font-medium text-gray-500 mb-1">
-        {title}
-      </div>
-      <div
-        className={
-          highlight
-            ? "font-semibold text-gray-900"
-            : "text-gray-800"
-        }
-      >
-        {value}
-      </div>
-    </div>
   );
 }
