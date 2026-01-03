@@ -25,11 +25,6 @@ export default function DashboardPage() {
         credentials: "include",
       });
 
-      if (res.status === 401 || res.status === 403) {
-        window.location.href = "/login";
-        return;
-      }
-
       if (!res.ok) {
         throw new Error("Failed to load dashboard");
       }
