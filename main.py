@@ -1,9 +1,11 @@
 """
 Digital Growth Studio (Meta-AI)
 Main application entry point
-SAFE MODE:
-- Legacy Jinja UI preserved
-- API routes duplicated under /api
+
+PHASE 1.6 — BACKEND UI CUTOVER
+- FastAPI is API-only
+- Legacy Jinja UI routes disabled (not deleted)
+- /api/* remains source of truth
 """
 
 import app.models  # registers all SQLAlchemy models
@@ -39,7 +41,7 @@ app = FastAPI(
 
 
 # =========================
-# FRONTEND — STATIC FILES (LEGACY UI)
+# FRONTEND — STATIC FILES (LEGACY, KEPT FOR NOW)
 # =========================
 app.mount(
     "/static/shared",
@@ -61,15 +63,14 @@ app.mount(
 
 
 # =========================
-# FRONTEND — TEMPLATE LOADER (LEGACY UI)
+# TEMPLATE LOADER (LEGACY, KEPT FOR LOGIN ONLY)
 # =========================
 templates = Jinja2Templates(directory="frontend")
 
 
 # =========================
-# UI ROUTES — LEGACY (DO NOT REMOVE YET)
+# UI ROUTES — ONLY LOGIN (LEGACY)
 # =========================
-
 @app.get("/login")
 def login_page(request: Request):
     return templates.TemplateResponse(
@@ -78,120 +79,8 @@ def login_page(request: Request):
     )
 
 
-@app.get("/dashboard")
-def dashboard_page(
-    request: Request,
-    current_user: User = Depends(require_user),
-):
-    return templates.TemplateResponse(
-        "user/templates/dashboard.html",
-        {
-            "request": request,
-            "user": current_user,
-        },
-    )
-
-
-@app.get("/campaigns")
-def campaigns_page(
-    request: Request,
-    current_user: User = Depends(require_user),
-):
-    return templates.TemplateResponse(
-        "user/templates/campaigns.html",
-        {
-            "request": request,
-            "user": current_user,
-        },
-    )
-
-
-@app.get("/ai/actions")
-def ai_actions_page(
-    request: Request,
-    current_user: User = Depends(require_user),
-):
-    return templates.TemplateResponse(
-        "user/templates/ai_actions.html",
-        {
-            "request": request,
-            "user": current_user,
-        },
-    )
-
-
-@app.get("/audience/insights")
-def audience_insights_page(
-    request: Request,
-    current_user: User = Depends(require_user),
-):
-    return templates.TemplateResponse(
-        "user/templates/audience_insights.html",
-        {
-            "request": request,
-            "user": current_user,
-        },
-    )
-
-
-@app.get("/campaigns/buy")
-def buy_campaign_page(
-    request: Request,
-    current_user: User = Depends(require_user),
-):
-    return templates.TemplateResponse(
-        "user/templates/buy_campaign.html",
-        {
-            "request": request,
-            "user": current_user,
-        },
-    )
-
-
-@app.get("/billing")
-def billing_page(
-    request: Request,
-    current_user: User = Depends(require_user),
-):
-    return templates.TemplateResponse(
-        "user/templates/billing.html",
-        {
-            "request": request,
-            "user": current_user,
-        },
-    )
-
-
-@app.get("/settings")
-def settings_page(
-    request: Request,
-    current_user: User = Depends(require_user),
-):
-    return templates.TemplateResponse(
-        "user/templates/settings.html",
-        {
-            "request": request,
-            "user": current_user,
-        },
-    )
-
-
-@app.get("/reports")
-def reports_page(
-    request: Request,
-    current_user: User = Depends(require_user),
-):
-    return templates.TemplateResponse(
-        "user/templates/reports.html",
-        {
-            "request": request,
-            "user": current_user,
-        },
-    )
-
-
 # =========================
-# API ROUTERS — LEGACY (UNCHANGED)
+# API ROUTERS — CANONICAL
 # =========================
 app.include_router(auth_router)
 app.include_router(campaigns_router)
@@ -202,7 +91,7 @@ app.include_router(dashboard_router)
 
 
 # =========================
-# API ROUTERS — NEW /api PREFIX (SAFE MODE)
+# API ROUTERS — /api PREFIX
 # =========================
 app.include_router(auth_router, prefix="/api")
 app.include_router(campaigns_router, prefix="/api")
