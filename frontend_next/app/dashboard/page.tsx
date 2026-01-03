@@ -35,7 +35,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
 
   // --------------------------------------------------
-  // LOAD DASHBOARD SUMMARY
+  // LOAD DASHBOARD SUMMARY (NO CACHE — ALWAYS REAL)
   // --------------------------------------------------
   const loadSummary = async () => {
     setLoading(true);
@@ -44,6 +44,7 @@ export default function DashboardPage() {
     try {
       const res = await fetch("/api/dashboard/summary", {
         credentials: "include",
+        cache: "no-store",
       });
 
       if (!res.ok) throw new Error();
@@ -68,6 +69,7 @@ export default function DashboardPage() {
     try {
       const res = await fetch("/api/meta/connect", {
         credentials: "include",
+        cache: "no-store",
       });
 
       if (!res.ok) return;
@@ -82,7 +84,7 @@ export default function DashboardPage() {
   };
 
   // --------------------------------------------------
-  // SYNC AD ACCOUNTS
+  // SYNC AD ACCOUNTS + REFRESH DASHBOARD
   // --------------------------------------------------
   const syncAdAccounts = async () => {
     setSyncing(true);
@@ -92,6 +94,7 @@ export default function DashboardPage() {
       const res = await fetch("/api/meta/adaccounts/sync", {
         method: "POST",
         credentials: "include",
+        cache: "no-store",
       });
 
       if (!res.ok) throw new Error();
