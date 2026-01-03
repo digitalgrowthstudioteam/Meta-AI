@@ -1,7 +1,9 @@
 import httpx
 from typing import List, Dict
 
-from app.meta_api.models import MetaAdAccount
+from app.meta_api.models import MetaAdAccount, MetaOAuthToken
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 
 class MetaCampaignClient:
@@ -21,29 +23,36 @@ class MetaCampaignClient:
     async def fetch_campaigns(
         cls,
         *,
+        db: AsyncSession,
+        user_id,
         ad_account: MetaAdAccount,
     ) -> List[Dict]:
         """
         Fetch ALL campaigns for a Meta Ad Account.
-
-        Returns normalized campaign dicts:
-        {
-            "id": str,
-            "name": str,
-            "objective": str,
-            "status": str
-        }
         """
 
-        if not ad_account.access_token:
-            raise RuntimeError("Meta ad account missing access token")
+        # -------------------------------------------------
+        # Resolve active Meta OAuth token for user
+        # -------------------------------------------------
+        result = await db.execute(
+            select(MetaOAuthToken)
+            .where(
+                MetaOAuthToken.user_id == user_id,
+                MetaOAuthToken.is_active.is_(True),
+            )
+            .limit(1)
+        )
+        token = result.scalar_one_or_none()
+
+        if not token:
+            raise RuntimeError("No active Meta OAuth token found")
 
         url = f"{cls.GRAPH_BASE_URL}/act_{ad_account.meta_account_id}/campaigns"
 
         params = {
             "fields": "id,name,objective,effective_status",
             "limit": 50,
-            "access_token": ad_account.access_token,
+            "access_token": token.access_token,
         }
 
         campaigns: List[Dict] = []
@@ -62,7 +71,6 @@ class MetaCampaignClient:
                 for item in payload.get("data", []):
                     status = item.get("effective_status", "UNKNOWN")
 
-                    # ❌ Skip deleted / archived campaigns
                     if status in {"DELETED", "ARCHIVED"}:
                         continue
 
