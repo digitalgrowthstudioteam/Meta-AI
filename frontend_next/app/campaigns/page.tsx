@@ -17,11 +17,6 @@ export default function CampaignsPage() {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const API_BASE =
-    typeof window !== "undefined"
-      ? window.location.origin
-      : "";
-
   // ===============================
   // LOAD CAMPAIGNS (READ-ONLY)
   // ===============================
@@ -30,20 +25,24 @@ export default function CampaignsPage() {
     setError(null);
 
     try {
-      const res = await fetch(
-        `${API_BASE}/api/campaigns/`,
-        { credentials: "include" }
-      );
+      const url = new URL("/api/campaigns/", window.location.href);
+
+      const res = await fetch(url.toString(), {
+        credentials: "include",
+      });
 
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
 
       const data = await res.json();
+
+      // IMPORTANT: empty array is a VALID state
       setCampaigns(Array.isArray(data) ? data : []);
-    } catch (err) {
-      setError("Unable to load campaigns from Meta.");
+      setError(null);
+    } catch {
       setCampaigns([]);
+      setError("Unable to load campaigns from Meta.");
     } finally {
       setLoading(false);
     }
@@ -60,13 +59,12 @@ export default function CampaignsPage() {
     setSyncing(true);
 
     try {
-      const res = await fetch(
-        `${API_BASE}/api/campaigns/sync`,
-        {
-          method: "POST",
-          credentials: "include",
-        }
-      );
+      const url = new URL("/api/campaigns/sync", window.location.href);
+
+      const res = await fetch(url.toString(), {
+        method: "POST",
+        credentials: "include",
+      });
 
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
@@ -182,9 +180,7 @@ export default function CampaignsPage() {
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500">
                     {c.last_meta_sync_at
-                      ? new Date(
-                          c.last_meta_sync_at
-                        ).toLocaleString()
+                      ? new Date(c.last_meta_sync_at).toLocaleString()
                       : "—"}
                   </td>
                 </tr>
