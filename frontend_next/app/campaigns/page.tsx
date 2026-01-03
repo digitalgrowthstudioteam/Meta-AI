@@ -25,21 +25,16 @@ export default function CampaignsPage() {
     setError(null);
 
     try {
-      const url = new URL("/api/campaigns/", window.location.href);
-
-      const res = await fetch(url.toString(), {
+      const res = await fetch("/api/campaigns/", {
         credentials: "include",
       });
 
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
+        throw new Error();
       }
 
       const data = await res.json();
-
-      // IMPORTANT: empty array is a VALID state
       setCampaigns(Array.isArray(data) ? data : []);
-      setError(null);
     } catch {
       setCampaigns([]);
       setError("Unable to load campaigns from Meta.");
@@ -59,15 +54,13 @@ export default function CampaignsPage() {
     setSyncing(true);
 
     try {
-      const url = new URL("/api/campaigns/sync", window.location.href);
-
-      const res = await fetch(url.toString(), {
+      const res = await fetch("/api/campaigns/sync", {
         method: "POST",
         credentials: "include",
       });
 
       if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
+        throw new Error();
       }
 
       await loadCampaigns();
@@ -83,9 +76,7 @@ export default function CampaignsPage() {
       {/* HEADER */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">
-            Campaigns
-          </h1>
+          <h1 className="text-xl font-semibold text-gray-900">Campaigns</h1>
           <p className="text-sm text-gray-500">
             Synced from Meta Ads Manager • Read-only
           </p>
@@ -118,7 +109,7 @@ export default function CampaignsPage() {
         <div className="text-sm text-red-600">{error}</div>
       )}
 
-      {/* EMPTY STATE */}
+      {/* EMPTY */}
       {!loading && !error && campaigns.length === 0 && (
         <div className="bg-white border border-gray-200 rounded p-10 text-center">
           <div className="text-sm text-gray-600 mb-3">
@@ -140,39 +131,25 @@ export default function CampaignsPage() {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr className="text-gray-600">
-                <th className="px-4 py-3 text-left font-medium">
-                  Campaign
-                </th>
-                <th className="px-4 py-3 text-left font-medium">
-                  Objective
-                </th>
-                <th className="px-4 py-3 text-left font-medium">
-                  Status
-                </th>
-                <th className="px-4 py-3 text-left font-medium">
-                  AI Status
-                </th>
-                <th className="px-4 py-3 text-left font-medium">
-                  Last Synced
-                </th>
+                <th className="px-4 py-3 text-left font-medium">Campaign</th>
+                <th className="px-4 py-3 text-left font-medium">Objective</th>
+                <th className="px-4 py-3 text-left font-medium">Status</th>
+                <th className="px-4 py-3 text-left font-medium">AI Status</th>
+                <th className="px-4 py-3 text-left font-medium">Last Synced</th>
               </tr>
             </thead>
-
             <tbody>
               {campaigns.map((c) => (
                 <tr
                   key={c.id}
-                  className="border-b last:border-b-0 hover:bg-gray-50 transition"
+                  className="border-b last:border-b-0 hover:bg-gray-50"
                 >
                   <td className="px-4 py-3">
-                    <div className="font-medium text-gray-900">
-                      {c.name}
-                    </div>
+                    <div className="font-medium text-gray-900">{c.name}</div>
                     <div className="text-xs text-gray-500">
                       ID: {c.id.slice(0, 8)}…
                     </div>
                   </td>
-
                   <td className="px-4 py-3">{c.objective}</td>
                   <td className="px-4 py-3">{c.status}</td>
                   <td className="px-4 py-3">
