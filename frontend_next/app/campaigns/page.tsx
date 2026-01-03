@@ -28,19 +28,23 @@ export default function CampaignsPage() {
         credentials: "include",
       });
 
+      if (res.status === 409) {
+        setCampaigns([]);
+        setMetaConnected(false);
+        return;
+      }
+
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
 
       const data = await res.json();
 
-      // EMPTY ARRAY IS VALID
       setCampaigns(Array.isArray(data) ? data : []);
       setMetaConnected(true);
     } catch (err) {
       console.error("Campaign load failed", err);
-      setError("Unable to reach campaign service.");
-      setMetaConnected(false);
+      setError("Unable to load campaigns.");
     } finally {
       setLoading(false);
     }
@@ -81,6 +85,7 @@ export default function CampaignsPage() {
   // -----------------------------------
   return (
     <div className="space-y-6">
+      {/* HEADER */}
       <div>
         <h1 className="text-xl font-semibold">Campaigns</h1>
         <p className="text-sm text-gray-500">
@@ -100,14 +105,14 @@ export default function CampaignsPage() {
 
       {/* META NOT CONNECTED */}
       {!loading && !error && metaConnected === false && (
-        <div className="border rounded p-6 bg-white">
-          <p className="font-medium mb-2">
-            Connect your Meta Ads account to get started
+        <div className="empty-state">
+          <p className="empty-state-title mb-2">
+            Connect your Meta Ads account
           </p>
-          <button
-            onClick={connectMeta}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-          >
+          <p className="empty-state-sub mb-4">
+            Meta connection is required to fetch campaigns.
+          </p>
+          <button onClick={connectMeta} className="btn-primary">
             Connect Meta Ads
           </button>
         </div>
@@ -115,15 +120,14 @@ export default function CampaignsPage() {
 
       {/* EMPTY STATE (CONNECTED BUT NO CAMPAIGNS) */}
       {!loading && !error && metaConnected && campaigns.length === 0 && (
-        <div className="border rounded p-6 bg-white">
-          <p className="font-medium mb-2">No campaigns synced yet</p>
-          <p className="text-sm text-gray-500 mb-4">
+        <div className="empty-state">
+          <p className="empty-state-title mb-2">
+            No campaigns synced yet
+          </p>
+          <p className="empty-state-sub mb-4">
             Fetch your campaigns from Meta Ads Manager.
           </p>
-          <button
-            onClick={syncCampaigns}
-            className="px-4 py-2 bg-gray-900 text-white rounded hover:bg-gray-800"
-          >
+          <button onClick={syncCampaigns} className="btn-secondary">
             Sync Campaigns
           </button>
         </div>
@@ -131,9 +135,9 @@ export default function CampaignsPage() {
 
       {/* CAMPAIGN LIST */}
       {!loading && !error && campaigns.length > 0 && (
-        <div className="bg-white border rounded overflow-hidden">
+        <div className="surface overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b">
+            <thead className="border-b">
               <tr>
                 <th className="px-4 py-3 text-left">Campaign</th>
                 <th className="px-4 py-3 text-left">Objective</th>
@@ -144,11 +148,19 @@ export default function CampaignsPage() {
             <tbody>
               {campaigns.map((c) => (
                 <tr key={c.id} className="border-b last:border-0">
-                  <td className="px-4 py-3">{c.name}</td>
+                  <td className="px-4 py-3 font-medium">{c.name}</td>
                   <td className="px-4 py-3">{c.objective ?? "—"}</td>
                   <td className="px-4 py-3">{c.status}</td>
                   <td className="px-4 py-3">
-                    {c.ai_active ? "AI Active" : "AI Inactive"}
+                    {c.ai_active ? (
+                      <span className="text-green-700 font-medium">
+                        AI Active
+                      </span>
+                    ) : (
+                      <span className="text-gray-500">
+                        AI Inactive
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}
