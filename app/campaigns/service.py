@@ -96,6 +96,8 @@ class CampaignService:
         # 2️⃣ Fetch & upsert campaigns per ad account
         for ad_account in ad_accounts:
             meta_campaigns = await MetaCampaignClient.fetch_campaigns(
+                db=db,
+                user_id=user_id,
                 ad_account=ad_account,
             )
 
