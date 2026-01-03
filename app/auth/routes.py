@@ -51,13 +51,13 @@ async def verify_login(
         status_code=status.HTTP_302_FOUND,
     )
 
-    # 🔐 AUTH COOKIE (CRITICAL FIX)
+    # 🔐 AUTH COOKIE — MAGIC LINK SAFE CONFIG
     response.set_cookie(
         key="meta_ai_session",
         value=session_token,
         httponly=True,
         secure=True,
-        samesite="lax",
+        samesite="none",   # ✅ CRITICAL FIX
         path="/",
         max_age=60 * 60 * 24 * 3,  # 3 days
     )
@@ -72,10 +72,6 @@ async def verify_login(
 async def auth_me(
     user: User = Depends(require_user),
 ):
-    """
-    Frontend auth guard endpoint.
-    If this returns 200 → user is logged in.
-    """
     return {
         "id": user.id,
         "email": user.email,
