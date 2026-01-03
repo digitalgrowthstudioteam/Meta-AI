@@ -5,19 +5,13 @@ Main application entry point
 PHASE 1.6 — BACKEND UI CUTOVER
 - FastAPI is API-only
 - Legacy Jinja UI routes disabled (not deleted)
-- /api/* remains source of truth
+- /api/* is the single source of truth
 """
 
 import app.models  # registers all SQLAlchemy models
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-
-# =========================
-# AUTH DEPENDENCY
-# =========================
-from app.auth.dependencies import require_user
-from app.users.models import User
 
 # =========================
 # ROUTERS (API LOGIC)
@@ -41,7 +35,7 @@ app = FastAPI(
 
 
 # =========================
-# FRONTEND — STATIC FILES (LEGACY, KEPT FOR NOW)
+# STATIC FILES (LEGACY — SAFE TO KEEP)
 # =========================
 app.mount(
     "/static/shared",
@@ -63,13 +57,13 @@ app.mount(
 
 
 # =========================
-# TEMPLATE LOADER (LEGACY, KEPT FOR LOGIN ONLY)
+# TEMPLATE LOADER (LOGIN ONLY)
 # =========================
 templates = Jinja2Templates(directory="frontend")
 
 
 # =========================
-# UI ROUTES — ONLY LOGIN (LEGACY)
+# LEGACY LOGIN PAGE (ONLY)
 # =========================
 @app.get("/login")
 def login_page(request: Request):
@@ -80,18 +74,7 @@ def login_page(request: Request):
 
 
 # =========================
-# API ROUTERS — CANONICAL
-# =========================
-app.include_router(auth_router, prefix="/api")
-app.include_router(campaigns_router, prefix="/api")
-app.include_router(admin_router, prefix="/api")
-app.include_router(meta_router, prefix="/api")
-app.include_router(reports_router, prefix="/api")
-app.include_router(dashboard_router, prefix="/api")
-
-
-# =========================
-# API ROUTERS — /api PREFIX
+# API ROUTERS — SINGLE SOURCE
 # =========================
 app.include_router(auth_router, prefix="/api")
 app.include_router(campaigns_router, prefix="/api")
