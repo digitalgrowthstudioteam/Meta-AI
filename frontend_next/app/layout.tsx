@@ -3,7 +3,6 @@
 import "./globals.css";
 import Link from "next/link";
 import { ReactNode } from "react";
-import { usePathname } from "next/navigation";
 import clsx from "clsx";
 
 type Props = {
@@ -22,21 +21,12 @@ const NAV_ITEMS = [
 ];
 
 export default function RootLayout({ children }: Props) {
-  const pathname = usePathname();
-  const isLogin = pathname?.startsWith("/login");
-
-  if (isLogin) {
-    return (
-      <html lang="en">
-        <body className="bg-gray-50 text-gray-900">{children}</body>
-      </html>
-    );
-  }
-
   return (
     <html lang="en">
       <body className="bg-gray-50 text-gray-900">
         <div className="flex h-screen w-screen overflow-hidden">
+          
+          {/* SIDEBAR */}
           <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
             <div className="h-16 flex items-center px-6 border-b border-gray-200">
               <div className="font-semibold text-base tracking-tight">
@@ -50,20 +40,17 @@ export default function RootLayout({ children }: Props) {
                   key={item.href}
                   href={item.href}
                   label={item.label}
-                  active={
-                    pathname === item.href ||
-                    pathname?.startsWith(item.href + "/")
-                  }
                   primary={item.primary}
                 />
               ))}
             </nav>
           </aside>
 
+          {/* MAIN */}
           <div className="flex flex-col flex-1 min-w-0">
             <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-6">
               <div className="text-sm text-gray-600">
-                Meta Ads AI • Dev Mode (Auth Disabled)
+                Meta Ads AI • Development Mode (Auth Disabled)
               </div>
             </header>
 
@@ -80,12 +67,10 @@ export default function RootLayout({ children }: Props) {
 function SidebarLink({
   href,
   label,
-  active,
   primary,
 }: {
   href: string;
   label: string;
-  active: boolean;
   primary?: boolean;
 }) {
   return (
@@ -93,10 +78,8 @@ function SidebarLink({
       href={href}
       className={clsx(
         "flex items-center rounded px-3 py-2 transition",
-        active
-          ? "bg-blue-50 text-blue-700 font-medium"
-          : "text-gray-700 hover:bg-gray-100",
-        primary && !active && "font-medium"
+        "text-gray-700 hover:bg-gray-100",
+        primary && "font-medium"
       )}
     >
       {label}
