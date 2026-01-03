@@ -46,14 +46,12 @@ async def verify_login(
             detail="Invalid or expired login link",
         )
 
-    # 🚨 IMPORTANT:
-    # Redirect MUST go to Next.js route, NOT legacy FastAPI UI
     response = RedirectResponse(
         url="/dashboard",
         status_code=status.HTTP_302_FOUND,
     )
 
-    # 🔐 AUTH COOKIE (USED BY require_user)
+    # 🔐 AUTH COOKIE (CRITICAL FIX)
     response.set_cookie(
         key="meta_ai_session",
         value=session_token,
@@ -61,7 +59,6 @@ async def verify_login(
         secure=True,
         samesite="lax",
         path="/",
-        domain="meta-ai.digitalgrowthstudio.in",
         max_age=60 * 60 * 24 * 3,  # 3 days
     )
 
@@ -101,7 +98,6 @@ async def logout(
     response.delete_cookie(
         key="meta_ai_session",
         path="/",
-        domain="meta-ai.digitalgrowthstudio.in",
     )
 
     return response
