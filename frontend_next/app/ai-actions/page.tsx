@@ -17,7 +17,7 @@ export default function AIActionsPage() {
   const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
 
   // -----------------------------------
-  // LOAD AI ACTION CAMPAIGNS
+  // LOAD AI ACTION CAMPAIGNS (SAME AS CAMPAIGNS PAGE)
   // -----------------------------------
   const loadAICampaigns = async () => {
     try {
@@ -28,19 +28,25 @@ export default function AIActionsPage() {
         credentials: "include",
       });
 
+      // META NOT CONNECTED (EXPECTED STATE)
+      if (res.status === 409) {
+        setCampaigns([]);
+        setMetaConnected(false);
+        return;
+      }
+
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
 
       const data = await res.json();
 
-      // EMPTY ARRAY IS VALID
+      // EMPTY DATA IS VALID
       setCampaigns(Array.isArray(data) ? data : []);
       setMetaConnected(true);
     } catch (err) {
       console.error("AI Actions load failed:", err);
-      setError("Unable to reach AI campaign service.");
-      setMetaConnected(false);
+      setError("Unable to load AI Actions.");
     } finally {
       setLoading(false);
     }
@@ -65,7 +71,7 @@ export default function AIActionsPage() {
   };
 
   // -----------------------------------
-  // TOGGLE AI (SAFE)
+  // TOGGLE AI (SAFE, READ-ONLY META)
   // -----------------------------------
   const toggleAI = async (campaignId: string, enable: boolean) => {
     await fetch(`/api/campaigns/${campaignId}/ai-toggle`, {
@@ -115,17 +121,17 @@ export default function AIActionsPage() {
         </div>
       )}
 
-      {/* EMPTY STATE (CONNECTED, NO CAMPAIGNS) */}
+      {/* EMPTY STATE */}
       {!loading && !error && metaConnected && campaigns.length === 0 && (
         <div className="border rounded p-6 bg-white">
           <p className="font-medium mb-1">No campaigns available</p>
           <p className="text-sm text-gray-500">
-            Sync campaigns from Meta Ads Manager first.
+            Campaigns will appear here once synced from Meta.
           </p>
         </div>
       )}
 
-      {/* AI ACTION TABLE */}
+      {/* AI ACTIONS TABLE */}
       {!loading && !error && campaigns.length > 0 && (
         <div className="bg-white border rounded overflow-hidden">
           <table className="w-full text-sm">
