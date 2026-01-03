@@ -84,7 +84,7 @@ export default function DashboardPage() {
   };
 
   // --------------------------------------------------
-  // SYNC AD ACCOUNTS + REFRESH DASHBOARD
+  // SYNC AD ACCOUNTS
   // --------------------------------------------------
   const syncAdAccounts = async () => {
     setSyncing(true);
@@ -125,8 +125,13 @@ export default function DashboardPage() {
     return (
       <div className="space-y-4">
         <DevBanner />
-        <div className="text-sm text-red-600">
-          {error ?? "Dashboard unavailable"}
+        <div className="empty-state">
+          <p className="empty-state-title mb-1">
+            Dashboard unavailable
+          </p>
+          <p className="empty-state-sub">
+            {error ?? "Please try again shortly."}
+          </p>
         </div>
       </div>
     );
@@ -139,7 +144,7 @@ export default function DashboardPage() {
       {/* HEADER */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Dashboard</h1>
+          <h1 className="text-xl font-semibold">Dashboard</h1>
           <p className="text-sm text-gray-500">
             Overview of your Meta Ads and AI activity
           </p>
@@ -156,32 +161,36 @@ export default function DashboardPage() {
       </div>
 
       {/* META ACTION BAR */}
-      <div className="bg-white border border-gray-200 rounded p-4 flex items-center justify-between">
-        <div className="text-sm text-gray-600">
-          Meta Ads connection is required to sync campaigns and enable AI.
-        </div>
-
-        {!data.meta_connected && (
-          <button
-            onClick={connectMeta}
-            className="px-4 py-2 text-sm rounded bg-blue-600 text-white hover:bg-blue-700"
-          >
-            Connect Meta
+      {!data.meta_connected ? (
+        <div className="empty-state">
+          <p className="empty-state-title mb-2">
+            Connect your Meta Ads account
+          </p>
+          <p className="empty-state-sub mb-4">
+            Meta connection is required to sync campaigns and enable AI features.
+          </p>
+          <button onClick={connectMeta} className="btn-primary">
+            Connect Meta Ads
           </button>
-        )}
-
-        {data.meta_connected && (
+        </div>
+      ) : (
+        <div className="surface flex items-center justify-between p-4">
+          <div className="text-sm text-gray-600">
+            Meta Ads is connected. You can sync ad accounts anytime.
+          </div>
           <button
             onClick={syncAdAccounts}
             disabled={syncing}
-            className="px-4 py-2 text-sm rounded border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
+            className="btn-secondary disabled:opacity-50"
           >
             {syncing ? "Syncing…" : "Sync Ad Accounts"}
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
-      {message && <div className="text-sm text-green-600">{message}</div>}
+      {message && (
+        <div className="text-sm text-green-700">{message}</div>
+      )}
 
       {/* KPI GRID */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -200,7 +209,7 @@ export default function DashboardPage() {
         <KpiCard
           label="AI-Active Campaigns"
           value={`${data.campaigns.ai_active} / ${data.campaigns.ai_limit}`}
-          hint="Phase 1 limits"
+          hint="Current plan limit"
         />
 
         <KpiCard
@@ -242,7 +251,7 @@ function KpiCard({
   warning?: boolean;
 }) {
   return (
-    <div className="bg-white border border-gray-200 rounded p-5 space-y-1">
+    <div className="surface p-5 space-y-1">
       <div className="text-xs text-gray-500">{label}</div>
       <div
         className={`text-xl font-semibold ${
