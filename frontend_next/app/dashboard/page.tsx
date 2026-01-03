@@ -10,16 +10,18 @@ export default function DashboardPage() {
   const [syncResult, setSyncResult] = useState<string | null>(null);
 
   // --------------------------------------------------
-  // CHECK META CONNECTION (DERIVED FROM TOKEN PRESENCE)
+  // CHECK META CONNECTION (SERVER SOURCE OF TRUTH)
   // --------------------------------------------------
   useEffect(() => {
-    fetch("/meta/connect", { credentials: "include" })
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data?.redirect_url) {
-          setMetaStatus("disconnected");
-        } else {
+    fetch("/meta/adaccounts/sync", {
+      method: "POST",
+      credentials: "include",
+    })
+      .then((r) => {
+        if (r.ok) {
           setMetaStatus("connected");
+        } else {
+          setMetaStatus("disconnected");
         }
       })
       .catch(() => setMetaStatus("disconnected"));
@@ -33,13 +35,14 @@ export default function DashboardPage() {
       credentials: "include",
     });
     const data = await res.json();
+
     if (data?.redirect_url) {
       window.location.href = data.redirect_url;
     }
   };
 
   // --------------------------------------------------
-  // SYNC AD ACCOUNTS
+  // SYNC AD ACCOUNTS (MANUAL)
   // --------------------------------------------------
   const syncAdAccounts = async () => {
     setSyncing(true);
@@ -51,10 +54,13 @@ export default function DashboardPage() {
         credentials: "include",
       });
       const data = await res.json();
+
+      setMetaStatus("connected");
       setSyncResult(
         `Synced ${data.ad_accounts_processed} ad accounts successfully`
       );
     } catch {
+      setMetaStatus("disconnected");
       setSyncResult("Sync failed. Please try again.");
     } finally {
       setSyncing(false);
@@ -66,9 +72,7 @@ export default function DashboardPage() {
       {/* ================= HEADER ================= */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">
-            Dashboard
-          </h1>
+          <h1 className="text-xl font-semibold text-gray-900">Dashboard</h1>
           <p className="text-sm text-gray-500">
             Overview of your Meta Ads and AI activity
           </p>
@@ -77,13 +81,9 @@ export default function DashboardPage() {
         <div className="text-xs text-gray-500">
           Meta account:{" "}
           {metaStatus === "connected" ? (
-            <span className="text-green-600 font-medium">
-              Connected
-            </span>
+            <span className="text-green-600 font-medium">Connected</span>
           ) : metaStatus === "disconnected" ? (
-            <span className="text-red-600 font-medium">
-              Not connected
-            </span>
+            <span className="text-red-600 font-medium">Not connected</span>
           ) : (
             "Checking…"
           )}
@@ -119,9 +119,7 @@ export default function DashboardPage() {
       </div>
 
       {syncResult && (
-        <div className="text-sm text-green-600">
-          {syncResult}
-        </div>
+        <div className="text-sm text-green-600">{syncResult}</div>
       )}
 
       {/* ================= KPI CARDS ================= */}
