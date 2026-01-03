@@ -51,7 +51,7 @@ async def meta_oauth_callback(
     state: str = Query(...),
     db: AsyncSession = Depends(get_db),
 ):
-    # 1️⃣ Validate OAuth state
+    # 1) Validate OAuth state
     result = await db.execute(
         select(MetaOAuthState).where(
             MetaOAuthState.state == state,
@@ -67,35 +67,26 @@ async def meta_oauth_callback(
     oauth_state.is_used = True
     await db.commit()
 
-    # 2️⃣ Store OAuth token
-    try:
-        await MetaOAuthService.store_token(
-            db=db,
-            user_id=oauth_state.user_id,
-            code=code,
-        )
-    except Exception as e:
-        raise HTTPException(status_code=400, detail="Meta OAuth failed")
+    # 2) Store OAuth token
+    await MetaOAuthService.store_token(
+        db=db,
+        user_id=oauth_state.user_id,
+        code=code,
+    )
 
-    # 3️⃣ AUTO-SYNC AD ACCOUNTS
-    try:
-        await MetaAdAccountService.sync_user_ad_accounts(
-            db=db,
-            user_id=oauth_state.user_id,
-        )
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    # 3) AUTO-SYNC AD ACCOUNTS
+    await MetaAdAccountService.sync_user_ad_accounts(
+        db=db,
+        user_id=oauth_state.user_id,
+    )
 
-    # 4️⃣ AUTO-SYNC CAMPAIGNS
-    try:
-        await MetaCampaignService.sync_campaigns_for_user(
-            db=db,
-            user_id=oauth_state.user_id,
-        )
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    # 4) AUTO-SYNC CAMPAIGNS
+    await MetaCampaignService.sync_campaigns_for_user(
+        db=db,
+        user_id=oauth_state.user_id,
+    )
 
-    # 5️⃣ REDIRECT TO FRONTEND CAMPAIGNS PAGE
+    # 5) REDIRECT TO FRONTEND CAMPAIGNS PAGE
     return RedirectResponse(
         url="/campaigns",
         status_code=302,
