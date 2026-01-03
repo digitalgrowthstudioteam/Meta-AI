@@ -41,7 +41,7 @@ class MetaCampaignClient:
         url = f"{cls.GRAPH_BASE_URL}/act_{ad_account.meta_account_id}/campaigns"
 
         params = {
-            "fields": "id,name,objective,status",
+            "fields": "id,name,objective,effective_status",
             "limit": 50,
             "access_token": ad_account.access_token,
         }
@@ -60,12 +60,18 @@ class MetaCampaignClient:
                 payload = response.json()
 
                 for item in payload.get("data", []):
+                    status = item.get("effective_status", "UNKNOWN")
+
+                    # ❌ Skip deleted / archived campaigns
+                    if status in {"DELETED", "ARCHIVED"}:
+                        continue
+
                     campaigns.append(
                         {
                             "id": item["id"],
                             "name": item.get("name", ""),
                             "objective": item.get("objective", "UNKNOWN"),
-                            "status": item.get("status", "UNKNOWN"),
+                            "status": status,
                         }
                     )
 
@@ -75,7 +81,6 @@ class MetaCampaignClient:
                 if not next_url:
                     break
 
-                # Meta returns a full URL for next page
                 url = next_url
                 params = None
 
