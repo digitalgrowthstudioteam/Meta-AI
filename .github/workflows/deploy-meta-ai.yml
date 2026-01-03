@@ -22,7 +22,7 @@ jobs:
 
       - name: Deploy to VPS
         run: |
-          ssh root@<YOUR_VPS_PUBLIC_IP> << 'EOF'
+          ssh root@147.93.29.168 << 'EOF'
             set -e
             cd /var/www/projects/meta-ai-campaign
             git fetch origin
