@@ -10,6 +10,7 @@ from app.meta_api.models import (
     MetaAdAccount,
     UserMetaAdAccount,
 )
+from app.campaigns.models import Campaign
 from app.core.config import settings
 
 
@@ -20,9 +21,6 @@ META_TOKEN_URL = "https://graph.facebook.com/v19.0/oauth/access_token"
 class MetaOAuthService:
     """
     Handles Meta OAuth token exchange & storage.
-    Enforces:
-    - Long-lived tokens only
-    - One active token per user
     """
 
     @staticmethod
@@ -49,15 +47,9 @@ class MetaOAuthService:
     ) -> MetaOAuthToken:
         from app.meta_api.oauth import exchange_code_for_token
 
-        # -------------------------------------------------
-        # 1. Exchange code → short-lived token
-        # -------------------------------------------------
         short_token_data = await exchange_code_for_token(code)
         short_token = short_token_data["access_token"]
 
-        # -------------------------------------------------
-        # 2. Exchange short → long-lived token (60 days)
-        # -------------------------------------------------
         long_token_data = await MetaOAuthService._exchange_for_long_lived_token(
             short_token
         )
@@ -69,9 +61,6 @@ class MetaOAuthService:
             else None
         )
 
-        # -------------------------------------------------
-        # 3. Revoke existing active tokens for user
-        # -------------------------------------------------
         await db.execute(
             update(MetaOAuthToken)
             .where(
@@ -81,9 +70,6 @@ class MetaOAuthService:
             .values(is_active=False)
         )
 
-        # -------------------------------------------------
-        # 4. Store new long-lived token
-        # -------------------------------------------------
         token = MetaOAuthToken(
             user_id=user_id,
             access_token=long_token_data["access_token"],
@@ -110,30 +96,18 @@ class MetaAdAccountService:
         db: AsyncSession,
         user_id: UUID,
     ) -> int:
-        """
-        Fetch Meta ad accounts for the user and sync globally.
-        Returns number of accounts processed.
-        """
-
-        # -------------------------------------------------
-        # 1. Get active Meta OAuth token
-        # -------------------------------------------------
         result = await db.execute(
             select(MetaOAuthToken)
             .where(
                 MetaOAuthToken.user_id == user_id,
                 MetaOAuthToken.is_active.is_(True),
             )
-            .order_by(MetaOAuthToken.created_at.desc())
         )
         token = result.scalar_one_or_none()
 
         if not token:
             raise RuntimeError("Meta account not connected")
 
-        # -------------------------------------------------
-        # 2. Fetch ad accounts from Meta
-        # -------------------------------------------------
         async with httpx.AsyncClient(timeout=15) as client:
             response = await client.get(
                 f"{META_GRAPH_BASE}/me/adaccounts",
@@ -145,18 +119,12 @@ class MetaAdAccountService:
             response.raise_for_status()
             data = response.json()
 
-        ad_accounts = data.get("data", [])
-
-        # -------------------------------------------------
-        # 3. Upsert accounts + access mapping
-        # -------------------------------------------------
         processed = 0
 
-        for acct in ad_accounts:
+        for acct in data.get("data", []):
             meta_account_id = acct["id"]
             account_name = acct.get("name", "")
 
-            # ---- GLOBAL ACCOUNT UPSERT ----
             result = await db.execute(
                 select(MetaAdAccount).where(
                     MetaAdAccount.meta_account_id == meta_account_id
@@ -172,28 +140,99 @@ class MetaAdAccountService:
                 )
                 db.add(meta_account)
                 await db.flush()
-            else:
-                if meta_account.account_name != account_name:
-                    meta_account.account_name = account_name
 
-            # ---- USER ACCESS MAPPING ----
             result = await db.execute(
                 select(UserMetaAdAccount).where(
                     UserMetaAdAccount.user_id == user_id,
                     UserMetaAdAccount.meta_ad_account_id == meta_account.id,
                 )
             )
-            access = result.scalar_one_or_none()
-
-            if not access:
-                access = UserMetaAdAccount(
-                    user_id=user_id,
-                    meta_ad_account_id=meta_account.id,
-                    role="owner",
+            if not result.scalar_one_or_none():
+                db.add(
+                    UserMetaAdAccount(
+                        user_id=user_id,
+                        meta_ad_account_id=meta_account.id,
+                        role="owner",
+                    )
                 )
-                db.add(access)
 
             processed += 1
 
         await db.commit()
         return processed
+
+
+class MetaCampaignService:
+    """
+    Manual, read-only Meta Campaign sync.
+    """
+
+    @staticmethod
+    async def sync_campaigns_for_user(
+        *,
+        db: AsyncSession,
+        user_id: UUID,
+    ) -> int:
+        # Get token
+        result = await db.execute(
+            select(MetaOAuthToken)
+            .where(
+                MetaOAuthToken.user_id == user_id,
+                MetaOAuthToken.is_active.is_(True),
+            )
+        )
+        token = result.scalar_one_or_none()
+
+        if not token:
+            raise RuntimeError("Meta account not connected")
+
+        # Get user's ad accounts
+        result = await db.execute(
+            select(MetaAdAccount)
+            .join(UserMetaAdAccount)
+            .where(UserMetaAdAccount.user_id == user_id)
+        )
+        ad_accounts = result.scalars().all()
+
+        total = 0
+
+        async with httpx.AsyncClient(timeout=20) as client:
+            for acct in ad_accounts:
+                response = await client.get(
+                    f"{META_GRAPH_BASE}/{acct.meta_account_id}/campaigns",
+                    params={
+                        "access_token": token.access_token,
+                        "fields": "id,name,objective,status",
+                    },
+                )
+                response.raise_for_status()
+
+                for c in response.json().get("data", []):
+                    result = await db.execute(
+                        select(Campaign).where(
+                            Campaign.meta_campaign_id == c["id"]
+                        )
+                    )
+                    campaign = result.scalar_one_or_none()
+
+                    if not campaign:
+                        db.add(
+                            Campaign(
+                                meta_campaign_id=c["id"],
+                                ad_account_id=acct.id,
+                                name=c["name"],
+                                objective=c["objective"],
+                                status=c["status"],
+                                ai_active=False,
+                                created_at=datetime.utcnow(),
+                            )
+                        )
+                    else:
+                        campaign.name = c["name"]
+                        campaign.status = c["status"]
+                        campaign.last_meta_sync_at = datetime.utcnow()
+
+                    total += 1
+
+        await db.commit()
+        return total
