@@ -8,10 +8,8 @@ type Campaign = {
   objective: string;
   status: string;
   ai_active: boolean;
-  last_meta_sync_at?: string;
+  last_meta_sync_at?: string | null;
 };
-
-const API_BASE = "https://meta-ai.digitalgrowthstudio.in";
 
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -27,14 +25,24 @@ export default function CampaignsPage() {
     setError(null);
 
     try {
-      const res = await fetch(`${API_BASE}/api/campaigns`, {
+      const res = await fetch("/api/campaigns/", {
         credentials: "include",
       });
 
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
 
-      const data = await res.json();
-      setCampaigns(Array.isArray(data) ? data : []);
+      const json = await res.json();
+
+      // ✅ EMPTY ARRAY IS A VALID SUCCESS STATE
+      if (Array.isArray(json)) {
+        setCampaigns(json);
+        setError(null);
+      } else {
+        setCampaigns([]);
+        setError(null);
+      }
     } catch {
       setCampaigns([]);
       setError("Unable to load campaigns from Meta.");
@@ -52,18 +60,21 @@ export default function CampaignsPage() {
   // ===============================
   const syncCampaigns = async () => {
     setSyncing(true);
+    setError(null);
 
     try {
-      const res = await fetch(`${API_BASE}/api/campaigns/sync`, {
+      const res = await fetch("/api/campaigns/sync", {
         method: "POST",
         credentials: "include",
       });
 
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        throw new Error();
+      }
 
       await loadCampaigns();
     } catch {
-      alert("Failed to sync campaigns. Please try again.");
+      setError("Campaign sync failed. Please try again.");
     } finally {
       setSyncing(false);
     }
@@ -71,9 +82,12 @@ export default function CampaignsPage() {
 
   return (
     <div className="space-y-8">
+      {/* HEADER */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Campaigns</h1>
+          <h1 className="text-xl font-semibold text-gray-900">
+            Campaigns
+          </h1>
           <p className="text-sm text-gray-500">
             Synced from Meta Ads Manager • Read-only
           </p>
@@ -88,21 +102,25 @@ export default function CampaignsPage() {
         </button>
       </div>
 
+      {/* INFO */}
       <div className="bg-blue-50 border border-blue-100 rounded p-4 text-sm text-blue-700">
         Campaigns are managed in Meta Ads Manager. You cannot create or edit
         campaigns here.
       </div>
 
+      {/* LOADING */}
       {loading && (
         <div className="bg-white border border-gray-200 rounded p-6 text-sm text-gray-500">
-          Loading campaigns from Meta…
+          Loading campaigns…
         </div>
       )}
 
+      {/* ERROR (ONLY REAL ERRORS) */}
       {!loading && error && (
         <div className="text-sm text-red-600">{error}</div>
       )}
 
+      {/* EMPTY STATE */}
       {!loading && !error && campaigns.length === 0 && (
         <div className="bg-white border border-gray-200 rounded p-10 text-center">
           <div className="text-sm text-gray-600 mb-3">
@@ -118,6 +136,7 @@ export default function CampaignsPage() {
         </div>
       )}
 
+      {/* TABLE */}
       {!loading && !error && campaigns.length > 0 && (
         <div className="bg-white border border-gray-200 rounded overflow-hidden">
           <table className="w-full text-sm">
@@ -130,9 +149,13 @@ export default function CampaignsPage() {
                 <th className="px-4 py-3 text-left font-medium">Last Synced</th>
               </tr>
             </thead>
+
             <tbody>
               {campaigns.map((c) => (
-                <tr key={c.id} className="border-b last:border-b-0">
+                <tr
+                  key={c.id}
+                  className="border-b last:border-b-0 hover:bg-gray-50"
+                >
                   <td className="px-4 py-3">
                     <div className="font-medium text-gray-900">{c.name}</div>
                     <div className="text-xs text-gray-500">
@@ -155,6 +178,10 @@ export default function CampaignsPage() {
           </table>
         </div>
       )}
+
+      <div className="text-xs text-gray-400">
+        Data is synced read-only from Meta Ads Manager.
+      </div>
     </div>
   );
 }
