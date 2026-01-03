@@ -1,15 +1,32 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Optional
 from uuid import UUID
 
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+
 from app.core.db_session import get_db
-from app.auth.dependencies import get_current_user
 from app.users.models import User
 from app.campaigns.service import CampaignService
 from app.campaigns.schemas import CampaignResponse, ToggleAIRequest
 from app.plans.enforcement import EnforcementError
 
+
 router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
+
+
+# =========================================================
+# DEV MODE USER RESOLUTION (TEMPORARY)
+# =========================================================
+async def get_dev_user(db: AsyncSession) -> Optional[User]:
+    """
+    Temporary user resolver while auth is disabled.
+    Uses first available user in database.
+
+    THIS WILL BE REMOVED when Next.js auth middleware is enabled.
+    """
+    result = await db.execute(select(User).limit(1))
+    return result.scalar_one_or_none()
 
 
 # =========================================================
@@ -22,12 +39,16 @@ router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
 )
 async def list_campaigns(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ):
     """
     Returns all campaigns visible to the user.
     Meta is the source of truth.
     """
+
+    current_user = await get_dev_user(db)
+    if not current_user:
+        return []
+
     return await CampaignService.list_campaigns(
         db=db,
         user_id=current_user.id,
@@ -44,7 +65,6 @@ async def list_campaigns(
 )
 async def sync_campaigns_from_meta(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ):
     """
     Fetches ALL campaigns from Meta (read-only)
@@ -54,6 +74,14 @@ async def sync_campaigns_from_meta(
     No billing logic.
     No enforcement here.
     """
+
+    current_user = await get_dev_user(db)
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No user available in development mode",
+        )
+
     try:
         return await CampaignService.sync_from_meta(
             db=db,
@@ -78,7 +106,6 @@ async def toggle_ai(
     campaign_id: UUID,
     payload: ToggleAIRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ):
     """
     Enables / disables AI for a campaign.
@@ -87,6 +114,14 @@ async def toggle_ai(
     - 409 Conflict
     - Structured payload {code, message, action}
     """
+
+    current_user = await get_dev_user(db)
+    if not current_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No user available in development mode",
+        )
+
     try:
         return await CampaignService.toggle_ai(
             db=db,
