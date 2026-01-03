@@ -61,14 +61,15 @@ export default function RootLayout({ children }: Props) {
   }, [router, isPublicPage]);
 
   /* ======================================================
-     META CONNECTION STATUS (SINGLE SOURCE OF TRUTH)
+     META CONNECTION (SINGLE SOURCE OF TRUTH)
+     Uses SAME API as dashboard
   ====================================================== */
   useEffect(() => {
     if (isPublicPage) return;
 
-    async function checkMetaConnection() {
+    async function loadMetaStatus() {
       try {
-        const res = await fetch("/api/meta/accounts", {
+        const res = await fetch("/api/dashboard/summary", {
           credentials: "include",
         });
 
@@ -77,14 +78,14 @@ export default function RootLayout({ children }: Props) {
           return;
         }
 
-        const data = await res.json();
-        setMetaConnected(Array.isArray(data) && data.length > 0);
+        const json = await res.json();
+        setMetaConnected(!!json.meta_connected);
       } catch {
         setMetaConnected(false);
       }
     }
 
-    checkMetaConnection();
+    loadMetaStatus();
   }, [isPublicPage]);
 
   /* ======================================================
@@ -155,7 +156,7 @@ export default function RootLayout({ children }: Props) {
                 Meta Ads AI • Read-only Intelligence Mode
               </div>
 
-              <div className="text-sm text-gray-700">
+              <div className="text-sm">
                 Account:{" "}
                 {metaConnected === null ? (
                   <span className="text-gray-400">Checking…</span>
