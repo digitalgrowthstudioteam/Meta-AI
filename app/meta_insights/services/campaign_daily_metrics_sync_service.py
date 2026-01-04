@@ -17,15 +17,15 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.campaigns.models import Campaign
-from app.meta_insights.clients.campaign_insights_ingestion_service import (
-    CampaignInsightsIngestionService,
+from app.meta_insights.clients.meta_campaign_insights_client import (
+    MetaCampaignInsightsClient,
 )
 
 
 class CampaignDailyMetricsSyncService:
     def __init__(self, db: AsyncSession):
         self.db = db
-        self.client = CampaignInsightsIngestionService(db)
+        self.client = MetaCampaignInsightsClient(db)
 
     async def sync_for_date(self, target_date: date) -> None:
         """
@@ -35,7 +35,7 @@ class CampaignDailyMetricsSyncService:
         campaigns = await self._get_active_campaigns()
 
         for campaign in campaigns:
-            insights = await self.client.fetch_campaign_daily_insights(
+            insights = await self.client.fetch_daily_insights(
                 campaign=campaign,
                 target_date=target_date,
             )
