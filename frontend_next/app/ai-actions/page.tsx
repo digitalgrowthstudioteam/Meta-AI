@@ -57,6 +57,7 @@ export default function AIActionsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
+  const [feedbackSent, setFeedbackSent] = useState<Record<string, boolean>>({});
 
   /* ----------------------------- */
   /* LOAD CAMPAIGNS */
@@ -95,7 +96,7 @@ export default function AIActionsPage() {
         setLoading(true);
         await loadAICampaigns();
         await loadAIActions();
-      } catch (e) {
+      } catch {
         setError("Unable to load AI data.");
       } finally {
         setLoading(false);
@@ -119,6 +120,32 @@ export default function AIActionsPage() {
   };
 
   /* ----------------------------- */
+  /* FEEDBACK */
+  /* ----------------------------- */
+  const submitFeedback = async (
+    action: AIAction,
+    isHelpful: boolean
+  ) => {
+    const key = `${action.campaign_id}_${action.action_type}_${action.summary}`;
+    if (feedbackSent[key]) return;
+
+    await fetch("/api/ai/actions/feedback", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        campaign_id: action.campaign_id,
+        rule_name: action.action_type,
+        action_type: action.action_type,
+        is_helpful: isHelpful,
+        confidence_at_time: action.confidence.score,
+      }),
+    });
+
+    setFeedbackSent((prev) => ({ ...prev, [key]: true }));
+  };
+
+  /* ----------------------------- */
   /* DERIVED */
   /* ----------------------------- */
   const strategyActions = aiActions.flatMap((s) =>
@@ -134,7 +161,6 @@ export default function AIActionsPage() {
   /* ----------------------------- */
   return (
     <div className="space-y-8">
-      {/* HEADER */}
       <div>
         <h1 className="text-xl font-semibold">AI Actions</h1>
         <p className="text-sm text-gray-500">
@@ -145,7 +171,7 @@ export default function AIActionsPage() {
       {loading && <div className="text-gray-600">Loading…</div>}
       {!loading && error && <div className="text-red-600">{error}</div>}
 
-      {/* CAMPAIGN CONTROL TABLE */}
+      {/* CAMPAIGN CONTROL */}
       {!loading && metaConnected && campaigns.length > 0 && (
         <div className="surface overflow-hidden">
           <table className="w-full text-sm">
@@ -185,21 +211,39 @@ export default function AIActionsPage() {
       {/* STRATEGY INSIGHTS */}
       {strategyActions.length > 0 && (
         <div>
-          <h2 className="text-lg font-medium mb-2">
-            🧠 Strategy Insights
-          </h2>
+          <h2 className="text-lg font-medium mb-2">🧠 Strategy Insights</h2>
           <div className="space-y-3">
-            {strategyActions.map((a, i) => (
-              <div
-                key={i}
-                className="border-l-4 border-blue-400 bg-blue-50 p-4 rounded"
-              >
-                <div className="font-medium">{a.summary}</div>
-                <div className="text-xs text-gray-600 mt-1">
-                  Confidence: {Math.round(a.confidence.score * 100)}%
+            {strategyActions.map((a, i) => {
+              const key = `${a.campaign_id}_${a.action_type}_${a.summary}`;
+              return (
+                <div
+                  key={i}
+                  className="border-l-4 border-blue-400 bg-blue-50 p-4 rounded"
+                >
+                  <div className="font-medium">{a.summary}</div>
+                  <div className="text-xs text-gray-600 mt-1">
+                    Confidence: {Math.round(a.confidence.score * 100)}%
+                  </div>
+
+                  {!feedbackSent[key] && (
+                    <div className="mt-2 flex gap-2 text-xs">
+                      <button
+                        onClick={() => submitFeedback(a, true)}
+                        className="px-2 py-1 bg-green-100 text-green-700 rounded"
+                      >
+                        👍 Helpful
+                      </button>
+                      <button
+                        onClick={() => submitFeedback(a, false)}
+                        className="px-2 py-1 bg-red-100 text-red-700 rounded"
+                      >
+                        👎 Not Helpful
+                      </button>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -211,20 +255,40 @@ export default function AIActionsPage() {
             ⚠️ Action Recommendations
           </h2>
           <div className="space-y-3">
-            {operationalActions.map((a, i) => (
-              <div
-                key={i}
-                className="border-l-4 border-amber-400 bg-amber-50 p-4 rounded"
-              >
-                <div className="font-medium">
-                  {a.action_type.replace("_", " ")}
+            {operationalActions.map((a, i) => {
+              const key = `${a.campaign_id}_${a.action_type}_${a.summary}`;
+              return (
+                <div
+                  key={i}
+                  className="border-l-4 border-amber-400 bg-amber-50 p-4 rounded"
+                >
+                  <div className="font-medium">
+                    {a.action_type.replace("_", " ")}
+                  </div>
+                  <div className="text-sm text-gray-700">{a.summary}</div>
+                  <div className="text-xs text-gray-600 mt-1">
+                    Confidence: {Math.round(a.confidence.score * 100)}%
+                  </div>
+
+                  {!feedbackSent[key] && (
+                    <div className="mt-2 flex gap-2 text-xs">
+                      <button
+                        onClick={() => submitFeedback(a, true)}
+                        className="px-2 py-1 bg-green-100 text-green-700 rounded"
+                      >
+                        👍 Helpful
+                      </button>
+                      <button
+                        onClick={() => submitFeedback(a, false)}
+                        className="px-2 py-1 bg-red-100 text-red-700 rounded"
+                      >
+                        👎 Not Helpful
+                      </button>
+                    </div>
+                  )}
                 </div>
-                <div className="text-sm text-gray-700">{a.summary}</div>
-                <div className="text-xs text-gray-600 mt-1">
-                  Confidence: {Math.round(a.confidence.score * 100)}%
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
