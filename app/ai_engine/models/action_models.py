@@ -1,125 +1,122 @@
-from sqlalchemy import String, DateTime, ForeignKey, JSON
-from sqlalchemy.orm import Mapped, mapped_column
+from enum import Enum
+from typing import List, Dict, Optional
 from datetime import datetime
-import uuid
+from uuid import UUID
 
-from app.core.database import Base
+from pydantic import BaseModel, Field
 
 
-class AIAction(Base):
+# =========================================================
+# ACTION TYPES (WHAT AI CAN SUGGEST)
+# =========================================================
+class AIActionType(str, Enum):
+    SCALE_CAMPAIGN = "SCALE_CAMPAIGN"
+    REDUCE_BUDGET = "REDUCE_BUDGET"
+    PAUSE_CAMPAIGN = "PAUSE_CAMPAIGN"
+
+    SHIFT_CREATIVE = "SHIFT_CREATIVE"
+    SHIFT_PLACEMENT = "SHIFT_PLACEMENT"
+    SHIFT_AUDIENCE = "SHIFT_AUDIENCE"
+
+    NO_ACTION = "NO_ACTION"
+
+
+# =========================================================
+# EVIDENCE MODELS (WHY AI IS SAYING THIS)
+# =========================================================
+class MetricEvidence(BaseModel):
     """
-    Represents a single AI decision or recommendation made for a campaign.
-
-    This table is the authoritative audit log for:
-    - AI suggestions
-    - Explainability
-    - Approval / rejection
-    - Rollback readiness
+    Numeric evidence backing a recommendation.
     """
 
-    __tablename__ = "ai_actions"
-
-    # ===============================
-    # CORE IDENTITY
-    # ===============================
-    id: Mapped[uuid.UUID] = mapped_column(
-        primary_key=True,
-        default=uuid.uuid4
+    metric: str = Field(..., example="cpl")
+    window: str = Field(..., example="7D")
+    value: float = Field(..., example=120.5)
+    baseline: Optional[float] = Field(
+        None, example=95.2, description="Comparison baseline"
+    )
+    delta_pct: Optional[float] = Field(
+        None, example=26.5, description="% change vs baseline"
     )
 
-    campaign_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("campaigns.id"),
-        nullable=False
+
+class BreakdownEvidence(BaseModel):
+    """
+    Evidence from breakdown-level performance.
+    """
+
+    dimension: str = Field(
+        ..., example="ad_id", description="ad_id | placement | age_group | region"
+    )
+    key: str = Field(
+        ..., example="238493849384", description="Specific breakdown value"
+    )
+    metrics: List[MetricEvidence]
+
+
+# =========================================================
+# CONFIDENCE MODEL
+# =========================================================
+class ConfidenceScore(BaseModel):
+    """
+    Rule-based confidence score (0–1).
+    """
+
+    score: float = Field(..., ge=0.0, le=1.0, example=0.82)
+    reason: str = Field(
+        ..., example="Consistent CPL improvement across 7D and 14D windows"
     )
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=datetime.utcnow,
-        nullable=False
+
+# =========================================================
+# CORE AI ACTION MODEL
+# =========================================================
+class AIAction(BaseModel):
+    """
+    Single AI recommendation.
+
+    Campaign-scoped decision
+    backed by ad / placement / demographic evidence.
+    """
+
+    # Scope
+    campaign_id: UUID
+
+    # Action
+    action_type: AIActionType
+
+    # Human-readable explanation
+    summary: str = Field(
+        ..., example="Reduce budget due to rising CPL over the last 7 days"
     )
 
-    # ===============================
-    # ACTION DEFINITION
-    # ===============================
-    # Examples:
-    # BUDGET_INCREASE, BUDGET_DECREASE, PAUSE_CAMPAIGN, SCALE_CAMPAIGN, NO_ACTION
-    action_type: Mapped[str] = mapped_column(
-        String,
-        nullable=False
+    # Quantitative evidence
+    metrics: List[MetricEvidence] = []
+
+    # Breakdown evidence (optional)
+    breakdowns: List[BreakdownEvidence] = []
+
+    # Confidence
+    confidence: ConfidenceScore
+
+    # Safety / control
+    is_auto_applicable: bool = Field(
+        default=False,
+        description="Always false in Phase 7 (suggest-only)",
     )
 
-    # ===============================
-    # OBJECTIVE CONTEXT
-    # ===============================
-    # LEAD or SALES
-    objective_type: Mapped[str] = mapped_column(
-        String,
-        nullable=False
-    )
+    # Audit
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
 
-    # ===============================
-    # TIME DEPTH (DATA WINDOW USED)
-    # ===============================
-    # 1D, 3D, 7D, 14D, 30D, 90D, LIFETIME
-    time_window: Mapped[str] = mapped_column(
-        String,
-        nullable=False
-    )
 
-    # ===============================
-    # STATE SNAPSHOTS (ROLLBACK READY)
-    # ===============================
-    # Exact campaign state before suggestion
-    before_state: Mapped[dict] = mapped_column(
-        JSON,
-        nullable=False
-    )
+# =========================================================
+# ACTION SET (MULTIPLE PER CAMPAIGN)
+# =========================================================
+class AIActionSet(BaseModel):
+    """
+    Collection of AI actions for a campaign.
+    """
 
-    # Suggested campaign state after applying AI recommendation
-    after_state: Mapped[dict] = mapped_column(
-        JSON,
-        nullable=False
-    )
-
-    # ===============================
-    # EXPLAINABILITY PAYLOAD
-    # ===============================
-    # Stores:
-    # - metrics snapshot
-    # - baseline comparison
-    # - thresholds breached
-    # - human-readable reason
-    explainability: Mapped[dict] = mapped_column(
-        JSON,
-        nullable=False
-    )
-
-    # ===============================
-    # CONFIDENCE SCORING
-    # ===============================
-    # LOW / MEDIUM / HIGH
-    confidence_level: Mapped[str] = mapped_column(
-        String,
-        nullable=False
-    )
-
-    # ===============================
-    # ACTION LIFECYCLE
-    # ===============================
-    # SUGGESTED / APPROVED / REJECTED / APPLIED / ROLLED_BACK
-    status: Mapped[str] = mapped_column(
-        String,
-        nullable=False,
-        default="SUGGESTED"
-    )
-
-    # ===============================
-    # EXECUTION MODE (FUTURE-READY)
-    # ===============================
-    # SUGGEST (Phase 8A)
-    # AUTO (explicitly disabled until future phase)
-    executed_mode: Mapped[str] = mapped_column(
-        String,
-        nullable=False,
-        default="SUGGEST"
-    )
+    campaign_id: UUID
+    actions: List[AIAction]
+    evaluated_at: datetime = Field(default_factory=datetime.utcnow)
