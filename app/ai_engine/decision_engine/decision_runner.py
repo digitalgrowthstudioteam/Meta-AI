@@ -1,4 +1,5 @@
 from typing import List, Dict
+from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -19,7 +20,6 @@ from app.ai_engine.campaign_ai_readiness_service import (
     CampaignAIReadinessService,
 )
 
-# 🔥 NEW — Industry benchmark intelligence
 from app.ai_engine.services.campaign_vs_benchmark_service import (
     CampaignVsBenchmarkService,
 )
@@ -27,27 +27,20 @@ from app.ai_engine.services.campaign_vs_benchmark_service import (
 
 class AIDecisionRunner:
     """
-    FINAL — Phase 9.4 Decision Runner (LIVE, NO DB)
+    FINAL — Phase 11 Decision Runner (SAFE)
 
     - No DB writes
-    - No persistence
-    - Uses breakdown intelligence
-    - Uses category intelligence
-    - Uses industry benchmark intelligence (NEW)
+    - No Meta mutation
+    - Respects execution locks & time windows
     """
 
     def __init__(self) -> None:
         self.rules = [
-            # Campaign health
             LeadPerformanceDropRule(),
             SalesROASDropRule(),
-
-            # Breakdown intelligence
             BestCreativeRule(),
             BestPlacementRule(),
             BestAudienceSegmentRule(),
-
-            # Strategy intelligence
             CategoryStrategyRule(),
         ]
 
@@ -70,10 +63,23 @@ class AIDecisionRunner:
         benchmark_service = CampaignVsBenchmarkService(db)
 
         action_sets: List[AIActionSet] = []
+        now = datetime.utcnow()
 
         for campaign in campaigns:
             # -------------------------------------------------
-            # BASE AI CONTEXT (WINDOWED PERFORMANCE)
+            # PHASE 11 — HARD EXECUTION LOCK
+            # -------------------------------------------------
+            if campaign.ai_execution_locked:
+                continue
+
+            if campaign.ai_execution_window_start and now < campaign.ai_execution_window_start:
+                continue
+
+            if campaign.ai_execution_window_end and now > campaign.ai_execution_window_end:
+                continue
+
+            # -------------------------------------------------
+            # BASE AI CONTEXT
             # -------------------------------------------------
             ai_context: Dict = await ai_service.get_campaign_ai_score(
                 campaign_id=str(campaign.id),
@@ -82,7 +88,7 @@ class AIDecisionRunner:
             )
 
             # -------------------------------------------------
-            # 🔥 INDUSTRY BENCHMARK CONTEXT (PHASE 9.4)
+            # INDUSTRY BENCHMARK CONTEXT
             # -------------------------------------------------
             benchmark_context = await benchmark_service.compare(
                 campaign_id=str(campaign.id),
