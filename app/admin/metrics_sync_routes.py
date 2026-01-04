@@ -18,7 +18,7 @@ from app.meta_insights.services.campaign_daily_metrics_sync_service import (
     CampaignDailyMetricsSyncService,
 )
 
-router = APIRouter(prefix="/admin/metrics", tags=["Admin Metrics"])
+router = APIRouter(prefix="/metrics", tags=["Admin Metrics"])
 
 
 @router.post("/sync-daily")
