@@ -79,9 +79,13 @@ class CampaignCategoryMap(Base):
     )
 
     source: Mapped[CategorySource] = mapped_column(
-        Enum(CategorySource),
+        Enum(
+            CategorySource,
+            name="categorysource",
+            native_enum=True,
+            values_callable=lambda enum: [e.value for e in enum],
+        ),
         nullable=False,
-        doc="Resolution source: user | inferred | hybrid",
     )
 
     confidence_score: Mapped[float] = mapped_column(
