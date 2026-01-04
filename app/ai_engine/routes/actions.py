@@ -1,7 +1,9 @@
 from typing import List
+from datetime import datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.core.db_session import get_db
 from app.auth.dependencies import require_user
@@ -12,6 +14,8 @@ from app.ai_engine.models.action_models import (
     AIActionSet,
     ActionApprovalStatus,
 )
+
+from app.ai_engine.models.ai_action_feedback import AIActionFeedback
 
 # 🔥 CATEGORY INSIGHTS
 from app.ai_engine.routes.category_insights_routes import (
@@ -32,22 +36,12 @@ async def list_ai_actions(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    """
-    SAFE AI suggestions with hard approval enforcement.
-
-    - Non-approved actions are NEVER executable
-    - Auto-execution is impossible by design
-    """
-
     runner = AIDecisionRunner()
     action_sets = await runner.run_for_user(
         db=db,
         user_id=user.id,
     )
 
-    # -------------------------------------------------
-    # PHASE 11 — HARD APPROVAL FILTER
-    # -------------------------------------------------
     filtered_sets: List[AIActionSet] = []
 
     for action_set in action_sets:
@@ -61,7 +55,6 @@ async def list_ai_actions(
             ):
                 approved_actions.append(action)
 
-            # Always allow NO_ACTION (insight-only)
             if action.action_type.value == "NO_ACTION":
                 approved_actions.append(action)
 
@@ -74,6 +67,75 @@ async def list_ai_actions(
             )
 
     return filtered_sets
+
+
+# -----------------------------------------------------
+# APPROVE AI ACTION (PHASE 11)
+# -----------------------------------------------------
+@router.post("/actions/{action_id}/approve", status_code=200)
+async def approve_ai_action(
+    *,
+    action_id,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    stmt = select(AIActionFeedback).where(
+        AIActionFeedback.id == action_id
+    )
+    result = await db.execute(stmt)
+    action = result.scalar_one_or_none()
+
+    if not action:
+        raise HTTPException(status_code=404, detail="Action not found")
+
+    if action.approval_status != ActionApprovalStatus.DRAFT:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Action cannot be approved in current state",
+        )
+
+    action.approval_status = ActionApprovalStatus.APPROVED
+    action.approved_by_user_id = user.id
+    action.approved_at = datetime.utcnow()
+
+    await db.commit()
+    return {"status": "approved"}
+
+
+# -----------------------------------------------------
+# REJECT AI ACTION (PHASE 11)
+# -----------------------------------------------------
+@router.post("/actions/{action_id}/reject", status_code=200)
+async def reject_ai_action(
+    *,
+    action_id,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    stmt = select(AIActionFeedback).where(
+        AIActionFeedback.id == action_id
+    )
+    result = await db.execute(stmt)
+    action = result.scalar_one_or_none()
+
+    if not action:
+        raise HTTPException(status_code=404, detail="Action not found")
+
+    if action.approval_status not in (
+        ActionApprovalStatus.DRAFT,
+        ActionApprovalStatus.PENDING_APPROVAL,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Action cannot be rejected in current state",
+        )
+
+    action.approval_status = ActionApprovalStatus.REJECTED
+    action.approved_by_user_id = user.id
+    action.approved_at = datetime.utcnow()
+
+    await db.commit()
+    return {"status": "rejected"}
 
 
 # -----------------------------------------------------
