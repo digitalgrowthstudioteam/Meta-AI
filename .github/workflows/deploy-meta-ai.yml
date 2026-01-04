@@ -24,26 +24,23 @@ jobs:
           ssh -o StrictHostKeyChecking=yes ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
             set -e
             cd /var/www/projects/meta-ai-campaign
-
-            echo "▶ Pulling latest code"
-            git fetch origin
-            git reset --hard origin/main
-
-            echo "▶ Activating venv"
             source venv/bin/activate
 
-            echo "▶ Reading DATABASE_URL from systemd"
-            export DATABASE_URL=$(systemctl show meta-ai.service \
-              --property=Environment \
+            echo "▶ Extracting DATABASE_URL from systemd"
+            RAW_ENV=$(systemctl show meta-ai.service --property=Environment)
+            echo "RAW_ENV=$RAW_ENV"
+
+            export DATABASE_URL=$(echo "$RAW_ENV" \
               | sed 's/Environment=//' \
               | tr ' ' '\n' \
-              | grep DATABASE_URL= \
-              | cut -d= -f2-)
+              | grep '^DATABASE_URL=' \
+              | sed 's/^DATABASE_URL=//')
 
-            echo "▶ Running Alembic migrations"
+            echo "▶ DATABASE_URL extracted (masked)"
+            echo "$DATABASE_URL" | sed 's/\/\/.*@/\/\/****@/'
+
+            echo "▶ Running Alembic"
             alembic upgrade head
 
-            echo "▶ Restarting service"
             sudo systemctl restart meta-ai.service
-            sudo systemctl status meta-ai.service --no-pager
           EOF
