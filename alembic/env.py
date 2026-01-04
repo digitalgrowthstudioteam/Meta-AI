@@ -1,7 +1,7 @@
 import sys
-from pathlib import Path
 import os
 import asyncio
+from pathlib import Path
 from logging.config import fileConfig
 
 from sqlalchemy import pool
@@ -15,7 +15,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.append(str(BASE_DIR))
 
 # =========================================================
-# Database URL (env-first, fallback safe)
+# DATABASE URL (env-first, safe fallback)
 # =========================================================
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
@@ -23,7 +23,7 @@ DATABASE_URL = os.getenv(
 )
 
 # =========================================================
-# Alembic config
+# Alembic Config
 # =========================================================
 config = context.config
 config.set_main_option("sqlalchemy.url", DATABASE_URL)
@@ -32,7 +32,7 @@ if config.config_file_name:
     fileConfig(config.config_file_name)
 
 # =========================================================
-# Import ONLY EXISTING MODELS
+# Import ONLY real models
 # =========================================================
 from app.core.database import Base
 
@@ -63,7 +63,7 @@ def run_migrations_offline():
         context.run_migrations()
 
 # =========================================================
-# ONLINE MIGRATIONS
+# ONLINE MIGRATIONS (ASYNC — FIXED)
 # =========================================================
 def run_migrations_online():
     connectable = async_engine_from_config(
@@ -72,15 +72,17 @@ def run_migrations_online():
         poolclass=pool.NullPool,
     )
 
+    def do_run_migrations(connection):
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+        )
+        with context.begin_transaction():
+            context.run_migrations()
+
     async def run_async_migrations():
         async with connectable.connect() as connection:
-            await connection.run_sync(
-                lambda conn: context.configure(
-                    connection=conn,
-                    target_metadata=target_metadata,
-                )
-            )
-            await connection.run_sync(context.run_migrations)
+            await connection.run_sync(do_run_migrations)
         await connectable.dispose()
 
     asyncio.run(run_async_migrations())
