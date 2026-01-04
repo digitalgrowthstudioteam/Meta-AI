@@ -1,4 +1,3 @@
-from datetime import date
 from typing import List, Dict
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,14 +8,18 @@ from app.ai_engine.models.action_models import AIAction, AIActionSet
 from app.ai_engine.rules.lead_rules import LeadPerformanceDropRule
 from app.ai_engine.rules.sales_rules import SalesROASDropRule
 from app.ai_engine.rules.breakdown_rules import BestCreativeRule
+from app.ai_engine.campaign_ai_readiness_service import (
+    CampaignAIReadinessService,
+)
 
 
 class AIDecisionRunner:
     """
-    FINAL — Phase 7 Decision Runner (LIVE, NO DB)
+    FINAL — Phase 8 Decision Runner (LIVE, NO DB)
 
     - No DB writes
     - No persistence
+    - Uses Phase 7.3 AI intelligence
     - Rules evaluated in-memory
     - Returns AIActionSet per campaign
     """
@@ -47,15 +50,27 @@ class AIDecisionRunner:
         result = await db.execute(stmt)
         campaigns: List[Campaign] = result.scalars().all()
 
+        ai_service = CampaignAIReadinessService(db)
+
         action_sets: List[AIActionSet] = []
 
         for campaign in campaigns:
+            # -----------------------------------------
+            # PHASE 7.3 INTELLIGENCE (ONCE PER CAMPAIGN)
+            # -----------------------------------------
+            ai_context: Dict = await ai_service.get_campaign_ai_score(
+                campaign_id=str(campaign.id),
+                short_window="7d",
+                long_window="30d",
+            )
+
             actions: List[AIAction] = []
 
             for rule in self.rules:
                 rule_actions = await rule.evaluate(
                     db=db,
                     campaign=campaign,
+                    ai_context=ai_context,  # 🔥 injected
                 )
                 actions.extend(rule_actions)
 
