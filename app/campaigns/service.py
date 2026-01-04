@@ -19,12 +19,6 @@ logger = logging.getLogger(__name__)
 class CampaignService:
     """
     Campaign business logic layer.
-
-    Responsibilities:
-    - Campaign visibility
-    - Meta sync (read-only, resilient)
-    - AI toggle orchestration
-    - Enforcement gateway
     """
 
     # =====================================================
@@ -56,7 +50,8 @@ class CampaignService:
         )
 
         result = await db.execute(stmt)
-        return result.scalars().all()
+        # 🔴 REQUIRED when joins/outerjoins exist
+        return result.scalars().unique().all()
 
     # =====================================================
     # LIST CAMPAIGNS (LEGACY — KEEP)
