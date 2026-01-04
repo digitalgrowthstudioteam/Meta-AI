@@ -8,6 +8,11 @@ type Campaign = {
   status: string;
   objective?: string;
   ai_active?: boolean;
+
+  // Phase 9.2 — category visibility
+  category?: string | null;
+  category_confidence?: number | null;
+  category_source?: string | null;
 };
 
 export default function CampaignsPage() {
@@ -93,17 +98,12 @@ export default function CampaignsPage() {
         </p>
       </div>
 
-      {/* LOADING */}
-      {loading && (
-        <div className="text-gray-600">Loading campaigns…</div>
-      )}
+      {loading && <div className="text-gray-600">Loading campaigns…</div>}
 
-      {/* REAL ERROR ONLY */}
       {!loading && error && (
         <div className="text-red-600 font-medium">{error}</div>
       )}
 
-      {/* META NOT CONNECTED */}
       {!loading && !error && metaConnected === false && (
         <div className="empty-state">
           <p className="empty-state-title mb-2">
@@ -118,7 +118,6 @@ export default function CampaignsPage() {
         </div>
       )}
 
-      {/* EMPTY STATE (CONNECTED BUT NO CAMPAIGNS) */}
       {!loading && !error && metaConnected && campaigns.length === 0 && (
         <div className="empty-state">
           <p className="empty-state-title mb-2">
@@ -133,7 +132,6 @@ export default function CampaignsPage() {
         </div>
       )}
 
-      {/* CAMPAIGN LIST */}
       {!loading && !error && campaigns.length > 0 && (
         <div className="surface overflow-hidden">
           <table className="w-full text-sm">
@@ -141,6 +139,7 @@ export default function CampaignsPage() {
               <tr>
                 <th className="px-4 py-3 text-left">Campaign</th>
                 <th className="px-4 py-3 text-left">Objective</th>
+                <th className="px-4 py-3 text-left">Category</th>
                 <th className="px-4 py-3 text-left">Status</th>
                 <th className="px-4 py-3 text-left">AI</th>
               </tr>
@@ -150,6 +149,26 @@ export default function CampaignsPage() {
                 <tr key={c.id} className="border-b last:border-0">
                   <td className="px-4 py-3 font-medium">{c.name}</td>
                   <td className="px-4 py-3">{c.objective ?? "—"}</td>
+
+                  {/* CATEGORY VISIBILITY */}
+                  <td className="px-4 py-3">
+                    {c.category ? (
+                      <div className="space-y-1">
+                        <div className="font-medium">{c.category}</div>
+                        <div className="text-xs text-gray-500">
+                          {c.category_source} ·{" "}
+                          {c.category_confidence
+                            ? `${Math.round(
+                                c.category_confidence * 100
+                              )}%`
+                            : "—"}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-gray-400">Uncategorized</span>
+                    )}
+                  </td>
+
                   <td className="px-4 py-3">{c.status}</td>
                   <td className="px-4 py-3">
                     {c.ai_active ? (
