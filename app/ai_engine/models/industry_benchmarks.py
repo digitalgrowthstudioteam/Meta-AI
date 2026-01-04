@@ -1,7 +1,7 @@
 """
 Industry / Category Benchmarks Model
 
-PHASE 9.4 — STEP 1 (FOUNDATION)
+PHASE 9.4 — FOUNDATION (LOCKED)
 
 Purpose:
 - Store industry-level performance benchmarks
@@ -31,7 +31,7 @@ class IndustryBenchmark(Base):
     One row represents:
     - One category
     - One objective (LEAD / SALES)
-    - One time window (7d / 30d / 90d)
+    - One time window (1d / 3d / 7d / 14d / 30d / 90d / lifetime)
     """
 
     __tablename__ = "industry_benchmarks"
@@ -62,7 +62,7 @@ class IndustryBenchmark(Base):
         String,
         nullable=False,
         index=True,
-        doc="7d, 30d, 90d",
+        doc="1d, 3d, 7d, 14d, 30d, 90d, lifetime",
     )
 
     as_of_date: Mapped[date] = mapped_column(
@@ -95,8 +95,23 @@ class IndustryBenchmark(Base):
     )
 
     # -------------------------
-    # DISTRIBUTION (OPTIONAL, AI)
+    # DISTRIBUTION (AI SIGNALS)
     # -------------------------
+    p25_ctr: Mapped[float | None] = mapped_column(
+        Numeric(8, 4),
+        nullable=True,
+    )
+
+    p50_ctr: Mapped[float | None] = mapped_column(
+        Numeric(8, 4),
+        nullable=True,
+    )
+
+    p75_ctr: Mapped[float | None] = mapped_column(
+        Numeric(8, 4),
+        nullable=True,
+    )
+
     p25_roas: Mapped[float | None] = mapped_column(
         Numeric(8, 3),
         nullable=True,
@@ -113,7 +128,7 @@ class IndustryBenchmark(Base):
     )
 
     # -------------------------
-    # SAMPLE SIZE
+    # SAMPLE SIZE & QUALITY
     # -------------------------
     campaign_count: Mapped[int] = mapped_column(
         Integer,
@@ -122,12 +137,25 @@ class IndustryBenchmark(Base):
         doc="Number of campaigns used to compute this benchmark",
     )
 
+    data_quality_score: Mapped[float | None] = mapped_column(
+        Numeric(5, 2),
+        nullable=True,
+        doc="Confidence weighting for AI (future Phase 9.5)",
+    )
+
     # -------------------------
     # AUDIT
     # -------------------------
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow,
+        nullable=False,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
         nullable=False,
     )
 
