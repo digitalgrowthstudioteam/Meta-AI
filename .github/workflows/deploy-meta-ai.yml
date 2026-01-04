@@ -32,6 +32,9 @@ jobs:
             echo "▶ Activating venv"
             source venv/bin/activate
 
+            echo "▶ Exporting DATABASE_URL for Alembic"
+            export DATABASE_URL="postgresql+asyncpg://meta_ai_user:StrongNewPassword123!@127.0.0.1:5432/meta_ai_db"
+
             echo "▶ Running Alembic migrations"
             alembic upgrade head
 
