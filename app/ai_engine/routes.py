@@ -21,7 +21,7 @@ router = APIRouter(
 
 
 # =====================================================
-# LIST AI SUGGESTIONS (READ-ONLY)
+# LIST AI SUGGESTIONS (PERSISTED, READ-ONLY)
 # =====================================================
 @router.get("/actions", response_model=List[AIAction])
 async def list_ai_actions(
@@ -48,23 +48,22 @@ async def list_ai_actions(
             UserMetaAdAccount,
             UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
         )
-        .where(
-            UserMetaAdAccount.user_id == user.id,
-        )
+        .where(UserMetaAdAccount.user_id == user.id)
         .order_by(desc(AIAction.created_at))
         .limit(limit)
     )
 
     result = await db.execute(stmt)
-    actions = result.scalars().all()
-
-    return actions
+    return result.scalars().all()
 
 
 # =====================================================
-# AI ACTION HISTORY FOR A CAMPAIGN
+# AI ACTION HISTORY FOR A SINGLE CAMPAIGN
 # =====================================================
-@router.get("/campaign/{campaign_id}/actions", response_model=List[AIAction])
+@router.get(
+    "/campaign/{campaign_id}/actions",
+    response_model=List[AIAction],
+)
 async def list_campaign_ai_actions(
     *,
     campaign_id: UUID,
@@ -91,6 +90,4 @@ async def list_campaign_ai_actions(
     )
 
     result = await db.execute(stmt)
-    actions = result.scalars().all()
-
-    return actions
+    return result.scalars().all()
