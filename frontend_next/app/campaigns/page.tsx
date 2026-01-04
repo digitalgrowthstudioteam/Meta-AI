@@ -20,6 +20,7 @@ export default function CampaignsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   // -----------------------------------
   // LOAD CAMPAIGNS
@@ -83,6 +84,54 @@ export default function CampaignsPage() {
     });
 
     loadCampaigns();
+  };
+
+  // -----------------------------------
+  // TOGGLE AI
+  // -----------------------------------
+  const toggleAI = async (campaign: Campaign) => {
+    if (togglingId) return;
+
+    const nextValue = !campaign.ai_active;
+
+    // optimistic UI
+    setCampaigns((prev) =>
+      prev.map((c) =>
+        c.id === campaign.id ? { ...c, ai_active: nextValue } : c
+      )
+    );
+
+    setTogglingId(campaign.id);
+
+    try {
+      const res = await fetch(
+        `/api/campaigns/${campaign.id}/ai-toggle`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ enable: nextValue }),
+        }
+      );
+
+      if (!res.ok) {
+        throw new Error("Toggle failed");
+      }
+    } catch (err) {
+      // rollback on error
+      setCampaigns((prev) =>
+        prev.map((c) =>
+          c.id === campaign.id
+            ? { ...c, ai_active: campaign.ai_active }
+            : c
+        )
+      );
+      alert("Unable to change AI state. Check plan or restrictions.");
+    } finally {
+      setTogglingId(null);
+    }
   };
 
   // -----------------------------------
@@ -150,7 +199,6 @@ export default function CampaignsPage() {
                   <td className="px-4 py-3 font-medium">{c.name}</td>
                   <td className="px-4 py-3">{c.objective ?? "—"}</td>
 
-                  {/* CATEGORY VISIBILITY */}
                   <td className="px-4 py-3">
                     {c.category ? (
                       <div className="space-y-1">
@@ -170,16 +218,25 @@ export default function CampaignsPage() {
                   </td>
 
                   <td className="px-4 py-3">{c.status}</td>
+
                   <td className="px-4 py-3">
-                    {c.ai_active ? (
-                      <span className="text-green-700 font-medium">
-                        AI Active
-                      </span>
-                    ) : (
-                      <span className="text-gray-500">
-                        AI Inactive
-                      </span>
-                    )}
+                    <button
+                      onClick={() => toggleAI(c)}
+                      disabled={togglingId === c.id}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                        c.ai_active
+                          ? "bg-green-600"
+                          : "bg-gray-300"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+                          c.ai_active
+                            ? "translate-x-6"
+                            : "translate-x-1"
+                        }`}
+                      />
+                    </button>
                   </td>
                 </tr>
               ))}
