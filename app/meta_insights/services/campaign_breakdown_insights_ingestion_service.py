@@ -1,5 +1,5 @@
-from datetime import date
-from typing import List
+from datetime import date, datetime
+from typing import List, Dict, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -16,19 +16,14 @@ from app.meta_insights.models.campaign_breakdown_daily_metrics import (
 
 class CampaignBreakdownInsightsIngestionService:
     """
-    Ingests DAILY breakdown-level performance insights from Meta.
+    PHASE 8 — AUDIENCE / BREAKDOWN INSIGHTS (READ-ONLY)
 
-    Breakdown types ingested separately:
-    - Creative (ad_id)
-    - Placement (platform, placement)
-    - Demographics (age, gender)
-    - Geo (region)
+    Ingests DAILY breakdown-level performance insights.
 
-    Guarantees:
-    - Read-only Meta access
-    - Idempotent per (campaign, date, breakdown)
-    - Safe for cron / batch execution
-    - No AI / ML / aggregation logic
+    CURRENT MODE:
+    - Stub-safe
+    - NO Meta failures
+    - All-zero payloads are SKIPPED
     """
 
     # -----------------------------------------------------
@@ -47,7 +42,6 @@ class CampaignBreakdownInsightsIngestionService:
         for all active Meta ad accounts of a user.
         """
 
-        # 1️⃣ Fetch active ad accounts
         stmt = (
             select(MetaAdAccount)
             .join(
@@ -67,10 +61,9 @@ class CampaignBreakdownInsightsIngestionService:
             return 0
 
         rows_ingested = 0
+        client = MetaCampaignInsightsClient(db)
 
-        # 2️⃣ Process each ad account independently
         for ad_account in ad_accounts:
-            # Fetch campaigns for ID mapping
             stmt = (
                 select(Campaign)
                 .where(
@@ -81,33 +74,42 @@ class CampaignBreakdownInsightsIngestionService:
             result = await db.execute(stmt)
             campaigns = result.scalars().all()
 
-            campaign_map = {
-                c.meta_campaign_id: c for c in campaigns
-            }
+            campaign_map = {c.meta_campaign_id: c for c in campaigns}
 
-            # -----------------------------------------
-            # 3️⃣ Run separate breakdown fetches
-            # -----------------------------------------
+            # -------------------------------------------------
+            # BREAKDOWN SETS (LOCKED)
+            # -------------------------------------------------
             breakdown_sets = [
-                ["ad_id"],                     # Creative
-                ["platform", "placement"],     # Placement
-                ["age", "gender"],             # Demographics
-                ["region"],                    # Geo
+                ["ad_id"],
+                ["platform", "placement"],
+                ["age", "gender"],
+                ["region"],
             ]
 
             for breakdowns in breakdown_sets:
-                insights = await MetaCampaignInsightsClient.fetch_daily_insights_with_breakdown(
-                    ad_account=ad_account,
-                    since=since,
-                    until=until,
-                    breakdowns=breakdowns,
-                )
+                try:
+                    insights: List[Dict[str, Any]] = (
+                        await client.fetch_daily_insights_with_breakdown(
+                            ad_account=ad_account,
+                            since=since,
+                            until=until,
+                            breakdowns=breakdowns,
+                        )
+                    )
+                except Exception:
+                    continue
 
                 if not insights:
                     continue
 
                 for row in insights:
-                    campaign = campaign_map.get(row["campaign_meta_id"])
+                    # -----------------------------
+                    # STUB / EMPTY → SKIP
+                    # -----------------------------
+                    if row.get("impressions", 0) == 0 and row.get("spend", 0) == 0:
+                        continue
+
+                    campaign = campaign_map.get(row.get("campaign_meta_id"))
                     if not campaign:
                         continue
 
@@ -160,7 +162,7 @@ class CampaignBreakdownInsightsIngestionService:
                             roas=row["roas"],
                             objective_type=campaign.objective,
                             meta_account_id=ad_account.meta_account_id,
-                            meta_fetched_at=row["meta_fetched_at"],
+                            meta_fetched_at=row.get("meta_fetched_at", datetime.utcnow()),
                         )
                         db.add(metric)
 
