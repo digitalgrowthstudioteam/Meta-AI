@@ -36,7 +36,7 @@ async def list_ai_actions(
     - Safe for dashboard polling
     """
 
-    runner = DecisionRunner()
+    runner = AIDecisionRunner()
 
     action_sets = await runner.run_for_user(
         db=db,
