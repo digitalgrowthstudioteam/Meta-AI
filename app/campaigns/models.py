@@ -5,6 +5,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Float,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime, date
@@ -77,6 +78,46 @@ class Campaign(Base):
     )
 
     # =========================
+    # PHASE 11 — EXECUTION GUARDRAILS
+    # =========================
+    ai_execution_locked: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False,
+        doc="Hard lock: prevents any auto execution",
+    )
+
+    ai_max_budget_change_pct: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+        doc="Maximum allowed budget change % for approved actions",
+    )
+
+    ai_budget_floor: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+        doc="Minimum daily budget allowed by AI suggestions",
+    )
+
+    ai_budget_ceiling: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+        doc="Maximum daily budget allowed by AI suggestions",
+    )
+
+    ai_execution_window_start: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+        doc="AI actions valid only after this time",
+    )
+
+    ai_execution_window_end: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+        doc="AI actions invalid after this time",
+    )
+
+    # =========================
     # BILLING
     # =========================
     is_manual: Mapped[bool] = mapped_column(
@@ -123,4 +164,9 @@ Index(
     "ix_campaign_account_ai_active",
     Campaign.ad_account_id,
     Campaign.ai_active,
+)
+
+Index(
+    "ix_campaign_ai_execution_locked",
+    Campaign.ai_execution_locked,
 )
