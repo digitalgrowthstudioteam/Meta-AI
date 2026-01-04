@@ -20,6 +20,10 @@ class MetaAdAccount(Base):
     """
     Global Meta Ad Account.
     One row per Meta Ad Account across the platform.
+
+    business_category:
+    - User-provided primary business category (Phase 9)
+    - ML ground truth for global learning
     """
 
     __tablename__ = "meta_ad_accounts"
@@ -40,6 +44,13 @@ class MetaAdAccount(Base):
     account_name: Mapped[str] = mapped_column(
         String,
         nullable=False,
+    )
+
+    # 🔥 PHASE 9 — BUSINESS CATEGORY (GROUND TRUTH)
+    business_category: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+        doc="Primary business category for ML learning (e.g. Skin Care, Real Estate)",
     )
 
     is_active: Mapped[bool] = mapped_column(
