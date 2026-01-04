@@ -5,6 +5,7 @@ from sqlalchemy import select
 
 from app.campaigns.models import Campaign
 from app.ai_engine.models.action_models import AIAction, AIActionSet
+
 from app.ai_engine.rules.lead_rules import LeadPerformanceDropRule
 from app.ai_engine.rules.sales_rules import SalesROASDropRule
 from app.ai_engine.rules.breakdown_rules import (
@@ -12,37 +13,41 @@ from app.ai_engine.rules.breakdown_rules import (
     BestPlacementRule,
     BestAudienceSegmentRule,
 )
-from app.ai_engine.rules.category_strategy_rules import (
-    CategoryStrategyRule,
-)
+from app.ai_engine.rules.category_strategy_rules import CategoryStrategyRule
+
 from app.ai_engine.campaign_ai_readiness_service import (
     CampaignAIReadinessService,
+)
+
+# 🔥 NEW — Industry benchmark intelligence
+from app.ai_engine.services.campaign_vs_benchmark_service import (
+    CampaignVsBenchmarkService,
 )
 
 
 class AIDecisionRunner:
     """
-    FINAL — Phase 9.3.3 Decision Runner (LIVE, NO DB)
+    FINAL — Phase 9.4 Decision Runner (LIVE, NO DB)
 
     - No DB writes
     - No persistence
-    - Uses aggregated breakdown intelligence
+    - Uses breakdown intelligence
     - Uses category intelligence
-    - Rules evaluated in-memory
+    - Uses industry benchmark intelligence (NEW)
     """
 
     def __init__(self) -> None:
         self.rules = [
-            # Campaign-level health
+            # Campaign health
             LeadPerformanceDropRule(),
             SalesROASDropRule(),
 
-            # Breakdown intelligence (Phase 9.3.3)
+            # Breakdown intelligence
             BestCreativeRule(),
             BestPlacementRule(),
             BestAudienceSegmentRule(),
 
-            # Strategy-level intelligence
+            # Strategy intelligence
             CategoryStrategyRule(),
         ]
 
@@ -52,10 +57,6 @@ class AIDecisionRunner:
         db: AsyncSession,
         user_id,
     ) -> List[AIActionSet]:
-        """
-        Run AI rules for all AI-active campaigns
-        visible to the logged-in user.
-        """
 
         stmt = select(Campaign).where(
             Campaign.ai_active.is_(True),
@@ -66,18 +67,29 @@ class AIDecisionRunner:
         campaigns: List[Campaign] = result.scalars().all()
 
         ai_service = CampaignAIReadinessService(db)
+        benchmark_service = CampaignVsBenchmarkService(db)
 
         action_sets: List[AIActionSet] = []
 
         for campaign in campaigns:
-            # -----------------------------------------
-            # BASE AI CONTEXT (WINDOWED)
-            # -----------------------------------------
+            # -------------------------------------------------
+            # BASE AI CONTEXT (WINDOWED PERFORMANCE)
+            # -------------------------------------------------
             ai_context: Dict = await ai_service.get_campaign_ai_score(
                 campaign_id=str(campaign.id),
                 short_window="7d",
                 long_window="30d",
             )
+
+            # -------------------------------------------------
+            # 🔥 INDUSTRY BENCHMARK CONTEXT (PHASE 9.4)
+            # -------------------------------------------------
+            benchmark_context = await benchmark_service.compare(
+                campaign_id=str(campaign.id),
+                window_type="30d",
+            )
+
+            ai_context["industry_benchmark"] = benchmark_context
 
             actions: List[AIAction] = []
 
