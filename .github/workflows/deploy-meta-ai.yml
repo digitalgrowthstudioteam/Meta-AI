@@ -32,19 +32,7 @@ jobs:
             echo "▶ Activating venv"
             source venv/bin/activate
 
-            echo "▶ Extracting DATABASE_URL from systemd (clean)"
-            RAW_ENV=$(systemctl show meta-ai.service --property=Environment)
-            DATABASE_URL=$(echo "$RAW_ENV" \
-              | tr ' ' '\n' \
-              | grep '^DATABASE_URL=' \
-              | cut -d= -f2- \
-              | sed 's/^"//;s/"$//')
-
-            export DATABASE_URL
-
-            echo "▶ Running Alembic migrations"
-            alembic upgrade head
-
             echo "▶ Restarting service"
             sudo systemctl restart meta-ai.service
             sudo systemctl status meta-ai.service --no-pager
+          EOF
