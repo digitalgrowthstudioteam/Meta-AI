@@ -1,11 +1,11 @@
 from datetime import date
-from typing import List
+from typing import List, Dict
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select
 
 from app.campaigns.models import Campaign
-from app.ai_engine.models.action_models import AIAction
+from app.ai_engine.models.action_models import AIActionSet, AIAction
 from app.ai_engine.decision_engine.campaign_decision_service import (
     CampaignDecisionService,
 )
@@ -13,19 +13,33 @@ from app.ai_engine.decision_engine.campaign_decision_service import (
 
 class AIDecisionRunner:
     """
-    Orchestrates AI decision generation for campaigns.
+    Phase 7 — LIVE AI Decision Runner
+
+    Characteristics:
+    - NO database writes
+    - NO persistence
+    - NO Meta mutation
+    - Computes AI suggestions on demand
     """
 
-    @staticmethod
-    async def run(
+    async def run_for_user(
+        self,
         *,
         db: AsyncSession,
-        as_of_date: date,
-    ) -> int:
+        user_id,
+        as_of_date: date | None = None,
+    ) -> List[AIActionSet]:
         """
-        Runs AI decision generation for all eligible campaigns.
+        Generates LIVE AI suggestions for all AI-active campaigns
+        visible to the user.
         """
 
+        if as_of_date is None:
+            as_of_date = date.today()
+
+        # =========================================
+        # 1️⃣ Fetch eligible AI-active campaigns
+        # =========================================
         stmt = select(Campaign).where(
             Campaign.ai_active.is_(True),
             Campaign.is_archived.is_(False),
@@ -35,35 +49,33 @@ class AIDecisionRunner:
         result = await db.execute(stmt)
         campaigns: List[Campaign] = result.scalars().all()
 
-        actions_created = 0
+        # =========================================
+        # 2️⃣ Generate AI actions (IN-MEMORY)
+        # =========================================
+        action_sets: Dict[str, AIActionSet] = {}
 
         for campaign in campaigns:
-            ai_action = await CampaignDecisionService.decide_for_campaign(
+            action: AIAction | None = await CampaignDecisionService.decide_for_campaign(
                 db=db,
                 campaign=campaign,
                 as_of_date=as_of_date,
             )
 
-            if not ai_action:
+            if not action:
                 continue
 
-            dedupe_stmt = select(AIAction).where(
-                and_(
-                    AIAction.campaign_id == ai_action.campaign_id,
-                    AIAction.action_type == ai_action.action_type,
-                    AIAction.time_window == ai_action.time_window,
-                    AIAction.status == "SUGGESTED",
+            # Group by campaign
+            key = str(campaign.id)
+
+            if key not in action_sets:
+                action_sets[key] = AIActionSet(
+                    campaign_id=campaign.id,
+                    actions=[],
                 )
-            )
 
-            dedupe_result = await db.execute(dedupe_stmt)
-            existing = dedupe_result.scalar_one_or_none()
+            action_sets[key].actions.append(action)
 
-            if existing:
-                continue
-
-            db.add(ai_action)
-            actions_created += 1
-
-        await db.commit()
-        return actions_created
+        # =========================================
+        # 3️⃣ Return LIVE AI output
+        # =========================================
+        return list(action_sets.values())
