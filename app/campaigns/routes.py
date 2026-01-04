@@ -17,7 +17,7 @@ router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
 
 
 # =========================================================
-# LIST CAMPAIGNS (DEV-SAFE)
+# LIST CAMPAIGNS + CATEGORY VISIBILITY (PHASE 9.2)
 # =========================================================
 @router.get(
     "",
@@ -29,9 +29,9 @@ async def list_campaigns(
     current_user: User | None = Depends(get_current_user),
 ):
     """
-    Dev-safe:
-    - Returns empty list when auth is disabled
-    - Production behavior unchanged
+    Phase 9.2:
+    - Campaigns + category + confidence + source
+    - Read-only
     """
 
     # -----------------------------
@@ -59,7 +59,8 @@ async def list_campaigns(
             detail="Meta account not connected",
         )
 
-    return await CampaignService.list_campaigns(
+    # Phase 9.2 visibility-aware fetch
+    return await CampaignService.list_campaigns_with_visibility(
         db=db,
         user_id=current_user.id,
     )
