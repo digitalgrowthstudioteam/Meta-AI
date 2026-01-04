@@ -1,20 +1,27 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.db_session import get_db
 from app.auth.dependencies import require_user
 from app.users.models import User
+from app.campaigns.models import Campaign
+
 from app.ai_engine.models.ml_category_breakdown_stats import (
     MLCategoryBreakdownStat,
 )
+from app.ai_engine.models.ai_action_feedback import AIActionFeedback
+
 
 router = APIRouter(
     prefix="/api/ai",
-    tags=["AI Category Insights"],
+    tags=["AI Category & Feedback"],
 )
 
 
+# =====================================================
+# CATEGORY INSIGHTS (READ-ONLY)
+# =====================================================
 @router.get("/category-insights")
 async def get_category_insights(
     *,
@@ -66,3 +73,55 @@ async def get_category_insights(
             for r in rows
         ],
     }
+
+
+# =====================================================
+# AI ACTION FEEDBACK (WRITE-ONLY)
+# =====================================================
+@router.post("/actions/feedback")
+async def submit_ai_feedback(
+    *,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_user),
+    campaign_id: str,
+    rule_name: str,
+    action_type: str,
+    is_helpful: bool,
+    confidence_at_time: float,
+):
+    """
+    Store user feedback for an AI suggestion.
+
+    - Write-only
+    - Append-only
+    - Used as learning signal
+    """
+
+    # -------------------------------------------------
+    # Validate campaign ownership
+    # -------------------------------------------------
+    result = await db.execute(
+        select(Campaign).where(Campaign.id == campaign_id)
+    )
+    campaign = result.scalar_one_or_none()
+
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    # -------------------------------------------------
+    # Persist feedback
+    # -------------------------------------------------
+    db.add(
+        AIActionFeedback(
+            user_id=user.id,
+            campaign_id=campaign.id,
+            rule_name=rule_name,
+            action_type=action_type,
+            is_helpful=is_helpful,
+            confidence_at_time=confidence_at_time,
+        )
+    )
+
+    await db.commit()
+
+    return {"status": "ok"}
