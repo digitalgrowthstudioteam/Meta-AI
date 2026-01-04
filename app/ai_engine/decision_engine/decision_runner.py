@@ -7,7 +7,11 @@ from app.campaigns.models import Campaign
 from app.ai_engine.models.action_models import AIAction, AIActionSet
 from app.ai_engine.rules.lead_rules import LeadPerformanceDropRule
 from app.ai_engine.rules.sales_rules import SalesROASDropRule
-from app.ai_engine.rules.breakdown_rules import BestCreativeRule
+from app.ai_engine.rules.breakdown_rules import (
+    BestCreativeRule,
+    BestPlacementRule,
+    BestAudienceSegmentRule,
+)
 from app.ai_engine.rules.category_strategy_rules import (
     CategoryStrategyRule,
 )
@@ -18,22 +22,28 @@ from app.ai_engine.campaign_ai_readiness_service import (
 
 class AIDecisionRunner:
     """
-    FINAL — Phase 9 Decision Runner (LIVE, NO DB)
+    FINAL — Phase 9.3.3 Decision Runner (LIVE, NO DB)
 
     - No DB writes
     - No persistence
-    - Uses Phase 7.3 AI intelligence
-    - Uses Phase 9.5 category intelligence
+    - Uses aggregated breakdown intelligence
+    - Uses category intelligence
     - Rules evaluated in-memory
-    - Returns AIActionSet per campaign
     """
 
     def __init__(self) -> None:
         self.rules = [
+            # Campaign-level health
             LeadPerformanceDropRule(),
             SalesROASDropRule(),
+
+            # Breakdown intelligence (Phase 9.3.3)
             BestCreativeRule(),
-            CategoryStrategyRule(),  # 🧠 strategy-level intelligence
+            BestPlacementRule(),
+            BestAudienceSegmentRule(),
+
+            # Strategy-level intelligence
+            CategoryStrategyRule(),
         ]
 
     async def run_for_user(
@@ -61,7 +71,7 @@ class AIDecisionRunner:
 
         for campaign in campaigns:
             # -----------------------------------------
-            # PHASE 7.3 INTELLIGENCE (ONCE PER CAMPAIGN)
+            # BASE AI CONTEXT (WINDOWED)
             # -----------------------------------------
             ai_context: Dict = await ai_service.get_campaign_ai_score(
                 campaign_id=str(campaign.id),
