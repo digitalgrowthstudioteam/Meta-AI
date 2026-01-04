@@ -17,7 +17,7 @@ router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
 
 
 # =========================================================
-# LIST CAMPAIGNS
+# LIST CAMPAIGNS (DEV-SAFE)
 # =========================================================
 @router.get(
     "",
@@ -26,8 +26,23 @@ router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
 )
 async def list_campaigns(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User | None = Depends(get_current_user),
 ):
+    """
+    Dev-safe:
+    - Returns empty list when auth is disabled
+    - Production behavior unchanged
+    """
+
+    # -----------------------------
+    # DEV MODE (AUTH DISABLED)
+    # -----------------------------
+    if current_user is None:
+        return []
+
+    # -----------------------------
+    # PROD MODE
+    # -----------------------------
     result = await db.execute(
         select(MetaOAuthToken)
         .where(
