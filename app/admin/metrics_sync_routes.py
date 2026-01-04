@@ -31,7 +31,7 @@ async def sync_campaign_daily_metrics(
     Manually sync campaign daily metrics for a given date.
     """
     # 🔒 Safety: admin-only usage (simple guard for now)
-    if not current_user.is_admin:
+    if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
 
     service = CampaignDailyMetricsSyncService(db)
