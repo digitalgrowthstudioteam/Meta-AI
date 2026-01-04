@@ -3,12 +3,13 @@ Meta Campaign Insights Client
 
 Purpose:
 - Fetch daily campaign insights from Meta
-- Support breakdown-level performance for AI/ML
-- Isolated client (NO DB writes)
+- READ-ONLY
+- NO DB writes
+- Phase 6.5 compatible (campaign-level metrics only)
 """
 
 from datetime import date
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,67 +26,32 @@ class MetaCampaignInsightsClient:
         target_date: date,
     ) -> Optional[Dict[str, Any]]:
         """
-        CONTRACT (LOCKED):
+        PHASE 6.5 CONTRACT (LOCKED)
 
-        Must return:
+        Must return FLAT campaign-level metrics:
         {
-            "campaign": { campaign-level metrics },
-            "breakdowns": [
-                {
-                    "creative_id": str | None,
-                    "placement": str | None,
-                    "city": str | None,
-                    "gender": str | None,
-                    "age_range": str | None,
-                    "device": str | None,
-                    "impressions": int,
-                    "clicks": int,
-                    "spend": float,
-                    "conversions": int,
-                    "revenue": float | None
-                }
-            ]
+            "impressions": int,
+            "clicks": int,
+            "spend": float,
+            "leads": int,
+            "purchases": int,
+            "purchase_value": float
         }
 
-        TEMP STUB — real Meta Graph API wiring will replace this.
+        TEMP STUB — real Meta Graph API will replace this.
         """
 
         # -----------------------------
-        # CAMPAIGN-LEVEL METRICS
+        # SAFE NO-OP PLACEHOLDER
         # -----------------------------
-        campaign_metrics = {
+        # Ensures ingestion pipeline works end-to-end
+        # AI will remain empty until real data arrives
+
+        return {
             "impressions": 0,
             "clicks": 0,
             "spend": 0.0,
-            "conversions": 0,
-            "revenue": 0.0,
-        }
-
-        # -----------------------------
-        # BREAKDOWN-LEVEL METRICS
-        # -----------------------------
-        breakdowns: List[Dict[str, Any]] = []
-
-        # Example placeholder (safe no-op)
-        # Real Meta API will populate these rows
-        # Keeping structure locked for AI + aggregation layers
-        breakdowns.append(
-            {
-                "creative_id": None,
-                "placement": None,
-                "city": None,
-                "gender": None,
-                "age_range": None,
-                "device": None,
-                "impressions": 0,
-                "clicks": 0,
-                "spend": 0.0,
-                "conversions": 0,
-                "revenue": 0.0,
-            }
-        )
-
-        return {
-            "campaign": campaign_metrics,
-            "breakdowns": breakdowns,
+            "leads": 0,
+            "purchases": 0,
+            "purchase_value": 0.0,
         }
