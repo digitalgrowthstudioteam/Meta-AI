@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import List, Dict, Optional
+from typing import List, Optional
 from datetime import datetime
 from uuid import UUID
 
@@ -10,33 +10,44 @@ from pydantic import BaseModel, Field
 # ACTION TYPES (WHAT AI CAN SUGGEST)
 # =========================================================
 class AIActionType(str, Enum):
+    # Campaign-level
     SCALE_CAMPAIGN = "SCALE_CAMPAIGN"
     REDUCE_BUDGET = "REDUCE_BUDGET"
     PAUSE_CAMPAIGN = "PAUSE_CAMPAIGN"
 
+    # Breakdown-level
     SHIFT_CREATIVE = "SHIFT_CREATIVE"
     SHIFT_PLACEMENT = "SHIFT_PLACEMENT"
     SHIFT_AUDIENCE = "SHIFT_AUDIENCE"
 
+    # Strategy / insight only
     NO_ACTION = "NO_ACTION"
 
 
 # =========================================================
-# EVIDENCE MODELS (WHY AI IS SAYING THIS)
+# EVIDENCE MODELS
 # =========================================================
 class MetricEvidence(BaseModel):
     """
     Numeric evidence backing a recommendation.
     """
 
-    metric: str = Field(..., example="cpl")
+    metric: str = Field(..., example="roas")
     window: str = Field(..., example="7D")
-    value: float = Field(..., example=120.5)
+    value: float = Field(..., example=2.14)
+
+    # Optional comparison context
     baseline: Optional[float] = Field(
-        None, example=95.2, description="Comparison baseline"
+        None, example=2.85, description="Baseline value for comparison"
     )
     delta_pct: Optional[float] = Field(
-        None, example=26.5, description="% change vs baseline"
+        None, example=-24.9, description="% change vs baseline"
+    )
+
+    # Phase 9.5 — benchmark awareness
+    source: Optional[str] = Field(
+        default="campaign",
+        description="campaign | industry | category",
     )
 
 
@@ -46,11 +57,17 @@ class BreakdownEvidence(BaseModel):
     """
 
     dimension: str = Field(
-        ..., example="ad_id", description="ad_id | placement | age_group | region"
+        ...,
+        example="creative_id",
+        description="creative_id | placement | age_group | region | audience",
     )
+
     key: str = Field(
-        ..., example="238493849384", description="Specific breakdown value"
+        ...,
+        example="238493849384",
+        description="Specific breakdown value",
     )
+
     metrics: List[MetricEvidence]
 
 
@@ -60,11 +77,16 @@ class BreakdownEvidence(BaseModel):
 class ConfidenceScore(BaseModel):
     """
     Rule-based confidence score (0–1).
+
+    Phase 9.5:
+    - Boosted when industry / category benchmarks confirm
     """
 
     score: float = Field(..., ge=0.0, le=1.0, example=0.82)
+
     reason: str = Field(
-        ..., example="Consistent CPL improvement across 7D and 14D windows"
+        ...,
+        example="Confirmed by industry benchmark and stable 30D trend",
     )
 
 
@@ -75,8 +97,10 @@ class AIAction(BaseModel):
     """
     Single AI recommendation.
 
-    Campaign-scoped decision
-    backed by ad / placement / demographic evidence.
+    Campaign-scoped decision backed by:
+    - Aggregated metrics
+    - Breakdown intelligence
+    - Industry / category benchmarks (Phase 9.5)
     """
 
     # Scope
@@ -87,22 +111,22 @@ class AIAction(BaseModel):
 
     # Human-readable explanation
     summary: str = Field(
-        ..., example="Reduce budget due to rising CPL over the last 7 days"
+        ..., example="Reduce budget due to ROAS decay vs industry benchmark"
     )
 
-    # Quantitative evidence
+    # Metric evidence (campaign / benchmark)
     metrics: List[MetricEvidence] = []
 
-    # Breakdown evidence (optional)
+    # Breakdown evidence (creative / placement / audience)
     breakdowns: List[BreakdownEvidence] = []
 
     # Confidence
     confidence: ConfidenceScore
 
-    # Safety / control
+    # Automation safety
     is_auto_applicable: bool = Field(
         default=False,
-        description="Always false in Phase 7 (suggest-only)",
+        description="Always false until auto-execution phase",
     )
 
     # Audit
