@@ -6,11 +6,12 @@ from sqlalchemy import (
     ForeignKey,
     Index,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime, date
 import uuid
 
 from app.core.database import Base
+from app.ai_engine.models.campaign_category_map import CampaignCategoryMap
 
 
 class Campaign(Base):
@@ -57,7 +58,7 @@ class Campaign(Base):
     )
 
     # =========================
-    # AI CONTROL (PHASE 1)
+    # AI CONTROL
     # =========================
     ai_active: Mapped[bool] = mapped_column(
         Boolean,
@@ -70,8 +71,13 @@ class Campaign(Base):
         nullable=True,
     )
 
+    ai_deactivated_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+
     # =========================
-    # BILLING (CURRENT DB)
+    # BILLING
     # =========================
     is_manual: Mapped[bool] = mapped_column(
         Boolean,
@@ -97,6 +103,16 @@ class Campaign(Base):
         DateTime,
         default=datetime.utcnow,
         nullable=False,
+    )
+
+    # =========================
+    # CATEGORY VISIBILITY (PHASE 9.2 — READ ONLY)
+    # =========================
+    category_map: Mapped[CampaignCategoryMap | None] = relationship(
+        CampaignCategoryMap,
+        primaryjoin="Campaign.id == CampaignCategoryMap.campaign_id",
+        uselist=False,
+        viewonly=True,
     )
 
 
