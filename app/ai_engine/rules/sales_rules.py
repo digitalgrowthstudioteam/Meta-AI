@@ -1,6 +1,7 @@
 from typing import List, Dict
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 
 from app.campaigns.models import Campaign
 from app.ai_engine.rules.base import BaseRule
@@ -14,17 +15,17 @@ from app.ai_engine.models.action_models import (
 
 class SalesROASDropRule(BaseRule):
     """
-    Phase 9.4 — Industry-Aware Sales ROAS Drop Rule
+    Phase 9.4 — Sales ROAS Drop Rule (Benchmark-Aware)
 
     Uses:
     - Aggregated campaign metrics (7D vs 30D)
-    - Industry benchmark comparison (30D)
+    - Industry benchmark comparison (category-level)
     - Decay / fatigue signals
     """
 
     MIN_PROFITABLE_ROAS = 1.2
-    ROAS_DROP_THRESHOLD = 0.75  # 25% drop vs baseline
-    INDUSTRY_UNDERPERFORM_THRESHOLD = -20.0  # % vs industry avg
+    ROAS_DROP_THRESHOLD = 0.75        # 25% drop vs self baseline
+    BENCHMARK_ROAS_DELTA = 0.80       # 20% worse than industry avg
 
     async def evaluate(
         self,
@@ -63,41 +64,60 @@ class SalesROASDropRule(BaseRule):
         signals = ai_context.get("signals", {})
 
         # -------------------------------------------------
-        # 🔥 Industry benchmark context (Phase 9.4)
+        # INDUSTRY BENCHMARK (PHASE 9.4)
         # -------------------------------------------------
-        benchmark_ctx = ai_context.get("industry_benchmark", {})
-        benchmark_metrics = benchmark_ctx.get("metrics", {})
-        roas_benchmark = benchmark_metrics.get("roas")
+        benchmark = await db.execute(
+            text(
+                """
+                SELECT avg_roas
+                FROM industry_benchmarks
+                WHERE category = (
+                    SELECT category
+                    FROM campaign_category_map
+                    WHERE campaign_id = :campaign_id
+                )
+                  AND objective_type = :objective
+                  AND window_type = '7d'
+                ORDER BY as_of_date DESC
+                LIMIT 1
+                """
+            ),
+            {
+                "campaign_id": str(campaign.id),
+                "objective": campaign.objective,
+            },
+        )
 
-        industry_delta = None
-        if roas_benchmark and roas_benchmark.get("delta_pct") is not None:
-            industry_delta = roas_benchmark["delta_pct"]
+        benchmark_row = benchmark.fetchone()
+        benchmark_roas = (
+            float(benchmark_row.avg_roas)
+            if benchmark_row and benchmark_row.avg_roas
+            else None
+        )
+
+        worse_than_benchmark = (
+            benchmark_roas
+            and short_roas < benchmark_roas * self.BENCHMARK_ROAS_DELTA
+        )
 
         # -------------------------------------------------
         # Decision logic
         # -------------------------------------------------
-        should_reduce = (
+        if (
             short_roas < self.MIN_PROFITABLE_ROAS
             and roas_ratio < self.ROAS_DROP_THRESHOLD
-        )
-
-        industry_confirmed = (
-            industry_delta is not None
-            and industry_delta < self.INDUSTRY_UNDERPERFORM_THRESHOLD
-        )
-
-        if should_reduce:
+        ):
             reason = "ROAS dropped compared to 30-day baseline."
+
+            confidence = 0.75
 
             if signals.get("decay"):
                 reason += " Performance decay detected."
+                confidence += 0.05
 
-            if industry_confirmed:
+            if worse_than_benchmark:
                 reason += " Campaign is also underperforming industry benchmarks."
-
-            confidence_score = 0.75
-            if industry_confirmed:
-                confidence_score = 0.9  # higher confidence with benchmark confirmation
+                confidence += 0.10
 
             return [
                 AIAction(
@@ -105,7 +125,7 @@ class SalesROASDropRule(BaseRule):
                     action_type=AIActionType.REDUCE_BUDGET,
                     summary=(
                         "Reduce budget: ROAS declined below profitable levels "
-                        "and is underperforming recent performance."
+                        "relative to historical and industry benchmarks."
                     ),
                     metrics=[
                         MetricEvidence(
@@ -115,20 +135,9 @@ class SalesROASDropRule(BaseRule):
                             baseline=round(long_roas, 3),
                             delta_pct=round((roas_ratio - 1) * 100, 2),
                         ),
-                        *(
-                            [
-                                MetricEvidence(
-                                    metric="industry_roas_delta",
-                                    window="30D",
-                                    value=round(industry_delta, 2),
-                                )
-                            ]
-                            if industry_confirmed
-                            else []
-                        ),
                     ],
                     confidence=ConfidenceScore(
-                        score=confidence_score,
+                        score=min(confidence, 0.95),
                         reason=reason,
                     ),
                 )
