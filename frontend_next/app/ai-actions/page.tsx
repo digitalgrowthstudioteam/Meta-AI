@@ -20,6 +20,7 @@ type MetricEvidence = {
   value: number;
   baseline?: number;
   delta_pct?: number;
+  source?: "campaign" | "industry" | "category";
 };
 
 type BreakdownEvidence = {
@@ -170,7 +171,7 @@ export default function AIActionsPage() {
       <div>
         <h1 className="text-xl font-semibold">AI Actions</h1>
         <p className="text-sm text-gray-500">
-          Review AI recommendations and control which campaigns AI can analyze
+          Transparent AI recommendations with full reasoning
         </p>
       </div>
 
@@ -216,69 +217,94 @@ export default function AIActionsPage() {
         <div className="surface p-6 text-sm text-gray-600">
           No AI actions yet.
           <br />
-          Enable AI on campaigns and allow time for performance signals to
-          accumulate.
+          Enable AI and allow sufficient data accumulation.
         </div>
       )}
 
-      {/* AI ACTIONS PER CAMPAIGN */}
+      {/* AI ACTIONS */}
       {aiActionSets.map((set) => {
-        const campaign = campaigns.find((c) => c.id === set.campaign_id);
+        const campaign = campaigns.find(
+          (c) => c.id === set.campaign_id
+        );
 
         return (
-          <div key={set.campaign_id} className="space-y-3">
+          <div key={set.campaign_id} className="space-y-4">
             <h2 className="text-lg font-medium">
               {campaign?.name ?? "Campaign"}
             </h2>
 
             {set.actions.map((action, i) => {
               const key = `${action.campaign_id}_${action.action_type}_${action.summary}`;
-              const isStrategy = action.action_type === "NO_ACTION";
 
               return (
                 <div
                   key={i}
-                  className={`border-l-4 p-4 rounded ${
-                    isStrategy
-                      ? "border-blue-400 bg-blue-50"
-                      : "border-amber-400 bg-amber-50"
-                  }`}
+                  className="border-l-4 border-amber-400 bg-amber-50 p-4 rounded space-y-3"
                 >
                   <div className="font-medium">{action.summary}</div>
 
-                  <div className="text-xs text-gray-600 mt-1">
+                  <div className="text-xs text-gray-700">
                     Confidence:{" "}
-                    {Math.round(action.confidence.score * 100)}%
+                    <strong>
+                      {Math.round(action.confidence.score * 100)}%
+                    </strong>
                   </div>
+
+                  {action.confidence.reason && (
+                    <div className="text-xs text-gray-600 italic">
+                      Why: {action.confidence.reason}
+                    </div>
+                  )}
+
+                  {/* METRIC EVIDENCE */}
+                  {action.metrics && action.metrics.length > 0 && (
+                    <div className="mt-2">
+                      <div className="text-xs font-medium text-gray-700 mb-1">
+                        Evidence
+                      </div>
+                      <ul className="text-xs text-gray-700 space-y-1">
+                        {action.metrics.map((m, idx) => (
+                          <li key={idx}>
+                            • <strong>{m.metric}</strong> ({m.window}):{" "}
+                            {m.value}
+                            {m.delta_pct !== undefined &&
+                              ` (${m.delta_pct}% vs baseline)`}
+                            {m.source && (
+                              <span className="ml-1 text-gray-500">
+                                [{m.source}]
+                              </span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
 
                   {/* BREAKDOWN EVIDENCE */}
                   {action.breakdowns && action.breakdowns.length > 0 && (
-                    <div className="mt-3 space-y-2">
+                    <div className="mt-3">
+                      <div className="text-xs font-medium text-gray-700 mb-1">
+                        Breakdown Insights
+                      </div>
                       {action.breakdowns.map((b, idx) => (
-                        <div key={idx} className="text-xs">
-                          <div className="font-medium text-gray-700">
-                            {b.dimension.replace("_", " ")}:
+                        <div key={idx} className="text-xs mb-2">
+                          <div className="font-medium">
+                            {b.dimension.replace("_", " ")}: {b.key}
                           </div>
-                          <div className="flex flex-wrap gap-2 mt-1">
-                            <span className="px-2 py-0.5 rounded bg-gray-200 text-gray-700">
-                              {b.key}
-                            </span>
+                          <ul className="ml-3 list-disc">
                             {b.metrics.map((m, mi) => (
-                              <span
-                                key={mi}
-                                className="px-2 py-0.5 rounded bg-white border text-gray-700"
-                              >
+                              <li key={mi}>
                                 {m.metric} ({m.window}): {m.value}
-                              </span>
+                              </li>
                             ))}
-                          </div>
+                          </ul>
                         </div>
                       ))}
                     </div>
                   )}
 
                   {!feedbackSent[key] && (
-                    <div className="mt-3 flex gap-2 text-xs">
+                    <div className="flex gap-2 text-xs pt-2">
                       <button
                         onClick={() => submitFeedback(action, true)}
                         className="px-2 py-1 bg-green-100 text-green-700 rounded"
