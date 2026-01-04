@@ -24,14 +24,18 @@ from app.ai_engine.services.campaign_vs_benchmark_service import (
     CampaignVsBenchmarkService,
 )
 
+# 🔥 PHASE 12 — USER TRUST
+from app.ai_engine.services.user_trust_service import UserTrustService
+
 
 class AIDecisionRunner:
     """
-    FINAL — Phase 11 Decision Runner (SAFE)
+    FINAL — Phase 12 Decision Runner (TRUST-AWARE)
 
     - No DB writes
     - No Meta mutation
-    - Respects execution locks & time windows
+    - Respects execution locks
+    - Applies user trust to confidence
     """
 
     def __init__(self) -> None:
@@ -51,6 +55,14 @@ class AIDecisionRunner:
         user_id,
     ) -> List[AIActionSet]:
 
+        # -------------------------------------------------
+        # PHASE 12 — USER TRUST (ONCE PER REQUEST)
+        # -------------------------------------------------
+        user_trust_score, trust_reason = await UserTrustService.get_user_trust_score(
+            db=db,
+            user_id=user_id,
+        )
+
         stmt = select(Campaign).where(
             Campaign.ai_active.is_(True),
             Campaign.is_archived.is_(False),
@@ -67,7 +79,7 @@ class AIDecisionRunner:
 
         for campaign in campaigns:
             # -------------------------------------------------
-            # PHASE 11 — HARD EXECUTION LOCK
+            # PHASE 11 — HARD EXECUTION LOCKS
             # -------------------------------------------------
             if campaign.ai_execution_locked:
                 continue
@@ -105,6 +117,20 @@ class AIDecisionRunner:
                     campaign=campaign,
                     ai_context=ai_context,
                 )
+
+                # ---------------------------------------------
+                # PHASE 12 — APPLY USER TRUST TO CONFIDENCE
+                # ---------------------------------------------
+                for action in rule_actions:
+                    original_score = action.confidence.score
+                    adjusted_score = round(
+                        min(1.0, max(0.0, original_score * (0.8 + (user_trust_score * 0.4)))),
+                        2,
+                    )
+
+                    action.confidence.score = adjusted_score
+                    action.confidence.reason += f" | User trust factor applied ({trust_reason})"
+
                 actions.extend(rule_actions)
 
             if actions:
