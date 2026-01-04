@@ -9,19 +9,18 @@ from app.ai_engine.models.action_models import (
     AIAction,
     AIActionType,
     MetricEvidence,
-    ConfidenceScore,
 )
 
 
 class SalesROASDropRule(BaseRule):
     """
-    Phase 10 — Sales ROAS Drop Rule (Explainable + Benchmark-Aware)
+    Phase 12 — Sales ROAS Drop Rule (Feedback-Calibrated)
 
     Uses:
     - Aggregated campaign metrics (7D vs 30D)
     - Industry benchmark comparison
-    - Decay / fatigue signals
-    - Produces explainability timeline
+    - Decay signals
+    - Feedback-weighted confidence
     """
 
     MIN_PROFITABLE_ROAS = 1.2
@@ -65,7 +64,7 @@ class SalesROASDropRule(BaseRule):
         signals = ai_context.get("signals", {})
 
         # -------------------------------------------------
-        # INDUSTRY BENCHMARK (PHASE 9.4)
+        # INDUSTRY BENCHMARK
         # -------------------------------------------------
         benchmark_result = await db.execute(
             text(
@@ -109,7 +108,7 @@ class SalesROASDropRule(BaseRule):
             and roas_ratio < self.ROAS_DROP_THRESHOLD
         ):
             reason = "ROAS dropped compared to 30-day baseline."
-            confidence = 0.75
+            base_confidence = 0.75
 
             explain_steps = [
                 f"7D ROAS = {round(short_roas, 3)}",
@@ -119,15 +118,25 @@ class SalesROASDropRule(BaseRule):
 
             if signals.get("decay"):
                 reason += " Performance decay detected."
-                confidence += 0.05
-                explain_steps.append("Decay signal detected from CTR/ROAS trend")
+                base_confidence += 0.05
+                explain_steps.append("Decay signal detected from trend")
 
             if worse_than_benchmark:
                 reason += " Campaign underperforms industry benchmark."
-                confidence += 0.10
+                base_confidence += 0.10
                 explain_steps.append(
                     f"Industry benchmark ROAS ≈ {round(benchmark_roas, 3)}"
                 )
+
+            # -------------------------------------------------
+            # Phase 12 — Feedback-calibrated confidence
+            # -------------------------------------------------
+            calibrated_confidence = await self.calibrate_confidence(
+                db=db,
+                base_score=min(base_confidence, 0.95),
+                campaign_id=campaign.id,
+                action_type=AIActionType.REDUCE_BUDGET.value,
+            )
 
             action = AIAction(
                 campaign_id=campaign.id,
@@ -158,15 +167,9 @@ class SalesROASDropRule(BaseRule):
                         else []
                     ),
                 ],
-                confidence=ConfidenceScore(
-                    score=min(confidence, 0.95),
-                    reason=reason,
-                ),
+                confidence=calibrated_confidence,
             )
 
-            # -------------------------------------------------
-            # Phase 10 — Attach explainability
-            # -------------------------------------------------
             return [
                 self.attach_explainability(
                     action,
