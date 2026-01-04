@@ -7,7 +7,7 @@ from app.core.db_session import get_db
 from app.auth.dependencies import require_user
 from app.users.models import User
 
-from app.ai_engine.decision_engine.decision_runner import DecisionRunner
+from app.ai_engine.decision_engine.decision_runner import AIDecisionRunner
 from app.ai_engine.models.action_models import AIActionSet
 
 
