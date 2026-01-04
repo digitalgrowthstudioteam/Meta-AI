@@ -1,15 +1,13 @@
 """
 Campaign Daily Metrics Sync Service
 
-PHASE 9.3 — AGGREGATION READY (FOUNDATION)
+PHASE 6.5 — META INSIGHTS INGESTION (LOCKED)
 
 Purpose:
 - Fetch daily Meta Insights per campaign
-- Upsert into campaign_daily_metrics
-- NO inference
-- NO AI
-- NO mutation of Meta
-- Prepare clean, normalized data for downstream aggregations
+- Idempotent upsert into campaign_daily_metrics
+- READ-ONLY Meta
+- NO AI / NO inference
 """
 
 from datetime import date, datetime
@@ -31,35 +29,52 @@ class CampaignDailyMetricsSyncService:
         self.client = MetaCampaignInsightsClient(db)
 
     # =====================================================
-    # ENTRY POINT — DAILY SYNC (LOCKED)
+    # ENTRY POINT — DAILY SYNC (ADMIN ONLY)
     # =====================================================
-    async def sync_for_date(self, target_date: date) -> None:
+    async def sync_for_date(self, target_date: date) -> Dict[str, int]:
         """
-        Phase 6.x responsibility:
-        - Raw, immutable metrics ingestion
-        - Campaign-level only
+        Phase 6.5 responsibility:
+        - Raw metrics ingestion
+        - Per-campaign isolation (fail-safe)
         """
 
         campaigns = await self._get_active_campaigns()
 
-        for campaign in campaigns:
-            insights = await self.client.fetch_daily_insights(
-                campaign=campaign,
-                target_date=target_date,
-            )
+        synced = 0
+        skipped = 0
+        failed = 0
 
-            if not insights:
+        for campaign in campaigns:
+            try:
+                insights = await self.client.fetch_daily_insights(
+                    campaign=campaign,
+                    target_date=target_date,
+                )
+
+                if not insights:
+                    skipped += 1
+                    continue
+
+                row = self._normalize_campaign_metrics(
+                    campaign=campaign,
+                    insights=insights,
+                    target_date=target_date,
+                )
+
+                await self._upsert_campaign_daily(row)
+                synced += 1
+
+            except Exception:
+                failed += 1
                 continue
 
-            row = self._normalize_campaign_metrics(
-                campaign=campaign,
-                insights=insights,
-                target_date=target_date,
-            )
-
-            await self._upsert_campaign_daily(row)
-
         await self.db.commit()
+
+        return {
+            "synced_campaigns": synced,
+            "skipped_campaigns": skipped,
+            "failed_campaigns": failed,
+        }
 
     # =====================================================
     # FETCH CAMPAIGNS (READ-ONLY)
@@ -77,7 +92,7 @@ class CampaignDailyMetricsSyncService:
         return result.scalars().all()
 
     # =====================================================
-    # NORMALIZATION — CAMPAIGN LEVEL (LOCKED)
+    # NORMALIZATION — CAMPAIGN LEVEL
     # =====================================================
     def _normalize_campaign_metrics(
         self,
@@ -124,7 +139,7 @@ class CampaignDailyMetricsSyncService:
         }
 
     # =====================================================
-    # UPSERT — CAMPAIGN DAILY METRICS (LOCKED)
+    # UPSERT — CAMPAIGN DAILY METRICS (IDEMPOTENT)
     # =====================================================
     async def _upsert_campaign_daily(self, row: Dict[str, Any]) -> None:
         await self.db.execute(
