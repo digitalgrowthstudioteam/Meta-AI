@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.plans.subscription_models import Subscription
 from app.admin.models import AdminOverride
 from app.campaigns.models import Campaign
+from app.meta_api.models import MetaAdAccount, UserMetaAdAccount
 
 
 # =========================================================
@@ -16,20 +17,9 @@ from app.campaigns.models import Campaign
 class EnforcementError(Exception):
     """
     Structured enforcement error.
-
-    Attributes:
-    - code: machine-readable error code
-    - message: human-readable message
-    - action: suggested UI action
     """
 
-    def __init__(
-        self,
-        *,
-        code: str,
-        message: str,
-        action: str,
-    ):
+    def __init__(self, *, code: str, message: str, action: str):
         self.code = code
         self.message = message
         self.action = action
@@ -45,11 +35,7 @@ class EnforcementError(Exception):
 
 class PlanEnforcementService:
     """
-    Central enforcement engine.
-
-    🔒 RULES:
-    - This is the ONLY place where limits are calculated
-    - UI, API, AI, CRON must ALL obey this service
+    🔒 SINGLE SOURCE OF TRUTH FOR LIMITS
     """
 
     # =====================================================
@@ -90,15 +76,30 @@ class PlanEnforcementService:
         db: AsyncSession,
         user_id: UUID,
     ) -> int:
-        stmt = select(Campaign).where(
-            Campaign.ai_active.is_(True),
-            Campaign.is_archived.is_(False),
+        """
+        Count ONLY campaigns belonging to the user
+        across their selected ad accounts.
+        """
+
+        stmt = (
+            select(Campaign)
+            .join(MetaAdAccount, Campaign.ad_account_id == MetaAdAccount.id)
+            .join(
+                UserMetaAdAccount,
+                UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
+            )
+            .where(
+                UserMetaAdAccount.user_id == user_id,
+                Campaign.ai_active.is_(True),
+                Campaign.is_archived.is_(False),
+            )
         )
+
         result = await db.execute(stmt)
         return len(result.scalars().all())
 
     # =====================================================
-    # PUBLIC API
+    # PUBLIC GATE
     # =====================================================
     @staticmethod
     async def can_activate_ai(
@@ -107,10 +108,7 @@ class PlanEnforcementService:
         user_id: UUID,
     ) -> None:
         """
-        Enforcement gate for AI activation.
-
-        Raises:
-            EnforcementError (structured)
+        Hard enforcement gate for AI activation.
         """
 
         subscription = await PlanEnforcementService._get_active_subscription(
@@ -126,7 +124,6 @@ class PlanEnforcementService:
 
         now = datetime.utcnow()
 
-        # ⛔ Trial / subscription expired
         if subscription.ends_at and now > subscription.ends_at:
             raise EnforcementError(
                 code="SUBSCRIPTION_EXPIRED",
@@ -134,10 +131,8 @@ class PlanEnforcementService:
                 action="RENEW_PLAN",
             )
 
-        # Base limit (snapshot)
         base_limit = subscription.ai_campaign_limit_snapshot or 0
 
-        # Admin override (if any)
         override = await PlanEnforcementService._get_active_admin_override(
             db, user_id
         )
@@ -152,9 +147,6 @@ class PlanEnforcementService:
         if active_count >= effective_limit:
             raise EnforcementError(
                 code="AI_LIMIT_REACHED",
-                message=(
-                    f"You have reached your AI campaign limit "
-                    f"({effective_limit})."
-                ),
+                message=f"AI campaign limit reached ({effective_limit}).",
                 action="UPGRADE_PLAN",
             )
