@@ -25,6 +25,17 @@ class AIActionType(str, Enum):
 
 
 # =========================================================
+# EXECUTION & APPROVAL GUARDRAILS (PHASE 11)
+# =========================================================
+class ActionApprovalStatus(str, Enum):
+    DRAFT = "DRAFT"
+    PENDING_APPROVAL = "PENDING_APPROVAL"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    EXPIRED = "EXPIRED"
+
+
+# =========================================================
 # EVIDENCE MODELS
 # =========================================================
 class MetricEvidence(BaseModel):
@@ -36,7 +47,6 @@ class MetricEvidence(BaseModel):
     window: str = Field(..., example="7D")
     value: float = Field(..., example=2.14)
 
-    # Optional comparison context
     baseline: Optional[float] = Field(
         None, example=2.85, description="Baseline value for comparison"
     )
@@ -44,7 +54,6 @@ class MetricEvidence(BaseModel):
         None, example=-24.9, description="% change vs baseline"
     )
 
-    # Source of truth (Phase 9.5+)
     source: Literal["campaign", "industry", "category"] = Field(
         default="campaign",
         description="Origin of this metric",
@@ -75,23 +84,13 @@ class BreakdownEvidence(BaseModel):
 # REASONING & EXPLAINABILITY (PHASE 10)
 # =========================================================
 class ReasoningStep(BaseModel):
-    """
-    Atomic reasoning step for explainability timeline.
-    """
-
     step: str = Field(..., example="7D ROAS dropped below 30D baseline")
     evidence: Optional[List[MetricEvidence]] = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 
 class ExplainabilityContext(BaseModel):
-    """
-    Human + UI consumable explanation context.
-    """
-
-    rule_name: str = Field(
-        ..., example="SalesROASDropRule"
-    )
+    rule_name: str = Field(..., example="SalesROASDropRule")
 
     decision_path: List[ReasoningStep] = Field(
         default_factory=list,
@@ -113,12 +112,7 @@ class ExplainabilityContext(BaseModel):
 # CONFIDENCE MODEL
 # =========================================================
 class ConfidenceScore(BaseModel):
-    """
-    Rule-based confidence score (0–1).
-    """
-
     score: float = Field(..., ge=0.0, le=1.0, example=0.82)
-
     reason: str = Field(
         ...,
         example="Confirmed by industry benchmark and stable 30D trend",
@@ -126,15 +120,11 @@ class ConfidenceScore(BaseModel):
 
 
 # =========================================================
-# CORE AI ACTION MODEL
+# CORE AI ACTION MODEL (PHASE 11 SAFE)
 # =========================================================
 class AIAction(BaseModel):
     """
-    Single AI recommendation.
-
-    Phase 10:
-    - Fully explainable
-    - Trust & reasoning attached
+    Single AI recommendation with execution guardrails.
     """
 
     # Scope
@@ -148,22 +138,55 @@ class AIAction(BaseModel):
         ..., example="Reduce budget due to ROAS decay vs industry benchmark"
     )
 
-    # Metric evidence (campaign / benchmark)
+    # Evidence
     metrics: List[MetricEvidence] = []
-
-    # Breakdown evidence (creative / placement / audience)
     breakdowns: List[BreakdownEvidence] = []
 
-    # Explainability (NEW)
+    # Explainability
     explainability: Optional[ExplainabilityContext] = None
 
     # Confidence
     confidence: ConfidenceScore
 
-    # Automation safety
-    is_auto_applicable: bool = Field(
-        default=False,
-        description="Always false until auto-execution phase",
+    # =====================================================
+    # EXECUTION GUARDRAILS (PHASE 11)
+    # =====================================================
+    approval_status: ActionApprovalStatus = Field(
+        default=ActionApprovalStatus.DRAFT,
+        description="Human approval lifecycle status",
+    )
+
+    requires_human_approval: bool = Field(
+        default=True,
+        description="Always true in Phase 11",
+    )
+
+    approved_by_user_id: Optional[UUID] = Field(
+        default=None,
+        description="User who approved this action",
+    )
+
+    approved_at: Optional[datetime] = None
+
+    approval_expires_at: Optional[datetime] = Field(
+        default=None,
+        description="Action becomes invalid after this time",
+    )
+
+    max_budget_change_pct: Optional[float] = Field(
+        default=None,
+        description="Hard safety cap for budget changes",
+    )
+
+    rollback_supported: bool = Field(
+        default=True,
+        description="Whether rollback metadata is available",
+    )
+
+    # Hard safety lock (cannot be bypassed)
+    auto_execution_blocked: bool = Field(
+        default=True,
+        description="System-level block on auto execution",
     )
 
     # Audit
@@ -174,10 +197,6 @@ class AIAction(BaseModel):
 # ACTION SET (MULTIPLE PER CAMPAIGN)
 # =========================================================
 class AIActionSet(BaseModel):
-    """
-    Collection of AI actions for a campaign.
-    """
-
     campaign_id: UUID
     actions: List[AIAction]
     evaluated_at: datetime = Field(default_factory=datetime.utcnow)
