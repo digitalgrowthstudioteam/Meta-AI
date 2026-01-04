@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Literal
 from datetime import datetime
 from uuid import UUID
 
@@ -44,10 +44,10 @@ class MetricEvidence(BaseModel):
         None, example=-24.9, description="% change vs baseline"
     )
 
-    # Phase 9.5 — benchmark awareness
-    source: Optional[str] = Field(
+    # Source of truth (Phase 9.5+)
+    source: Literal["campaign", "industry", "category"] = Field(
         default="campaign",
-        description="campaign | industry | category",
+        description="Origin of this metric",
     )
 
 
@@ -72,14 +72,49 @@ class BreakdownEvidence(BaseModel):
 
 
 # =========================================================
+# REASONING & EXPLAINABILITY (PHASE 10)
+# =========================================================
+class ReasoningStep(BaseModel):
+    """
+    Atomic reasoning step for explainability timeline.
+    """
+
+    step: str = Field(..., example="7D ROAS dropped below 30D baseline")
+    evidence: Optional[List[MetricEvidence]] = None
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+
+class ExplainabilityContext(BaseModel):
+    """
+    Human + UI consumable explanation context.
+    """
+
+    rule_name: str = Field(
+        ..., example="SalesROASDropRule"
+    )
+
+    decision_path: List[ReasoningStep] = Field(
+        default_factory=list,
+        description="Ordered reasoning steps",
+    )
+
+    benchmark_used: bool = Field(
+        default=False,
+        description="Was industry/category benchmark used?",
+    )
+
+    trust_note: Optional[str] = Field(
+        None,
+        example="Decision confirmed by industry benchmark with high sample size",
+    )
+
+
+# =========================================================
 # CONFIDENCE MODEL
 # =========================================================
 class ConfidenceScore(BaseModel):
     """
     Rule-based confidence score (0–1).
-
-    Phase 9.5:
-    - Boosted when industry / category benchmarks confirm
     """
 
     score: float = Field(..., ge=0.0, le=1.0, example=0.82)
@@ -97,10 +132,9 @@ class AIAction(BaseModel):
     """
     Single AI recommendation.
 
-    Campaign-scoped decision backed by:
-    - Aggregated metrics
-    - Breakdown intelligence
-    - Industry / category benchmarks (Phase 9.5)
+    Phase 10:
+    - Fully explainable
+    - Trust & reasoning attached
     """
 
     # Scope
@@ -119,6 +153,9 @@ class AIAction(BaseModel):
 
     # Breakdown evidence (creative / placement / audience)
     breakdowns: List[BreakdownEvidence] = []
+
+    # Explainability (NEW)
+    explainability: Optional[ExplainabilityContext] = None
 
     # Confidence
     confidence: ConfidenceScore
