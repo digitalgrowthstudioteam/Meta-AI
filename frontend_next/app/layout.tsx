@@ -47,6 +47,12 @@ export default function RootLayout({
               >
                 Audience Insights
               </NavLink>
+              <NavLink
+                href="/industry-benchmarks"
+                current={pathname === "/industry-benchmarks"}
+              >
+                Industry Benchmarks
+              </NavLink>
               <NavLink href="/reports" current={pathname === "/reports"}>
                 Reports
               </NavLink>
