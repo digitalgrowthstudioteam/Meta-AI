@@ -14,16 +14,17 @@ from app.ai_engine.models.action_models import (
 
 class SalesROASDropRule(BaseRule):
     """
-    Phase 8 — AI-Aware Sales ROAS Drop Rule
+    Phase 9.4 — Industry-Aware Sales ROAS Drop Rule
 
     Uses:
-    - Aggregated metrics only
-    - 7D vs 30D ROAS comparison
-    - AI signals: decay / fatigue
+    - Aggregated campaign metrics (7D vs 30D)
+    - Industry benchmark comparison (30D)
+    - Decay / fatigue signals
     """
 
     MIN_PROFITABLE_ROAS = 1.2
     ROAS_DROP_THRESHOLD = 0.75  # 25% drop vs baseline
+    INDUSTRY_UNDERPERFORM_THRESHOLD = -20.0  # % vs industry avg
 
     async def evaluate(
         self,
@@ -34,7 +35,7 @@ class SalesROASDropRule(BaseRule):
     ) -> List[AIAction]:
 
         # -------------------------------------------------
-        # Campaign eligibility
+        # Eligibility
         # -------------------------------------------------
         if campaign.objective.upper() not in (
             "SALES",
@@ -62,16 +63,41 @@ class SalesROASDropRule(BaseRule):
         signals = ai_context.get("signals", {})
 
         # -------------------------------------------------
+        # 🔥 Industry benchmark context (Phase 9.4)
+        # -------------------------------------------------
+        benchmark_ctx = ai_context.get("industry_benchmark", {})
+        benchmark_metrics = benchmark_ctx.get("metrics", {})
+        roas_benchmark = benchmark_metrics.get("roas")
+
+        industry_delta = None
+        if roas_benchmark and roas_benchmark.get("delta_pct") is not None:
+            industry_delta = roas_benchmark["delta_pct"]
+
+        # -------------------------------------------------
         # Decision logic
         # -------------------------------------------------
-        if (
+        should_reduce = (
             short_roas < self.MIN_PROFITABLE_ROAS
             and roas_ratio < self.ROAS_DROP_THRESHOLD
-        ):
+        )
+
+        industry_confirmed = (
+            industry_delta is not None
+            and industry_delta < self.INDUSTRY_UNDERPERFORM_THRESHOLD
+        )
+
+        if should_reduce:
             reason = "ROAS dropped compared to 30-day baseline."
 
             if signals.get("decay"):
-                reason += " Performance decay signal detected."
+                reason += " Performance decay detected."
+
+            if industry_confirmed:
+                reason += " Campaign is also underperforming industry benchmarks."
+
+            confidence_score = 0.75
+            if industry_confirmed:
+                confidence_score = 0.9  # higher confidence with benchmark confirmation
 
             return [
                 AIAction(
@@ -79,7 +105,7 @@ class SalesROASDropRule(BaseRule):
                     action_type=AIActionType.REDUCE_BUDGET,
                     summary=(
                         "Reduce budget: ROAS declined below profitable levels "
-                        "in the last 7 days."
+                        "and is underperforming recent performance."
                     ),
                     metrics=[
                         MetricEvidence(
@@ -88,10 +114,21 @@ class SalesROASDropRule(BaseRule):
                             value=round(short_roas, 3),
                             baseline=round(long_roas, 3),
                             delta_pct=round((roas_ratio - 1) * 100, 2),
-                        )
+                        ),
+                        *(
+                            [
+                                MetricEvidence(
+                                    metric="industry_roas_delta",
+                                    window="30D",
+                                    value=round(industry_delta, 2),
+                                )
+                            ]
+                            if industry_confirmed
+                            else []
+                        ),
                     ],
                     confidence=ConfidenceScore(
-                        score=0.8,
+                        score=confidence_score,
                         reason=reason,
                     ),
                 )
