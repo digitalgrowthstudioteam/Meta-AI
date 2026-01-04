@@ -1,230 +1,159 @@
-import httpx
-from typing import List, Dict, Optional
+"""
+Campaign Daily Metrics Sync Service
+
+Purpose:
+- Fetch daily Meta Insights per campaign
+- Upsert into campaign_daily_metrics
+- No duplication (campaign_id + date)
+- Objective-aware (LEAD vs SALES)
+- Safe, idempotent, async
+"""
+
 from datetime import date, datetime
+from typing import Iterable, Dict, Any
+from uuid import uuid4
 
-from app.meta_api.models import MetaAdAccount
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.campaigns.models import Campaign
+from app.meta_insights.clients.meta_campaign_insights_client import (
+    MetaCampaignInsightsClient,
+)
 
 
-class MetaCampaignInsightsClient:
-    """
-    READ-ONLY Meta Campaign Insights Client.
+class CampaignDailyMetricsSyncService:
+    def __init__(self, db: AsyncSession):
+        self.db = db
+        self.client = MetaCampaignInsightsClient(db)
 
-    Responsibilities:
-    - Fetch DAILY performance insights per campaign
-    - Fetch DAILY performance insights with breakdowns
-    - Respect Meta Ad Account timezone
-    - Normalize Meta insights payload
-    - Never mutate Meta
-    - Never apply business logic
-    """
-
-    GRAPH_BASE_URL = "https://graph.facebook.com/v19.0"
-
-    # =====================================================
-    # BASE — CAMPAIGN LEVEL (UNCHANGED)
-    # =====================================================
-    @classmethod
-    async def fetch_daily_insights(
-        cls,
-        *,
-        ad_account: MetaAdAccount,
-        since: date,
-        until: date,
-    ) -> List[Dict]:
+    async def sync_for_date(self, target_date: date) -> None:
         """
-        Fetch DAILY insights for all campaigns in an ad account.
+        Sync metrics for all active campaigns for a single date.
+        Safe to re-run.
         """
+        campaigns = await self._get_active_campaigns()
 
-        if not ad_account.access_token:
-            raise RuntimeError("Meta ad account missing access token")
+        for campaign in campaigns:
+            insights = await self.client.fetch_daily_insights(
+                campaign=campaign,
+                target_date=target_date,
+            )
 
-        url = f"{cls.GRAPH_BASE_URL}/act_{ad_account.meta_account_id}/insights"
+            if not insights:
+                continue
 
-        params = {
-            "level": "campaign",
-            "time_increment": 1,
-            "time_range": {
-                "since": since.isoformat(),
-                "until": until.isoformat(),
-            },
-            "fields": ",".join(
-                [
-                    "campaign_id",
-                    "impressions",
-                    "clicks",
-                    "spend",
-                    "actions",
-                    "action_values",
-                    "ctr",
-                    "cpc",
-                    "cost_per_action_type",
-                    "purchase_roas",
-                    "date_start",
-                ]
-            ),
-            "access_token": ad_account.access_token,
-        }
+            row = self._normalize_metrics(campaign, insights, target_date)
+            await self._upsert(row)
 
-        return await cls._execute_and_normalize(url, params)
+        await self.db.commit()
 
-    # =====================================================
-    # BREAKDOWN — DAILY INSIGHTS (NEW)
-    # =====================================================
-    @classmethod
-    async def fetch_daily_insights_with_breakdown(
-        cls,
-        *,
-        ad_account: MetaAdAccount,
-        since: date,
-        until: date,
-        breakdowns: List[str],
-    ) -> List[Dict]:
-        """
-        Fetch DAILY insights with a specific breakdown.
-
-        Example breakdowns:
-        - ["ad_id"]
-        - ["platform", "placement"]
-        - ["age", "gender"]
-        - ["region"]
-        """
-
-        if not ad_account.access_token:
-            raise RuntimeError("Meta ad account missing access token")
-
-        url = f"{cls.GRAPH_BASE_URL}/act_{ad_account.meta_account_id}/insights"
-
-        params = {
-            "level": "campaign",
-            "time_increment": 1,
-            "breakdowns": ",".join(breakdowns),
-            "time_range": {
-                "since": since.isoformat(),
-                "until": until.isoformat(),
-            },
-            "fields": ",".join(
-                [
-                    "campaign_id",
-                    "ad_id",
-                    "impressions",
-                    "clicks",
-                    "spend",
-                    "actions",
-                    "action_values",
-                    "ctr",
-                    "cpc",
-                    "cost_per_action_type",
-                    "purchase_roas",
-                    "date_start",
-                ]
-            ),
-            "access_token": ad_account.access_token,
-        }
-
-        return await cls._execute_and_normalize(
-            url,
-            params,
-            breakdowns=breakdowns,
+    async def _get_active_campaigns(self) -> Iterable[Campaign]:
+        result = await self.db.execute(
+            text(
+                """
+                SELECT *
+                FROM campaigns
+                WHERE is_deleted = false
+                """
+            )
         )
+        return result.scalars().all()
 
-    # =====================================================
-    # INTERNAL — EXECUTION & NORMALIZATION
-    # =====================================================
-    @classmethod
-    async def _execute_and_normalize(
-        cls,
-        url: str,
-        params: Dict,
-        breakdowns: Optional[List[str]] = None,
-    ) -> List[Dict]:
-        insights: List[Dict] = []
+    def _normalize_metrics(
+        self,
+        campaign: Campaign,
+        insights: Dict[str, Any],
+        target_date: date,
+    ) -> Dict[str, Any]:
+        impressions = int(insights.get("impressions", 0))
+        clicks = int(insights.get("clicks", 0))
+        spend = float(insights.get("spend", 0))
 
-        async with httpx.AsyncClient(timeout=30) as client:
-            while True:
-                response = await client.get(url, params=params)
+        leads = int(insights.get("leads", 0))
+        purchases = int(insights.get("purchases", 0))
+        revenue = float(insights.get("purchase_value", 0))
 
-                if response.status_code != 200:
-                    raise RuntimeError(
-                        f"Meta Insights API error {response.status_code}: {response.text}"
-                    )
-
-                payload = response.json()
-
-                for item in payload.get("data", []):
-                    insights.append(
-                        cls._normalize_row(
-                            item=item,
-                            breakdowns=breakdowns,
-                        )
-                    )
-
-                paging = payload.get("paging", {})
-                next_url = paging.get("next")
-
-                if not next_url:
-                    break
-
-                url = next_url
-                params = None
-
-        return insights
-
-    # =====================================================
-    # NORMALIZATION (NO BUSINESS LOGIC)
-    # =====================================================
-    @staticmethod
-    def _normalize_row(
-        *,
-        item: Dict,
-        breakdowns: Optional[List[str]] = None,
-    ) -> Dict:
-        impressions = int(item.get("impressions", 0))
-        clicks = int(item.get("clicks", 0))
-        spend = float(item.get("spend", 0.0))
-
-        conversions = 0
-        for action in item.get("actions", []):
-            if action.get("action_type") in ("lead", "purchase"):
-                conversions += int(action.get("value", 0))
-
-        conversion_value = None
-        roas = None
-
-        purchase_roas = item.get("purchase_roas")
-        if purchase_roas and isinstance(purchase_roas, list):
-            roas = float(purchase_roas[0].get("value", 0))
-            for av in item.get("action_values", []):
-                if av.get("action_type") == "purchase":
-                    conversion_value = float(av.get("value", 0))
-
-        ctr = float(item.get("ctr")) if item.get("ctr") else None
+        ctr = (clicks / impressions) if impressions else None
 
         cpl = None
         cpa = None
-        for cpa_item in item.get("cost_per_action_type", []):
-            if cpa_item.get("action_type") == "lead":
-                cpl = float(cpa_item.get("value"))
-            if cpa_item.get("action_type") == "purchase":
-                cpa = float(cpa_item.get("value"))
+        roas = None
 
-        row = {
-            "campaign_meta_id": item.get("campaign_id"),
-            "metric_date": date.fromisoformat(item.get("date_start")),
+        if campaign.objective == "LEAD" and leads > 0:
+            cpl = spend / leads
+
+        if campaign.objective == "SALES" and purchases > 0:
+            cpa = spend / purchases
+            roas = revenue / spend if spend > 0 else None
+
+        return {
+            "id": str(uuid4()),
+            "campaign_id": str(campaign.id),
+            "date": target_date,
             "impressions": impressions,
             "clicks": clicks,
             "spend": spend,
-            "conversions": conversions,
-            "conversion_value": conversion_value,
+            "leads": leads,
+            "purchases": purchases,
+            "revenue": revenue,
             "ctr": ctr,
             "cpl": cpl,
             "cpa": cpa,
             "roas": roas,
-            "meta_fetched_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow(),
         }
 
-        # Attach breakdown fields dynamically
-        if breakdowns:
-            for b in breakdowns:
-                row[b] = item.get(b)
-
-        return row
+    async def _upsert(self, row: Dict[str, Any]) -> None:
+        await self.db.execute(
+            text(
+                """
+                INSERT INTO campaign_daily_metrics (
+                    id,
+                    campaign_id,
+                    date,
+                    impressions,
+                    clicks,
+                    spend,
+                    leads,
+                    purchases,
+                    revenue,
+                    ctr,
+                    cpl,
+                    cpa,
+                    roas,
+                    updated_at
+                )
+                VALUES (
+                    :id,
+                    :campaign_id,
+                    :date,
+                    :impressions,
+                    :clicks,
+                    :spend,
+                    :leads,
+                    :purchases,
+                    :revenue,
+                    :ctr,
+                    :cpl,
+                    :cpa,
+                    :roas,
+                    :updated_at
+                )
+                ON CONFLICT (campaign_id, date)
+                DO UPDATE SET
+                    impressions = EXCLUDED.impressions,
+                    clicks = EXCLUDED.clicks,
+                    spend = EXCLUDED.spend,
+                    leads = EXCLUDED.leads,
+                    purchases = EXCLUDED.purchases,
+                    revenue = EXCLUDED.revenue,
+                    ctr = EXCLUDED.ctr,
+                    cpl = EXCLUDED.cpl,
+                    cpa = EXCLUDED.cpa,
+                    roas = EXCLUDED.roas,
+                    updated_at = EXCLUDED.updated_at
+                """
+            ),
+            row,
+        )
