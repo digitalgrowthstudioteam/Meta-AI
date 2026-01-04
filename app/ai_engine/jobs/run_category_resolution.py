@@ -1,6 +1,6 @@
 import asyncio
 
-from app.core.db_session import async_session
+from app.core.db_session import AsyncSessionLocal
 from app.ai_engine.services.category_resolution_service import (
     CategoryResolutionService,
 )
