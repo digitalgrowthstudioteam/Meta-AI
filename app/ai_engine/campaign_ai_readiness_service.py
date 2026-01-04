@@ -1,13 +1,14 @@
 """
 Campaign AI Readiness Service
 
-PHASE 9.3 — ALIGNED & LOCKED
+PHASE 9.4 — BENCHMARK AWARE (LOCKED)
 
 Purpose:
 - Prepare AI-consumable intelligence
 - Score campaigns and breakdowns
 - Compare time windows
 - Detect fatigue, scale, decay
+- Attach industry benchmark context
 - NO ML (rules + math only)
 """
 
@@ -34,7 +35,7 @@ class CampaignAIReadinessService:
         self.db = db
 
     # =========================================================
-    # CAMPAIGN-LEVEL AI SCORE
+    # CAMPAIGN-LEVEL AI SCORE (PHASE 9.4)
     # =========================================================
     async def get_campaign_ai_score(
         self,
@@ -49,13 +50,20 @@ class CampaignAIReadinessService:
             return {"status": "insufficient_data"}
 
         score = self._score_performance(short, long)
+        signals = self._detect_signals(short, long)
+
+        industry_benchmark = await self._get_industry_benchmark(
+            campaign_id=campaign_id,
+            window=short_window,
+        )
 
         return {
             "campaign_id": campaign_id,
-            "short_window": short_window,
-            "long_window": long_window,
+            "short_window": short,
+            "long_window": long,
             "ai_score": score,
-            "signals": self._detect_signals(short, long),
+            "signals": signals,
+            "industry_benchmark": industry_benchmark,
         }
 
     # =========================================================
@@ -120,6 +128,55 @@ class CampaignAIReadinessService:
         )
         row = result.fetchone()
         return dict(row._mapping) if row else None
+
+    async def _get_industry_benchmark(
+        self,
+        *,
+        campaign_id: str,
+        window: str,
+    ) -> Dict | None:
+        """
+        Fetch latest industry benchmark for campaign category + objective.
+        """
+        result = await self.db.execute(
+            text(
+                """
+                SELECT
+                    b.avg_ctr,
+                    b.avg_cpl,
+                    b.avg_cpa,
+                    b.avg_roas,
+                    b.p25_roas,
+                    b.p50_roas,
+                    b.p75_roas,
+                    b.campaign_count
+                FROM industry_benchmarks b
+                WHERE b.category = (
+                    SELECT category
+                    FROM campaign_category_map
+                    WHERE campaign_id = :campaign_id
+                )
+                  AND b.objective_type = (
+                    SELECT objective
+                    FROM campaigns
+                    WHERE id = :campaign_id
+                )
+                  AND b.window_type = :window
+                ORDER BY b.as_of_date DESC
+                LIMIT 1
+                """
+            ),
+            {
+                "campaign_id": campaign_id,
+                "window": window,
+            },
+        )
+
+        row = result.fetchone()
+        if not row:
+            return None
+
+        return dict(row._mapping)
 
     def _score_performance(self, short: Dict, long: Dict) -> float:
         """
