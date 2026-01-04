@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from uuid import UUID
 from datetime import datetime
@@ -31,15 +31,9 @@ class CampaignService:
     ) -> list[Campaign]:
         stmt = (
             select(Campaign)
-            .options(selectinload(Campaign.category_map))  # ✅ FIX
-            .join(
-                MetaAdAccount,
-                Campaign.ad_account_id == MetaAdAccount.id,
-            )
-            .join(
-                UserMetaAdAccount,
-                UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
-            )
+            .options(selectinload(Campaign.category_map))
+            .join(MetaAdAccount, Campaign.ad_account_id == MetaAdAccount.id)
+            .join(UserMetaAdAccount, UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id)
             .where(
                 UserMetaAdAccount.user_id == user_id,
                 Campaign.is_archived.is_(False),
@@ -50,34 +44,7 @@ class CampaignService:
         return result.scalars().all()
 
     # =====================================================
-    # LIST CAMPAIGNS (LEGACY — KEEP)
-    # =====================================================
-    @staticmethod
-    async def list_campaigns(
-        db: AsyncSession,
-        user_id: UUID,
-    ) -> list[Campaign]:
-        stmt = (
-            select(Campaign)
-            .join(
-                MetaAdAccount,
-                Campaign.ad_account_id == MetaAdAccount.id,
-            )
-            .join(
-                UserMetaAdAccount,
-                UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
-            )
-            .where(
-                UserMetaAdAccount.user_id == user_id,
-                Campaign.is_archived.is_(False),
-            )
-        )
-
-        result = await db.execute(stmt)
-        return result.scalars().all()
-
-    # =====================================================
-    # SYNC CAMPAIGNS FROM META
+    # SYNC CAMPAIGNS FROM META (PHASE 5 — SAFE)
     # =====================================================
     @staticmethod
     async def sync_from_meta(
@@ -87,10 +54,7 @@ class CampaignService:
 
         stmt = (
             select(MetaAdAccount)
-            .join(
-                UserMetaAdAccount,
-                UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
-            )
+            .join(UserMetaAdAccount, UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id)
             .where(
                 UserMetaAdAccount.user_id == user_id,
                 MetaAdAccount.is_active.is_(True),
@@ -148,7 +112,7 @@ class CampaignService:
         return synced_campaigns
 
     # =====================================================
-    # AI TOGGLE (ENFORCED)
+    # AI TOGGLE (PHASE 6 — HARD ENFORCED)
     # =====================================================
     @staticmethod
     async def toggle_ai(
@@ -160,14 +124,8 @@ class CampaignService:
     ) -> Campaign:
         stmt = (
             select(Campaign)
-            .join(
-                MetaAdAccount,
-                Campaign.ad_account_id == MetaAdAccount.id,
-            )
-            .join(
-                UserMetaAdAccount,
-                UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
-            )
+            .join(MetaAdAccount, Campaign.ad_account_id == MetaAdAccount.id)
+            .join(UserMetaAdAccount, UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id)
             .where(
                 Campaign.id == campaign_id,
                 UserMetaAdAccount.user_id == user_id,
@@ -180,6 +138,9 @@ class CampaignService:
         if not campaign:
             raise ValueError("Campaign not found")
 
+        # -----------------------------
+        # ENFORCE PLAN LIMITS
+        # -----------------------------
         if enable and not campaign.ai_active:
             try:
                 await PlanEnforcementService.can_activate_ai(
@@ -187,8 +148,41 @@ class CampaignService:
                     user_id=user_id,
                 )
             except EnforcementError as e:
-                raise ValueError(str(e))
+                raise EnforcementError(
+                    code="AI_CAMPAIGN_LIMIT_REACHED",
+                    message=str(e),
+                )
 
+            # Count active AI campaigns
+            count_stmt = (
+                select(func.count(Campaign.id))
+                .join(MetaAdAccount, Campaign.ad_account_id == MetaAdAccount.id)
+                .join(UserMetaAdAccount, UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id)
+                .where(
+                    UserMetaAdAccount.user_id == user_id,
+                    Campaign.ai_active.is_(True),
+                )
+            )
+            count_result = await db.execute(count_stmt)
+            active_count = count_result.scalar_one()
+
+            allowed = await PlanEnforcementService.get_ai_campaign_limit(
+                db=db,
+                user_id=user_id,
+            )
+
+            if active_count >= allowed:
+                raise EnforcementError(
+                    code="AI_CAMPAIGN_LIMIT_REACHED",
+                    message=(
+                        f"AI campaign limit reached "
+                        f"({allowed}). Upgrade plan to enable more."
+                    ),
+                )
+
+        # -----------------------------
+        # APPLY TOGGLE
+        # -----------------------------
         campaign.ai_active = enable
         campaign.ai_activated_at = datetime.utcnow() if enable else None
         campaign.ai_deactivated_at = None if enable else datetime.utcnow()
