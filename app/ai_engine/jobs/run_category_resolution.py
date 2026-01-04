@@ -7,7 +7,7 @@ from app.ai_engine.services.category_resolution_service import (
 
 
 async def main():
-    async with async_session() as db:
+    async with AsyncSessionLocal() as db:
         service = CategoryResolutionService(db)
         result = await service.run()
         print("Category resolution job completed:", result)
