@@ -1,16 +1,19 @@
 """
 Campaign Daily Metrics Sync Service
 
+PHASE 9.3 — AGGREGATION READY (FOUNDATION)
+
 Purpose:
 - Fetch daily Meta Insights per campaign
 - Upsert into campaign_daily_metrics
-- No duplication (campaign_id + date)
-- Objective-aware (LEAD vs SALES)
-- Safe, idempotent, async
+- NO inference
+- NO AI
+- NO mutation of Meta
+- Prepare clean, normalized data for downstream aggregations
 """
 
 from datetime import date, datetime
-from typing import Iterable, Dict, Any
+from typing import Dict, Any
 from uuid import uuid4
 
 from sqlalchemy import text
@@ -27,11 +30,16 @@ class CampaignDailyMetricsSyncService:
         self.db = db
         self.client = MetaCampaignInsightsClient(db)
 
+    # =====================================================
+    # ENTRY POINT — DAILY SYNC (LOCKED)
+    # =====================================================
     async def sync_for_date(self, target_date: date) -> None:
         """
-        Sync metrics for all active campaigns for a single date.
-        Safe to re-run.
+        Phase 6.x responsibility:
+        - Raw, immutable metrics ingestion
+        - Campaign-level only
         """
+
         campaigns = await self._get_active_campaigns()
 
         for campaign in campaigns:
@@ -43,21 +51,35 @@ class CampaignDailyMetricsSyncService:
             if not insights:
                 continue
 
-            row = self._normalize_metrics(campaign, insights, target_date)
-            await self._upsert(row)
+            row = self._normalize_campaign_metrics(
+                campaign=campaign,
+                insights=insights,
+                target_date=target_date,
+            )
+
+            await self._upsert_campaign_daily(row)
 
         await self.db.commit()
 
+    # =====================================================
+    # FETCH CAMPAIGNS (READ-ONLY)
+    # =====================================================
     async def _get_active_campaigns(self):
         result = await self.db.execute(
-            text("""
+            text(
+                """
                 SELECT *
                 FROM campaigns
-            """)
+                WHERE is_archived = FALSE
+                """
+            )
         )
         return result.scalars().all()
 
-    def _normalize_metrics(
+    # =====================================================
+    # NORMALIZATION — CAMPAIGN LEVEL (LOCKED)
+    # =====================================================
+    def _normalize_campaign_metrics(
         self,
         campaign: Campaign,
         insights: Dict[str, Any],
@@ -101,7 +123,10 @@ class CampaignDailyMetricsSyncService:
             "updated_at": datetime.utcnow(),
         }
 
-    async def _upsert(self, row: Dict[str, Any]) -> None:
+    # =====================================================
+    # UPSERT — CAMPAIGN DAILY METRICS (LOCKED)
+    # =====================================================
+    async def _upsert_campaign_daily(self, row: Dict[str, Any]) -> None:
         await self.db.execute(
             text(
                 """
