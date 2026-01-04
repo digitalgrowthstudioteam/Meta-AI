@@ -1,10 +1,12 @@
 """
 Campaign Breakdown Aggregation Service
 
+PHASE 9.3.2 — CORRECTED & LOCKED
+
 Purpose:
 - Aggregate performance by creative, placement, geography, demographics, device
 - Windowed (1D, 3D, 7D, 14D, 30D, 90D, Lifetime)
-- AI-ready breakdown intelligence
+- Source of truth: campaign_breakdown_daily_metrics
 """
 
 from datetime import date, timedelta, datetime
@@ -29,6 +31,9 @@ class CampaignBreakdownAggregationService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    # =====================================================
+    # PUBLIC ENTRY POINT
+    # =====================================================
     async def aggregate_for_date(self, as_of_date: date) -> None:
         campaign_ids = await self._get_campaign_ids()
 
@@ -43,12 +48,24 @@ class CampaignBreakdownAggregationService:
 
         await self.db.commit()
 
+    # =====================================================
+    # FETCH ACTIVE CAMPAIGNS
+    # =====================================================
     async def _get_campaign_ids(self) -> List[str]:
         result = await self.db.execute(
-            text("SELECT id FROM campaigns WHERE is_archived = false")
+            text(
+                """
+                SELECT id
+                FROM campaigns
+                WHERE is_archived = FALSE
+                """
+            )
         )
         return [str(row[0]) for row in result.fetchall()]
 
+    # =====================================================
+    # CORE AGGREGATION LOGIC (FIXED)
+    # =====================================================
     async def _aggregate_campaign_breakdowns(
         self,
         campaign_id: str,
@@ -67,25 +84,25 @@ class CampaignBreakdownAggregationService:
             SELECT
                 creative_id,
                 placement,
-                city,
+                region,
                 gender,
-                age_range,
-                device,
+                age_group,
+                platform,
                 SUM(impressions)      AS impressions,
                 SUM(clicks)           AS clicks,
                 SUM(spend)            AS spend,
                 SUM(conversions)      AS conversions,
                 SUM(conversion_value) AS revenue
-            FROM campaign_daily_metrics
+            FROM campaign_breakdown_daily_metrics
             WHERE campaign_id = :campaign_id
               AND {date_filter}
             GROUP BY
                 creative_id,
                 placement,
-                city,
+                region,
                 gender,
-                age_range,
-                device
+                age_group,
+                platform
         """
 
         params = {
@@ -116,10 +133,10 @@ class CampaignBreakdownAggregationService:
                 window_end=as_of_date,
                 creative_id=row.creative_id,
                 placement=row.placement,
-                city=row.city,
+                region=row.region,
                 gender=row.gender,
-                age_range=row.age_range,
-                device=row.device,
+                age_group=row.age_group,
+                platform=row.platform,
                 impressions=impressions,
                 clicks=clicks,
                 spend=spend,
@@ -131,6 +148,9 @@ class CampaignBreakdownAggregationService:
                 roas=roas,
             )
 
+    # =====================================================
+    # UPSERT AGGREGATES (IDEMPOTENT)
+    # =====================================================
     async def _upsert_breakdown(self, **data) -> None:
         await self.db.execute(
             text(
@@ -143,10 +163,10 @@ class CampaignBreakdownAggregationService:
                     window_end_date,
                     creative_id,
                     placement,
-                    city,
+                    region,
                     gender,
-                    age_range,
-                    device,
+                    age_group,
+                    platform,
                     impressions,
                     clicks,
                     spend,
@@ -166,10 +186,10 @@ class CampaignBreakdownAggregationService:
                     :window_end,
                     :creative_id,
                     :placement,
-                    :city,
+                    :region,
                     :gender,
-                    :age_range,
-                    :device,
+                    :age_group,
+                    :platform,
                     :impressions,
                     :clicks,
                     :spend,
