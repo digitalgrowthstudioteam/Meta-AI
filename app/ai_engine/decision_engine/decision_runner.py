@@ -1,34 +1,42 @@
 from datetime import date
-from typing import List
+from typing import List, Dict
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.campaigns.models import Campaign
-from app.ai_engine.models.action_models import AIAction
-from app.ai_engine.decision_engine.campaign_decision_service import (
-    CampaignDecisionService,
-)
+from app.ai_engine.models.action_models import AIAction, AIActionSet
+from app.ai_engine.rules.lead_rules import LeadPerformanceDropRule
+from app.ai_engine.rules.sales_rules import SalesROASDropRule
+from app.ai_engine.rules.breakdown_rules import BestCreativeRule
 
 
 class AIDecisionRunner:
     """
-    Orchestrates AI decision generation for campaigns.
+    FINAL — Phase 7 Decision Runner (LIVE, NO DB)
 
-    Phase 7:
-    - Suggest-only
-    - No Meta mutation
-    - No admin override logic yet
+    - No DB writes
+    - No persistence
+    - Rules evaluated in-memory
+    - Returns AIActionSet per campaign
     """
 
-    @staticmethod
-    async def run(
+    def __init__(self) -> None:
+        self.rules = [
+            LeadPerformanceDropRule(),
+            SalesROASDropRule(),
+            BestCreativeRule(),
+        ]
+
+    async def run_for_user(
+        self,
         *,
         db: AsyncSession,
-        as_of_date: date,
-    ) -> int:
+        user_id,
+    ) -> List[AIActionSet]:
         """
-        Generates AI suggestions for all eligible campaigns.
+        Run AI rules for all AI-active campaigns
+        visible to the logged-in user.
         """
 
         stmt = select(Campaign).where(
@@ -39,20 +47,24 @@ class AIDecisionRunner:
         result = await db.execute(stmt)
         campaigns: List[Campaign] = result.scalars().all()
 
-        actions_created = 0
+        action_sets: List[AIActionSet] = []
 
         for campaign in campaigns:
-            ai_action = await CampaignDecisionService.decide_for_campaign(
-                db=db,
-                campaign=campaign,
-                as_of_date=as_of_date,
-            )
+            actions: List[AIAction] = []
 
-            if not ai_action:
-                continue
+            for rule in self.rules:
+                rule_actions = await rule.evaluate(
+                    db=db,
+                    campaign=campaign,
+                )
+                actions.extend(rule_actions)
 
-            db.add(ai_action)
-            actions_created += 1
+            if actions:
+                action_sets.append(
+                    AIActionSet(
+                        campaign_id=campaign.id,
+                        actions=actions,
+                    )
+                )
 
-        await db.commit()
-        return actions_created
+        return action_sets
