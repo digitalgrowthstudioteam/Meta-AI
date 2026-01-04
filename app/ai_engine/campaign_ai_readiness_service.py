@@ -1,6 +1,8 @@
 """
 Campaign AI Readiness Service
 
+PHASE 9.3 — ALIGNED & LOCKED
+
 Purpose:
 - Prepare AI-consumable intelligence
 - Score campaigns and breakdowns
@@ -15,6 +17,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 
 WindowType = Literal["1d", "3d", "7d", "14d", "30d", "90d", "lifetime"]
+
+# Phase 9.3 aligned breakdown dimensions
+BreakdownDimension = Literal[
+    "creative_id",
+    "placement",
+    "region",
+    "age_group",
+    "gender",
+    "platform",
+]
 
 
 class CampaignAIReadinessService:
@@ -47,20 +59,13 @@ class CampaignAIReadinessService:
         }
 
     # =========================================================
-    # BREAKDOWN RANKING (WHAT WORKS BEST)
+    # BREAKDOWN RANKING (PHASE 9.3 ALIGNED)
     # =========================================================
     async def rank_breakdowns(
         self,
         campaign_id: str,
         window: WindowType,
-        dimension: Literal[
-            "creative_id",
-            "placement",
-            "city",
-            "gender",
-            "age_range",
-            "device",
-        ],
+        dimension: BreakdownDimension,
         limit: int = 5,
     ) -> List[Dict]:
         result = await self.db.execute(
@@ -138,13 +143,13 @@ class CampaignAIReadinessService:
     def _detect_signals(self, short: Dict, long: Dict) -> Dict:
         signals = {}
 
-        if short["ctr"] and long["ctr"]:
+        if short.get("ctr") and long.get("ctr"):
             if short["ctr"] < long["ctr"] * 0.8:
                 signals["fatigue"] = True
             elif short["ctr"] > long["ctr"] * 1.2:
                 signals["scale"] = True
 
-        if short["roas"] and long["roas"]:
+        if short.get("roas") and long.get("roas"):
             if short["roas"] < long["roas"] * 0.75:
                 signals["decay"] = True
 
