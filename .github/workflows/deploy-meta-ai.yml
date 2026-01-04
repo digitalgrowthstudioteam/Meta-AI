@@ -24,9 +24,18 @@ jobs:
           ssh -o StrictHostKeyChecking=yes ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
             set -e
             cd /var/www/projects/meta-ai-campaign
+
+            echo "▶ Pulling latest code"
             git fetch origin
             git reset --hard origin/main
+
+            echo "▶ Activating venv"
             source venv/bin/activate
+
+            echo "▶ Running Alembic migrations"
+            alembic upgrade head
+
+            echo "▶ Restarting service"
             sudo systemctl restart meta-ai.service
             sudo systemctl status meta-ai.service --no-pager
           EOF
