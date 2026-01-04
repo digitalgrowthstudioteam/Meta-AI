@@ -165,13 +165,13 @@ Index(
 
 
 # ============================================================
-# BREAKDOWN-LEVEL AGGREGATES (WHAT WORKS INSIDE CAMPAIGN)
+# BREAKDOWN-LEVEL AGGREGATES (ALIGNED WITH PHASE 9.3)
 # ============================================================
 
 class CampaignBreakdownAggregate(Base):
     """
     Aggregated performance broken down by creative, placement,
-    geography, demographics, and device.
+    region, demographics, and platform.
 
     One row = one campaign × one window × one breakdown slice
     """
@@ -208,7 +208,7 @@ class CampaignBreakdownAggregate(Base):
     )
 
     # -------------------------
-    # BREAKDOWN DIMENSIONS
+    # BREAKDOWN DIMENSIONS (ALIGNED)
     # -------------------------
     creative_id: Mapped[str | None] = mapped_column(
         String,
@@ -220,9 +220,10 @@ class CampaignBreakdownAggregate(Base):
         nullable=True,
     )
 
-    city: Mapped[str | None] = mapped_column(
+    region: Mapped[str | None] = mapped_column(
         String,
         nullable=True,
+        doc="City or region",
     )
 
     gender: Mapped[str | None] = mapped_column(
@@ -230,15 +231,16 @@ class CampaignBreakdownAggregate(Base):
         nullable=True,
     )
 
-    age_range: Mapped[str | None] = mapped_column(
+    age_group: Mapped[str | None] = mapped_column(
         String,
         nullable=True,
         doc="e.g. 18-24, 25-34",
     )
 
-    device: Mapped[str | None] = mapped_column(
+    platform: Mapped[str | None] = mapped_column(
         String,
         nullable=True,
+        doc="facebook / instagram / audience_network",
     )
 
     # -------------------------
@@ -309,7 +311,8 @@ Index(
     CampaignBreakdownAggregate.window_type,
     CampaignBreakdownAggregate.creative_id,
     CampaignBreakdownAggregate.placement,
-    CampaignBreakdownAggregate.city,
+    CampaignBreakdownAggregate.region,
     CampaignBreakdownAggregate.gender,
-    CampaignBreakdownAggregate.age_range,
+    CampaignBreakdownAggregate.age_group,
+    CampaignBreakdownAggregate.platform,
 )
