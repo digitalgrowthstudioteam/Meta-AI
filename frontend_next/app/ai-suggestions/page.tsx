@@ -51,9 +51,7 @@ export default function AISuggestionsPage() {
         credentials: "include",
       });
 
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
       const json = await res.json();
       setData(Array.isArray(json) ? json : []);
@@ -80,69 +78,137 @@ export default function AISuggestionsPage() {
       </div>
 
       {/* LOADING */}
-      {loading && (
-        <div className="text-gray-600">Analyzing campaigns…</div>
-      )}
+      {loading && <div className="text-gray-600">Analyzing campaigns…</div>}
 
       {/* ERROR */}
       {!loading && error && (
         <div className="text-red-600 font-medium">{error}</div>
       )}
 
-      {/* EMPTY STATE */}
+      {/* EMPTY */}
       {!loading && !error && data.length === 0 && (
         <div className="empty-state">
-          <p className="empty-state-title mb-1">
-            No AI suggestions yet
-          </p>
+          <p className="empty-state-title mb-1">No AI suggestions yet</p>
           <p className="empty-state-sub">
-            AI will suggest actions once performance patterns are detected.
+            AI will suggest actions once patterns are detected.
           </p>
         </div>
       )}
 
-      {/* SUGGESTIONS */}
+      {/* RESULTS */}
       {!loading &&
         !error &&
         data.map((set) => (
-          <div key={set.campaign_id} className="surface p-4 space-y-4">
-            <div className="text-sm text-gray-500">
-              Campaign ID: {set.campaign_id}
+          <div
+            key={set.campaign_id}
+            className="surface p-4 space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-gray-500">
+                Campaign ID: {set.campaign_id}
+              </div>
+              <div className="text-xs text-gray-400">
+                Evaluated:{" "}
+                {new Date(set.evaluated_at).toLocaleString()}
+              </div>
             </div>
 
             {set.actions.map((action, idx) => (
               <div
                 key={idx}
-                className="border rounded-lg p-4 space-y-2"
+                className="border rounded-lg p-4 space-y-3 bg-white"
               >
+                {/* ACTION HEADER */}
                 <div className="flex items-center justify-between">
                   <div className="font-medium">
-                    {action.action_type.replace("_", " ")}
+                    {action.action_type.replaceAll("_", " ")}
                   </div>
-                  <div className="text-xs text-gray-500">
-                    Confidence: {Math.round(action.confidence.score * 100)}%
+                  <div className="text-xs font-medium px-2 py-1 rounded bg-gray-100">
+                    Confidence:{" "}
+                    {Math.round(action.confidence.score * 100)}%
                   </div>
                 </div>
 
+                {/* SUMMARY */}
                 <p className="text-sm text-gray-700">
                   {action.summary}
                 </p>
 
+                {/* METRIC EVIDENCE */}
                 {action.metrics && action.metrics.length > 0 && (
-                  <div className="text-xs text-gray-600">
-                    <div className="font-medium mb-1">Evidence</div>
-                    <ul className="list-disc pl-4 space-y-1">
-                      {action.metrics.map((m, i) => (
-                        <li key={i}>
-                          {m.metric.toUpperCase()} ({m.window}): {m.value}
-                          {m.delta_pct !== undefined &&
-                            ` (${m.delta_pct}% change)`}
-                        </li>
-                      ))}
-                    </ul>
+                  <div>
+                    <div className="text-xs font-medium mb-1 text-gray-700">
+                      Metric Evidence
+                    </div>
+                    <table className="w-full text-xs border">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="border px-2 py-1 text-left">
+                            Metric
+                          </th>
+                          <th className="border px-2 py-1">Window</th>
+                          <th className="border px-2 py-1">Value</th>
+                          <th className="border px-2 py-1">Baseline</th>
+                          <th className="border px-2 py-1">Δ%</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {action.metrics.map((m, i) => (
+                          <tr key={i}>
+                            <td className="border px-2 py-1">
+                              {m.metric.toUpperCase()}
+                            </td>
+                            <td className="border px-2 py-1">
+                              {m.window}
+                            </td>
+                            <td className="border px-2 py-1">
+                              {m.value}
+                            </td>
+                            <td className="border px-2 py-1">
+                              {m.baseline ?? "—"}
+                            </td>
+                            <td className="border px-2 py-1">
+                              {m.delta_pct !== undefined
+                                ? `${m.delta_pct}%`
+                                : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 )}
 
+                {/* BREAKDOWN EVIDENCE */}
+                {action.breakdowns && action.breakdowns.length > 0 && (
+                  <div>
+                    <div className="text-xs font-medium mb-1 text-gray-700">
+                      Breakdown Evidence
+                    </div>
+                    <div className="space-y-2">
+                      {action.breakdowns.map((b, i) => (
+                        <div
+                          key={i}
+                          className="border rounded p-2 text-xs bg-gray-50"
+                        >
+                          <div className="font-medium mb-1">
+                            {b.dimension}: {b.key}
+                          </div>
+                          <ul className="list-disc pl-4">
+                            {b.metrics.map((m, j) => (
+                              <li key={j}>
+                                {m.metric.toUpperCase()} ({m.window}):{" "}
+                                {m.value}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* CONFIDENCE REASON */}
                 <div className="text-xs text-gray-500">
                   {action.confidence.reason}
                 </div>
