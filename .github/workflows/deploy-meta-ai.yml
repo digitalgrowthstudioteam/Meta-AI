@@ -32,8 +32,13 @@ jobs:
             echo "▶ Activating venv"
             source venv/bin/activate
 
-            echo "▶ Exporting DATABASE_URL for Alembic"
-            export DATABASE_URL="postgresql+asyncpg://meta_ai_user:StrongNewPassword123!@127.0.0.1:5432/meta_ai_db"
+            echo "▶ Reading DATABASE_URL from systemd"
+            export DATABASE_URL=$(systemctl show meta-ai.service \
+              --property=Environment \
+              | sed 's/Environment=//' \
+              | tr ' ' '\n' \
+              | grep DATABASE_URL= \
+              | cut -d= -f2-)
 
             echo "▶ Running Alembic migrations"
             alembic upgrade head
