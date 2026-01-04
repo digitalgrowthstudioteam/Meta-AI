@@ -34,15 +34,9 @@ async def list_campaigns(
     - Read-only
     """
 
-    # -----------------------------
-    # DEV MODE (AUTH DISABLED)
-    # -----------------------------
     if current_user is None:
         return []
 
-    # -----------------------------
-    # PROD MODE
-    # -----------------------------
     result = await db.execute(
         select(MetaOAuthToken)
         .where(
@@ -59,11 +53,32 @@ async def list_campaigns(
             detail="Meta account not connected",
         )
 
-    # Phase 9.2 visibility-aware fetch
-    return await CampaignService.list_campaigns_with_visibility(
+    campaigns = await CampaignService.list_campaigns_with_visibility(
         db=db,
         user_id=current_user.id,
     )
+
+    # 🔍 Explicit mapping (NO magic, NO assumptions)
+    response: list[CampaignResponse] = []
+
+    for campaign in campaigns:
+        category_map = getattr(campaign, "category_map", None)
+
+        response.append(
+            CampaignResponse(
+                id=campaign.id,
+                name=campaign.name,
+                objective=campaign.objective,
+                status=campaign.status,
+                ai_active=campaign.ai_active,
+                ai_activated_at=campaign.ai_activated_at,
+                category=category_map.category if category_map else None,
+                category_confidence=category_map.confidence if category_map else None,
+                category_source=category_map.source.value if category_map else None,
+            )
+        )
+
+    return response
 
 
 # =========================================================
