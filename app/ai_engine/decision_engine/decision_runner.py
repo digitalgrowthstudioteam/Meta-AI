@@ -1,97 +1,60 @@
 from datetime import date
-from typing import List
+from typing import List, Dict
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select
 
 from app.campaigns.models import Campaign
-from app.ai_engine.models.action_models import AIAction
+from app.ai_engine.models.action_models import AIActionSet
 from app.ai_engine.decision_engine.campaign_decision_service import (
     CampaignDecisionService,
 )
 
 
-class AIDecisionRunner:
-    """
-    Orchestrates AI decision generation for campaigns.
-
-    Responsibilities:
-    - Iterate eligible AI-active campaigns
-    - Generate AIAction suggestions
-    - Prevent duplicate / noisy suggestions
-    - Persist only meaningful AI decisions
-
-    This runner:
-    - NEVER auto-applies changes
-    - NEVER talks to Meta
-    - Is SAFE for cron / systemd execution
-    """
-
     @staticmethod
-    async def run(
+    async def run_for_user(
         *,
         db: AsyncSession,
-        as_of_date: date,
-    ) -> int:
+        user_id,
+    ) -> List[AIActionSet]:
         """
-        Runs AI decision generation for all eligible campaigns.
+        Runs AI decision engine for all AI-active campaigns
+        belonging to a specific user.
 
         Returns:
-            Number of AIAction records created.
+            List of AIActionSet (campaign-wise suggestions)
         """
 
-        # ===============================================
-        # 1️⃣ Fetch eligible AI-active campaigns
-        # ===============================================
-        stmt = select(Campaign).where(
-            Campaign.ai_active.is_(True),
-            Campaign.is_archived.is_(False),
-            Campaign.admin_locked.is_(False),
+        # Fetch user-visible AI-active campaigns
+        stmt = (
+            select(Campaign)
+            .where(
+                Campaign.ai_active.is_(True),
+                Campaign.is_archived.is_(False),
+                Campaign.admin_locked.is_(False),
+            )
         )
 
         result = await db.execute(stmt)
-        campaigns: List[Campaign] = result.scalars().all()
+        campaigns = result.scalars().all()
 
-        actions_created = 0
+        action_sets: List[AIActionSet] = []
 
-        # ===============================================
-        # 2️⃣ Iterate campaigns safely
-        # ===============================================
         for campaign in campaigns:
-            ai_action = await CampaignDecisionService.decide_for_campaign(
+            actions = await CampaignDecisionService.decide_for_campaign(
                 db=db,
                 campaign=campaign,
-                as_of_date=as_of_date,
+                as_of_date=date.today(),
             )
 
-            if not ai_action:
+            if not actions:
                 continue
 
-            # ===========================================
-            # 3️⃣ Deduplication guard
-            # Prevent same suggestion spam
-            # ===========================================
-            dedupe_stmt = select(AIAction).where(
-                and_(
-                    AIAction.campaign_id == ai_action.campaign_id,
-                    AIAction.action_type == ai_action.action_type,
-                    AIAction.time_window == ai_action.time_window,
-                    AIAction.status == "SUGGESTED",
+            action_sets.append(
+                AIActionSet(
+                    campaign_id=campaign.id,
+                    actions=actions,
                 )
             )
 
-            dedupe_result = await db.execute(dedupe_stmt)
-            existing = dedupe_result.scalar_one_or_none()
-
-            if existing:
-                # Skip duplicate suggestion
-                continue
-
-            # ===========================================
-            # 4️⃣ Persist AIAction (SUGGESTED only)
-            # ===========================================
-            db.add(ai_action)
-            actions_created += 1
-
-        await db.commit()
-        return actions_created
+        return action_sets
