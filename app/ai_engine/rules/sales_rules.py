@@ -15,12 +15,13 @@ from app.ai_engine.models.action_models import (
 
 class SalesROASDropRule(BaseRule):
     """
-    Phase 9.4 — Sales ROAS Drop Rule (Benchmark-Aware)
+    Phase 10 — Sales ROAS Drop Rule (Explainable + Benchmark-Aware)
 
     Uses:
     - Aggregated campaign metrics (7D vs 30D)
-    - Industry benchmark comparison (category-level)
+    - Industry benchmark comparison
     - Decay / fatigue signals
+    - Produces explainability timeline
     """
 
     MIN_PROFITABLE_ROAS = 1.2
@@ -66,7 +67,7 @@ class SalesROASDropRule(BaseRule):
         # -------------------------------------------------
         # INDUSTRY BENCHMARK (PHASE 9.4)
         # -------------------------------------------------
-        benchmark = await db.execute(
+        benchmark_result = await db.execute(
             text(
                 """
                 SELECT avg_roas
@@ -88,7 +89,7 @@ class SalesROASDropRule(BaseRule):
             },
         )
 
-        benchmark_row = benchmark.fetchone()
+        benchmark_row = benchmark_result.fetchone()
         benchmark_roas = (
             float(benchmark_row.avg_roas)
             if benchmark_row and benchmark_row.avg_roas
@@ -108,37 +109,73 @@ class SalesROASDropRule(BaseRule):
             and roas_ratio < self.ROAS_DROP_THRESHOLD
         ):
             reason = "ROAS dropped compared to 30-day baseline."
-
             confidence = 0.75
+
+            explain_steps = [
+                f"7D ROAS = {round(short_roas, 3)}",
+                f"30D ROAS = {round(long_roas, 3)}",
+                f"ROAS change = {round((roas_ratio - 1) * 100, 2)}%",
+            ]
 
             if signals.get("decay"):
                 reason += " Performance decay detected."
                 confidence += 0.05
+                explain_steps.append("Decay signal detected from CTR/ROAS trend")
 
             if worse_than_benchmark:
-                reason += " Campaign is also underperforming industry benchmarks."
+                reason += " Campaign underperforms industry benchmark."
                 confidence += 0.10
+                explain_steps.append(
+                    f"Industry benchmark ROAS ≈ {round(benchmark_roas, 3)}"
+                )
 
-            return [
-                AIAction(
-                    campaign_id=campaign.id,
-                    action_type=AIActionType.REDUCE_BUDGET,
-                    summary=(
-                        "Reduce budget: ROAS declined below profitable levels "
-                        "relative to historical and industry benchmarks."
+            action = AIAction(
+                campaign_id=campaign.id,
+                action_type=AIActionType.REDUCE_BUDGET,
+                summary=(
+                    "Reduce budget: ROAS declined below profitable levels "
+                    "relative to historical and industry benchmarks."
+                ),
+                metrics=[
+                    MetricEvidence(
+                        metric="roas",
+                        window="7D",
+                        value=round(short_roas, 3),
+                        baseline=round(long_roas, 3),
+                        delta_pct=round((roas_ratio - 1) * 100, 2),
+                        source="campaign",
                     ),
-                    metrics=[
-                        MetricEvidence(
-                            metric="roas",
-                            window="7D",
-                            value=round(short_roas, 3),
-                            baseline=round(long_roas, 3),
-                            delta_pct=round((roas_ratio - 1) * 100, 2),
-                        ),
-                    ],
-                    confidence=ConfidenceScore(
-                        score=min(confidence, 0.95),
-                        reason=reason,
+                    *(
+                        [
+                            MetricEvidence(
+                                metric="industry_roas",
+                                window="7D",
+                                value=round(benchmark_roas, 3),
+                                source="industry",
+                            )
+                        ]
+                        if benchmark_roas
+                        else []
+                    ),
+                ],
+                confidence=ConfidenceScore(
+                    score=min(confidence, 0.95),
+                    reason=reason,
+                ),
+            )
+
+            # -------------------------------------------------
+            # Phase 10 — Attach explainability
+            # -------------------------------------------------
+            return [
+                self.attach_explainability(
+                    action,
+                    steps=explain_steps,
+                    benchmark_used=bool(benchmark_roas),
+                    trust_note=(
+                        "Decision confirmed by industry benchmark"
+                        if worse_than_benchmark
+                        else "Decision based on campaign performance trend"
                     ),
                 )
             ]
