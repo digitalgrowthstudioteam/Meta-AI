@@ -223,9 +223,7 @@ export default function AIActionsPage() {
 
       {/* AI ACTIONS PER CAMPAIGN */}
       {aiActionSets.map((set) => {
-        const campaign = campaigns.find(
-          (c) => c.id === set.campaign_id
-        );
+        const campaign = campaigns.find((c) => c.id === set.campaign_id);
 
         return (
           <div key={set.campaign_id} className="space-y-3">
@@ -249,20 +247,34 @@ export default function AIActionsPage() {
                   <div className="font-medium">{action.summary}</div>
 
                   <div className="text-xs text-gray-600 mt-1">
-                    Confidence: {Math.round(action.confidence.score * 100)}%
+                    Confidence:{" "}
+                    {Math.round(action.confidence.score * 100)}%
                   </div>
 
-                  {/* METRIC EVIDENCE */}
-                  {action.metrics && action.metrics.length > 0 && (
-                    <ul className="mt-2 text-xs text-gray-700 list-disc pl-4">
-                      {action.metrics.map((m, idx) => (
-                        <li key={idx}>
-                          {m.metric} ({m.window}): {m.value}
-                          {m.delta_pct !== undefined &&
-                            ` (${m.delta_pct}% change)`}
-                        </li>
+                  {/* BREAKDOWN EVIDENCE */}
+                  {action.breakdowns && action.breakdowns.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {action.breakdowns.map((b, idx) => (
+                        <div key={idx} className="text-xs">
+                          <div className="font-medium text-gray-700">
+                            {b.dimension.replace("_", " ")}:
+                          </div>
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            <span className="px-2 py-0.5 rounded bg-gray-200 text-gray-700">
+                              {b.key}
+                            </span>
+                            {b.metrics.map((m, mi) => (
+                              <span
+                                key={mi}
+                                className="px-2 py-0.5 rounded bg-white border text-gray-700"
+                              >
+                                {m.metric} ({m.window}): {m.value}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
                       ))}
-                    </ul>
+                    </div>
                   )}
 
                   {!feedbackSent[key] && (
