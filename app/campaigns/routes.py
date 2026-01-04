@@ -28,12 +28,6 @@ async def list_campaigns(
     db: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(get_current_user),
 ):
-    """
-    Phase 9.2:
-    - Campaigns + category + confidence + source
-    - Read-only
-    """
-
     if current_user is None:
         return []
 
@@ -61,7 +55,7 @@ async def list_campaigns(
     response: list[CampaignResponse] = []
 
     for campaign in campaigns:
-        category_map = getattr(campaign, "category_map", None)
+        category_map = campaign.category_map
 
         response.append(
             CampaignResponse(
@@ -71,13 +65,9 @@ async def list_campaigns(
                 status=campaign.status,
                 ai_active=campaign.ai_active,
                 ai_activated_at=campaign.ai_activated_at,
-                category=category_map.category if category_map else None,
-                category_confidence=category_map.confidence if category_map else None,
-                category_source=(
-                    category_map.source.value
-                    if category_map and category_map.source
-                    else None
-                ),
+                category=category_map.final_category if category_map else None,
+                category_confidence=category_map.confidence_score if category_map else None,
+                category_source=category_map.source.value if category_map else None,
             )
         )
 
