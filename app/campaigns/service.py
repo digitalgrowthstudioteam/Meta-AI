@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from uuid import UUID
 from datetime import datetime
 import logging
@@ -11,7 +12,6 @@ from app.plans.enforcement import (
     PlanEnforcementService,
     EnforcementError,
 )
-from app.ai_engine.models.campaign_category_map import CampaignCategoryMap
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,7 @@ class CampaignService:
     ) -> list[Campaign]:
         stmt = (
             select(Campaign)
+            .options(selectinload(Campaign.category_map))  # ✅ FIX
             .join(
                 MetaAdAccount,
                 Campaign.ad_account_id == MetaAdAccount.id,
@@ -39,10 +40,6 @@ class CampaignService:
                 UserMetaAdAccount,
                 UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
             )
-            .outerjoin(
-                CampaignCategoryMap,
-                CampaignCategoryMap.campaign_id == Campaign.id,
-            )
             .where(
                 UserMetaAdAccount.user_id == user_id,
                 Campaign.is_archived.is_(False),
@@ -50,8 +47,7 @@ class CampaignService:
         )
 
         result = await db.execute(stmt)
-        # 🔴 REQUIRED when joins/outerjoins exist
-        return result.scalars().unique().all()
+        return result.scalars().all()
 
     # =====================================================
     # LIST CAMPAIGNS (LEGACY — KEEP)
