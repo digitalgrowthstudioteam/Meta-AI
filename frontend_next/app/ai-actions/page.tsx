@@ -2,6 +2,10 @@
 
 import { useEffect, useState } from "react";
 
+/* ----------------------------- */
+/* TYPES */
+/* ----------------------------- */
+
 type CampaignAI = {
   id: string;
   name: string;
@@ -10,139 +14,147 @@ type CampaignAI = {
   ai_active: boolean;
 };
 
+type MetricEvidence = {
+  metric: string;
+  window: string;
+  value: number;
+  baseline?: number;
+  delta_pct?: number;
+};
+
+type BreakdownEvidence = {
+  dimension: string;
+  key: string;
+  metrics: MetricEvidence[];
+};
+
+type ConfidenceScore = {
+  score: number;
+  reason: string;
+};
+
+type AIAction = {
+  campaign_id: string;
+  action_type: string;
+  summary: string;
+  metrics?: MetricEvidence[];
+  breakdowns?: BreakdownEvidence[];
+  confidence: ConfidenceScore;
+};
+
+type AIActionSet = {
+  campaign_id: string;
+  actions: AIAction[];
+};
+
+/* ----------------------------- */
+/* COMPONENT */
+/* ----------------------------- */
+
 export default function AIActionsPage() {
   const [campaigns, setCampaigns] = useState<CampaignAI[]>([]);
+  const [aiActions, setAiActions] = useState<AIActionSet[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
 
-  // -----------------------------------
-  // LOAD AI ACTION CAMPAIGNS
-  // -----------------------------------
+  /* ----------------------------- */
+  /* LOAD CAMPAIGNS */
+  /* ----------------------------- */
   const loadAICampaigns = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+    const res = await fetch("/api/campaigns", { credentials: "include" });
 
-      const res = await fetch("/api/campaigns", {
-        credentials: "include",
-      });
+    if (res.status === 409) {
+      setCampaigns([]);
+      setMetaConnected(false);
+      return;
+    }
 
-      if (res.status === 409) {
-        setCampaigns([]);
-        setMetaConnected(false);
-        return;
-      }
+    const data = await res.json();
+    setCampaigns(Array.isArray(data) ? data : []);
+    setMetaConnected(true);
+  };
 
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
+  /* ----------------------------- */
+  /* LOAD AI ACTIONS */
+  /* ----------------------------- */
+  const loadAIActions = async () => {
+    const res = await fetch("/api/ai/actions", {
+      credentials: "include",
+    });
 
+    if (res.ok) {
       const data = await res.json();
-      setCampaigns(Array.isArray(data) ? data : []);
-      setMetaConnected(true);
-    } catch (err) {
-      console.error("AI Actions load failed:", err);
-      setError("Unable to load AI Actions.");
-    } finally {
-      setLoading(false);
+      setAiActions(Array.isArray(data) ? data : []);
     }
   };
 
   useEffect(() => {
-    loadAICampaigns();
+    (async () => {
+      try {
+        setLoading(true);
+        await loadAICampaigns();
+        await loadAIActions();
+      } catch (e) {
+        setError("Unable to load AI data.");
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, []);
 
-  // -----------------------------------
-  // CONNECT META
-  // -----------------------------------
-  const connectMeta = async () => {
-    const res = await fetch("/api/meta/connect", {
-      credentials: "include",
-    });
-
-    const data = await res.json();
-    if (data?.redirect_url) {
-      window.location.href = data.redirect_url;
-    }
-  };
-
-  // -----------------------------------
-  // TOGGLE AI
-  // -----------------------------------
+  /* ----------------------------- */
+  /* TOGGLE AI */
+  /* ----------------------------- */
   const toggleAI = async (campaignId: string, enable: boolean) => {
     await fetch(`/api/campaigns/${campaignId}/ai-toggle`, {
       method: "POST",
       credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ enable }),
     });
 
-    loadAICampaigns();
+    await loadAICampaigns();
+    await loadAIActions();
   };
 
-  // -----------------------------------
-  // RENDER
-  // -----------------------------------
+  /* ----------------------------- */
+  /* DERIVED */
+  /* ----------------------------- */
+  const strategyActions = aiActions.flatMap((s) =>
+    s.actions.filter((a) => a.action_type === "NO_ACTION")
+  );
+
+  const operationalActions = aiActions.flatMap((s) =>
+    s.actions.filter((a) => a.action_type !== "NO_ACTION")
+  );
+
+  /* ----------------------------- */
+  /* RENDER */
+  /* ----------------------------- */
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* HEADER */}
       <div>
         <h1 className="text-xl font-semibold">AI Actions</h1>
         <p className="text-sm text-gray-500">
-          Control which campaigns AI can optimize
+          Control AI and review recommendations
         </p>
       </div>
 
-      {/* LOADING */}
-      {loading && (
-        <div className="text-gray-600">Loading AI actions…</div>
-      )}
+      {loading && <div className="text-gray-600">Loading…</div>}
+      {!loading && error && <div className="text-red-600">{error}</div>}
 
-      {/* REAL ERROR ONLY */}
-      {!loading && error && (
-        <div className="text-red-600 font-medium">{error}</div>
-      )}
-
-      {/* META NOT CONNECTED */}
-      {!loading && !error && metaConnected === false && (
-        <div className="empty-state">
-          <p className="empty-state-title mb-2">
-            Connect your Meta Ads account
-          </p>
-          <p className="empty-state-sub mb-4">
-            Meta connection is required to enable AI optimization.
-          </p>
-          <button onClick={connectMeta} className="btn-primary">
-            Connect Meta Ads
-          </button>
-        </div>
-      )}
-
-      {/* EMPTY STATE */}
-      {!loading && !error && metaConnected && campaigns.length === 0 && (
-        <div className="empty-state">
-          <p className="empty-state-title mb-1">
-            No campaigns available
-          </p>
-          <p className="empty-state-sub">
-            Campaigns will appear here once synced from Meta.
-          </p>
-        </div>
-      )}
-
-      {/* AI ACTIONS TABLE */}
-      {!loading && !error && campaigns.length > 0 && (
+      {/* CAMPAIGN CONTROL TABLE */}
+      {!loading && metaConnected && campaigns.length > 0 && (
         <div className="surface overflow-hidden">
           <table className="w-full text-sm">
             <thead className="border-b">
               <tr>
                 <th className="px-4 py-3 text-left">Campaign</th>
-                <th className="px-4 py-3 text-left">Objective</th>
-                <th className="px-4 py-3 text-left">Status</th>
-                <th className="px-4 py-3 text-left">AI Control</th>
+                <th className="px-4 py-3">Objective</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">AI</th>
               </tr>
             </thead>
             <tbody>
@@ -167,6 +179,53 @@ export default function AIActionsPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* STRATEGY INSIGHTS */}
+      {strategyActions.length > 0 && (
+        <div>
+          <h2 className="text-lg font-medium mb-2">
+            🧠 Strategy Insights
+          </h2>
+          <div className="space-y-3">
+            {strategyActions.map((a, i) => (
+              <div
+                key={i}
+                className="border-l-4 border-blue-400 bg-blue-50 p-4 rounded"
+              >
+                <div className="font-medium">{a.summary}</div>
+                <div className="text-xs text-gray-600 mt-1">
+                  Confidence: {Math.round(a.confidence.score * 100)}%
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ACTION RECOMMENDATIONS */}
+      {operationalActions.length > 0 && (
+        <div>
+          <h2 className="text-lg font-medium mb-2">
+            ⚠️ Action Recommendations
+          </h2>
+          <div className="space-y-3">
+            {operationalActions.map((a, i) => (
+              <div
+                key={i}
+                className="border-l-4 border-amber-400 bg-amber-50 p-4 rounded"
+              >
+                <div className="font-medium">
+                  {a.action_type.replace("_", " ")}
+                </div>
+                <div className="text-sm text-gray-700">{a.summary}</div>
+                <div className="text-xs text-gray-600 mt-1">
+                  Confidence: {Math.round(a.confidence.score * 100)}%
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
