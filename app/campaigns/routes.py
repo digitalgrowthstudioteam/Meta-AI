@@ -58,7 +58,6 @@ async def list_campaigns(
         user_id=current_user.id,
     )
 
-    # 🔍 Explicit mapping (NO magic, NO assumptions)
     response: list[CampaignResponse] = []
 
     for campaign in campaigns:
@@ -74,7 +73,11 @@ async def list_campaigns(
                 ai_activated_at=campaign.ai_activated_at,
                 category=category_map.category if category_map else None,
                 category_confidence=category_map.confidence if category_map else None,
-                category_source=category_map.source.value if category_map else None,
+                category_source=(
+                    category_map.source.value
+                    if category_map and category_map.source
+                    else None
+                ),
             )
         )
 
