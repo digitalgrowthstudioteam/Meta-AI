@@ -8,6 +8,9 @@ from app.ai_engine.models.action_models import AIAction, AIActionSet
 from app.ai_engine.rules.lead_rules import LeadPerformanceDropRule
 from app.ai_engine.rules.sales_rules import SalesROASDropRule
 from app.ai_engine.rules.breakdown_rules import BestCreativeRule
+from app.ai_engine.rules.category_strategy_rules import (
+    CategoryStrategyRule,
+)
 from app.ai_engine.campaign_ai_readiness_service import (
     CampaignAIReadinessService,
 )
@@ -15,11 +18,12 @@ from app.ai_engine.campaign_ai_readiness_service import (
 
 class AIDecisionRunner:
     """
-    FINAL — Phase 8 Decision Runner (LIVE, NO DB)
+    FINAL — Phase 9 Decision Runner (LIVE, NO DB)
 
     - No DB writes
     - No persistence
     - Uses Phase 7.3 AI intelligence
+    - Uses Phase 9.5 category intelligence
     - Rules evaluated in-memory
     - Returns AIActionSet per campaign
     """
@@ -29,6 +33,7 @@ class AIDecisionRunner:
             LeadPerformanceDropRule(),
             SalesROASDropRule(),
             BestCreativeRule(),
+            CategoryStrategyRule(),  # 🧠 strategy-level intelligence
         ]
 
     async def run_for_user(
@@ -70,7 +75,7 @@ class AIDecisionRunner:
                 rule_actions = await rule.evaluate(
                     db=db,
                     campaign=campaign,
-                    ai_context=ai_context,  # 🔥 injected
+                    ai_context=ai_context,
                 )
                 actions.extend(rule_actions)
 
