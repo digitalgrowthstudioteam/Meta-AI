@@ -30,7 +30,7 @@ type BreakdownEvidence = {
 
 type ConfidenceScore = {
   score: number;
-  reason: string;
+  reason?: string;
 };
 
 type AIAction = {
@@ -53,7 +53,7 @@ type AIActionSet = {
 
 export default function AIActionsPage() {
   const [campaigns, setCampaigns] = useState<CampaignAI[]>([]);
-  const [aiActions, setAiActions] = useState<AIActionSet[]>([]);
+  const [aiActionSets, setAiActionSets] = useState<AIActionSet[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
@@ -62,7 +62,7 @@ export default function AIActionsPage() {
   /* ----------------------------- */
   /* LOAD CAMPAIGNS */
   /* ----------------------------- */
-  const loadAICampaigns = async () => {
+  const loadCampaigns = async () => {
     const res = await fetch("/api/campaigns", { credentials: "include" });
 
     if (res.status === 409) {
@@ -86,7 +86,7 @@ export default function AIActionsPage() {
 
     if (res.ok) {
       const data = await res.json();
-      setAiActions(Array.isArray(data) ? data : []);
+      setAiActionSets(Array.isArray(data) ? data : []);
     }
   };
 
@@ -94,10 +94,10 @@ export default function AIActionsPage() {
     (async () => {
       try {
         setLoading(true);
-        await loadAICampaigns();
+        await loadCampaigns();
         await loadAIActions();
       } catch {
-        setError("Unable to load AI data.");
+        setError("Unable to load AI actions.");
       } finally {
         setLoading(false);
       }
@@ -115,17 +115,14 @@ export default function AIActionsPage() {
       body: JSON.stringify({ enable }),
     });
 
-    await loadAICampaigns();
+    await loadCampaigns();
     await loadAIActions();
   };
 
   /* ----------------------------- */
   /* FEEDBACK */
   /* ----------------------------- */
-  const submitFeedback = async (
-    action: AIAction,
-    isHelpful: boolean
-  ) => {
+  const submitFeedback = async (action: AIAction, isHelpful: boolean) => {
     const key = `${action.campaign_id}_${action.action_type}_${action.summary}`;
     if (feedbackSent[key]) return;
 
@@ -146,33 +143,39 @@ export default function AIActionsPage() {
   };
 
   /* ----------------------------- */
-  /* DERIVED */
-  /* ----------------------------- */
-  const strategyActions = aiActions.flatMap((s) =>
-    s.actions.filter((a) => a.action_type === "NO_ACTION")
-  );
-
-  const operationalActions = aiActions.flatMap((s) =>
-    s.actions.filter((a) => a.action_type !== "NO_ACTION")
-  );
-
-  /* ----------------------------- */
   /* RENDER */
   /* ----------------------------- */
+
+  if (loading) {
+    return <div className="text-gray-600">Loading AI actions…</div>;
+  }
+
+  if (error) {
+    return <div className="text-red-600">{error}</div>;
+  }
+
+  if (metaConnected === false) {
+    return (
+      <div className="surface p-6">
+        <h2 className="font-medium mb-1">Meta account not connected</h2>
+        <p className="text-sm text-gray-600">
+          Connect your Meta Ads account to enable AI insights.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-xl font-semibold">AI Actions</h1>
         <p className="text-sm text-gray-500">
-          Control AI and review recommendations
+          Review AI recommendations and control which campaigns AI can analyze
         </p>
       </div>
 
-      {loading && <div className="text-gray-600">Loading…</div>}
-      {!loading && error && <div className="text-red-600">{error}</div>}
-
-      {/* CAMPAIGN CONTROL */}
-      {!loading && metaConnected && campaigns.length > 0 && (
+      {/* CAMPAIGN AI CONTROL */}
+      {campaigns.length > 0 && (
         <div className="surface overflow-hidden">
           <table className="w-full text-sm">
             <thead className="border-b">
@@ -208,33 +211,70 @@ export default function AIActionsPage() {
         </div>
       )}
 
-      {/* STRATEGY INSIGHTS */}
-      {strategyActions.length > 0 && (
-        <div>
-          <h2 className="text-lg font-medium mb-2">🧠 Strategy Insights</h2>
-          <div className="space-y-3">
-            {strategyActions.map((a, i) => {
-              const key = `${a.campaign_id}_${a.action_type}_${a.summary}`;
+      {/* EMPTY STATE */}
+      {aiActionSets.length === 0 && (
+        <div className="surface p-6 text-sm text-gray-600">
+          No AI actions yet.
+          <br />
+          Enable AI on campaigns and allow time for performance signals to
+          accumulate.
+        </div>
+      )}
+
+      {/* AI ACTIONS PER CAMPAIGN */}
+      {aiActionSets.map((set) => {
+        const campaign = campaigns.find(
+          (c) => c.id === set.campaign_id
+        );
+
+        return (
+          <div key={set.campaign_id} className="space-y-3">
+            <h2 className="text-lg font-medium">
+              {campaign?.name ?? "Campaign"}
+            </h2>
+
+            {set.actions.map((action, i) => {
+              const key = `${action.campaign_id}_${action.action_type}_${action.summary}`;
+              const isStrategy = action.action_type === "NO_ACTION";
+
               return (
                 <div
                   key={i}
-                  className="border-l-4 border-blue-400 bg-blue-50 p-4 rounded"
+                  className={`border-l-4 p-4 rounded ${
+                    isStrategy
+                      ? "border-blue-400 bg-blue-50"
+                      : "border-amber-400 bg-amber-50"
+                  }`}
                 >
-                  <div className="font-medium">{a.summary}</div>
+                  <div className="font-medium">{action.summary}</div>
+
                   <div className="text-xs text-gray-600 mt-1">
-                    Confidence: {Math.round(a.confidence.score * 100)}%
+                    Confidence: {Math.round(action.confidence.score * 100)}%
                   </div>
 
+                  {/* METRIC EVIDENCE */}
+                  {action.metrics && action.metrics.length > 0 && (
+                    <ul className="mt-2 text-xs text-gray-700 list-disc pl-4">
+                      {action.metrics.map((m, idx) => (
+                        <li key={idx}>
+                          {m.metric} ({m.window}): {m.value}
+                          {m.delta_pct !== undefined &&
+                            ` (${m.delta_pct}% change)`}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
                   {!feedbackSent[key] && (
-                    <div className="mt-2 flex gap-2 text-xs">
+                    <div className="mt-3 flex gap-2 text-xs">
                       <button
-                        onClick={() => submitFeedback(a, true)}
+                        onClick={() => submitFeedback(action, true)}
                         className="px-2 py-1 bg-green-100 text-green-700 rounded"
                       >
                         👍 Helpful
                       </button>
                       <button
-                        onClick={() => submitFeedback(a, false)}
+                        onClick={() => submitFeedback(action, false)}
                         className="px-2 py-1 bg-red-100 text-red-700 rounded"
                       >
                         👎 Not Helpful
@@ -245,53 +285,8 @@ export default function AIActionsPage() {
               );
             })}
           </div>
-        </div>
-      )}
-
-      {/* ACTION RECOMMENDATIONS */}
-      {operationalActions.length > 0 && (
-        <div>
-          <h2 className="text-lg font-medium mb-2">
-            ⚠️ Action Recommendations
-          </h2>
-          <div className="space-y-3">
-            {operationalActions.map((a, i) => {
-              const key = `${a.campaign_id}_${a.action_type}_${a.summary}`;
-              return (
-                <div
-                  key={i}
-                  className="border-l-4 border-amber-400 bg-amber-50 p-4 rounded"
-                >
-                  <div className="font-medium">
-                    {a.action_type.replace("_", " ")}
-                  </div>
-                  <div className="text-sm text-gray-700">{a.summary}</div>
-                  <div className="text-xs text-gray-600 mt-1">
-                    Confidence: {Math.round(a.confidence.score * 100)}%
-                  </div>
-
-                  {!feedbackSent[key] && (
-                    <div className="mt-2 flex gap-2 text-xs">
-                      <button
-                        onClick={() => submitFeedback(a, true)}
-                        className="px-2 py-1 bg-green-100 text-green-700 rounded"
-                      >
-                        👍 Helpful
-                      </button>
-                      <button
-                        onClick={() => submitFeedback(a, false)}
-                        className="px-2 py-1 bg-red-100 text-red-700 rounded"
-                      >
-                        👎 Not Helpful
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+        );
+      })}
     </div>
   );
 }
