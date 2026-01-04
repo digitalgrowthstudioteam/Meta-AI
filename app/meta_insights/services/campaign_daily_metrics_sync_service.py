@@ -48,15 +48,12 @@ class CampaignDailyMetricsSyncService:
 
         await self.db.commit()
 
-    async def _get_active_campaigns(self) -> Iterable[Campaign]:
+    async def _get_active_campaigns(self):
         result = await self.db.execute(
-            text(
-                """
+            text("""
                 SELECT *
                 FROM campaigns
-                WHERE is_deleted = false
-                """
-            )
+            """)
         )
         return result.scalars().all()
 
