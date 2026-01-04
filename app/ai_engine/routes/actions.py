@@ -31,5 +31,8 @@ async def list_ai_actions(
     - Safe for polling
     """
 
-    runner = AIDecisionRunner(db=db, user=user)
-    return await runner.run()
+    runner = AIDecisionRunner()
+    return await runner.run_for_user(
+        db=db,
+        user_id=user.id,
+    )
