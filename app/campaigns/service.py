@@ -11,6 +11,7 @@ from app.plans.enforcement import (
     PlanEnforcementService,
     EnforcementError,
 )
+from app.ai_engine.models.campaign_category_map import CampaignCategoryMap
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,38 @@ class CampaignService:
     """
 
     # =====================================================
-    # LIST CAMPAIGNS (VISIBILITY)
+    # LIST CAMPAIGNS + CATEGORY VISIBILITY (PHASE 9.2)
+    # =====================================================
+    @staticmethod
+    async def list_campaigns_with_visibility(
+        db: AsyncSession,
+        user_id: UUID,
+    ) -> list[Campaign]:
+        stmt = (
+            select(Campaign)
+            .join(
+                MetaAdAccount,
+                Campaign.ad_account_id == MetaAdAccount.id,
+            )
+            .join(
+                UserMetaAdAccount,
+                UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
+            )
+            .outerjoin(
+                CampaignCategoryMap,
+                CampaignCategoryMap.campaign_id == Campaign.id,
+            )
+            .where(
+                UserMetaAdAccount.user_id == user_id,
+                Campaign.is_archived.is_(False),
+            )
+        )
+
+        result = await db.execute(stmt)
+        return result.scalars().all()
+
+    # =====================================================
+    # LIST CAMPAIGNS (LEGACY — KEEP)
     # =====================================================
     @staticmethod
     async def list_campaigns(
@@ -54,22 +86,14 @@ class CampaignService:
         return result.scalars().all()
 
     # =====================================================
-    # SYNC CAMPAIGNS FROM META (RESILIENT, IDEMPOTENT)
+    # SYNC CAMPAIGNS FROM META
     # =====================================================
     @staticmethod
     async def sync_from_meta(
         db: AsyncSession,
         user_id: UUID,
     ) -> list[Campaign]:
-        """
-        Fetches ALL campaigns from Meta (read-only) and
-        upserts them idempotently.
 
-        - Resilient to partial Meta failures
-        - Never crashes if one ad account fails
-        """
-
-        # 1️⃣ Fetch user's active Meta ad accounts
         stmt = (
             select(MetaAdAccount)
             .join(
@@ -90,20 +114,18 @@ class CampaignService:
 
         synced_campaigns: list[Campaign] = []
 
-        # 2️⃣ Fetch campaigns per ad account (SAFE LOOP)
         for ad_account in ad_accounts:
             try:
                 meta_campaigns = await MetaCampaignClient.fetch_campaigns(
                     ad_account=ad_account,
                 )
             except Exception as e:
-                # 🔴 DO NOT CRASH SYNC
                 logger.error(
                     "Meta campaign sync failed for ad_account=%s : %s",
                     ad_account.meta_account_id,
                     str(e),
                 )
-                continue  # ⬅️ THIS IS THE FIX
+                continue
 
             for meta in meta_campaigns:
                 stmt = select(Campaign).where(
