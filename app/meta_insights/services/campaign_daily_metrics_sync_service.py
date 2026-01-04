@@ -16,28 +16,28 @@ from uuid import uuid4
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.meta_insights.clients.campaign_insights_client import (
-    CampaignInsightsClient,
-)
 from app.campaigns.models import Campaign
+from app.meta_insights.clients.campaign_insights_ingestion_service import (
+    CampaignInsightsIngestionService,
+)
 
 
 class CampaignDailyMetricsSyncService:
     def __init__(self, db: AsyncSession):
         self.db = db
-        self.client = CampaignInsightsClient()
+        self.client = CampaignInsightsIngestionService(db)
 
     async def sync_for_date(self, target_date: date) -> None:
         """
-        Sync metrics for all ACTIVE campaigns for a single date.
+        Sync metrics for all active campaigns for a single date.
         Safe to re-run.
         """
         campaigns = await self._get_active_campaigns()
 
         for campaign in campaigns:
-            insights = await self.client.fetch_daily_insights(
-                campaign.meta_campaign_id,
-                target_date,
+            insights = await self.client.fetch_campaign_daily_insights(
+                campaign=campaign,
+                target_date=target_date,
             )
 
             if not insights:
@@ -66,9 +66,6 @@ class CampaignDailyMetricsSyncService:
         insights: Dict[str, Any],
         target_date: date,
     ) -> Dict[str, Any]:
-        """
-        Convert Meta response → DB row
-        """
         impressions = int(insights.get("impressions", 0))
         clicks = int(insights.get("clicks", 0))
         spend = float(insights.get("spend", 0))
@@ -108,9 +105,6 @@ class CampaignDailyMetricsSyncService:
         }
 
     async def _upsert(self, row: Dict[str, Any]) -> None:
-        """
-        Upsert on (campaign_id, date)
-        """
         await self.db.execute(
             text(
                 """
