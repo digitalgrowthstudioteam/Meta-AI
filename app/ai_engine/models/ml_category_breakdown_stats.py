@@ -147,4 +147,3 @@ Index(
     MLCategoryBreakdownStat.device,
     unique=True,
 )
-`
