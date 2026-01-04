@@ -82,4 +82,34 @@ async def get_campaign_audience_insights(
         rows = result.fetchall()
 
     except Exception:
-        # 🔒 ABSOLUTE SA
+        # 🔒 ABSOLUTE SAFETY — NEVER 500
+        rows = []
+
+    insights: List[Dict[str, Any]] = []
+
+    for row in rows:
+        insights.append(
+            {
+                "creative_id": row.creative_id,
+                "placement": row.placement,
+                "platform": row.platform,
+                "region": row.region,
+                "gender": row.gender,
+                "age_group": row.age_group,
+                "impressions": int(row.impressions or 0),
+                "clicks": int(row.clicks or 0),
+                "spend": float(row.spend or 0),
+                "conversions": int(row.conversions or 0),
+                "revenue": float(row.revenue or 0),
+                "ctr": float(row.ctr) if row.ctr is not None else None,
+                "cpl": float(row.cpl) if row.cpl is not None else None,
+                "cpa": float(row.cpa) if row.cpa is not None else None,
+                "roas": float(row.roas) if row.roas is not None else None,
+            }
+        )
+
+    return {
+        "campaign_id": str(campaign_id),
+        "window": window,
+        "rows": insights,
+    }
