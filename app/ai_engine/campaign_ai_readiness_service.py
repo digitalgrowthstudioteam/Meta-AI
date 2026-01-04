@@ -1,7 +1,7 @@
 """
 Campaign AI Readiness Service
 
-PHASE 9.4 — BENCHMARK AWARE (LOCKED)
+PHASE 9.5 — BENCHMARK CALIBRATED (LOCKED)
 
 Purpose:
 - Prepare AI-consumable intelligence
@@ -9,6 +9,7 @@ Purpose:
 - Compare time windows
 - Detect fatigue, scale, decay
 - Attach industry benchmark context
+- Compute deltas vs industry for rule calibration
 - NO ML (rules + math only)
 """
 
@@ -35,7 +36,7 @@ class CampaignAIReadinessService:
         self.db = db
 
     # =========================================================
-    # CAMPAIGN-LEVEL AI SCORE (PHASE 9.4)
+    # CAMPAIGN-LEVEL AI SCORE (PHASE 9.5)
     # =========================================================
     async def get_campaign_ai_score(
         self,
@@ -52,9 +53,14 @@ class CampaignAIReadinessService:
         score = self._score_performance(short, long)
         signals = self._detect_signals(short, long)
 
-        industry_benchmark = await self._get_industry_benchmark(
+        benchmark = await self._get_industry_benchmark(
             campaign_id=campaign_id,
             window=short_window,
+        )
+
+        benchmark_ctx = self._build_benchmark_context(
+            campaign_window=short,
+            benchmark=benchmark,
         )
 
         return {
@@ -63,11 +69,11 @@ class CampaignAIReadinessService:
             "long_window": long,
             "ai_score": score,
             "signals": signals,
-            "industry_benchmark": industry_benchmark,
+            "industry_benchmark": benchmark_ctx,
         }
 
     # =========================================================
-    # BREAKDOWN RANKING (PHASE 9.3 ALIGNED)
+    # BREAKDOWN RANKING (PHASE 9.3)
     # =========================================================
     async def rank_breakdowns(
         self,
@@ -135,9 +141,6 @@ class CampaignAIReadinessService:
         campaign_id: str,
         window: str,
     ) -> Dict | None:
-        """
-        Fetch latest industry benchmark for campaign category + objective.
-        """
         result = await self.db.execute(
             text(
                 """
@@ -173,15 +176,51 @@ class CampaignAIReadinessService:
         )
 
         row = result.fetchone()
-        if not row:
+        return dict(row._mapping) if row else None
+
+    def _build_benchmark_context(
+        self,
+        *,
+        campaign_window: Dict,
+        benchmark: Dict | None,
+    ) -> Dict | None:
+        """
+        Compute deltas vs industry benchmark for rules.
+        """
+        if not benchmark:
             return None
 
-        return dict(row._mapping)
+        ctx: Dict = {"metrics": {}}
+
+        for metric in ("ctr", "cpl", "cpa", "roas"):
+            campaign_value = campaign_window.get(metric)
+            benchmark_value = benchmark.get(f"avg_{metric}")
+
+            if campaign_value is None or benchmark_value is None:
+                continue
+
+            delta_pct = (
+                ((campaign_value - benchmark_value) / benchmark_value) * 100
+                if benchmark_value
+                else None
+            )
+
+            ctx["metrics"][metric] = {
+                "campaign": campaign_value,
+                "benchmark": benchmark_value,
+                "delta_pct": round(delta_pct, 2) if delta_pct is not None else None,
+            }
+
+        ctx["distribution"] = {
+            "p25_roas": benchmark.get("p25_roas"),
+            "p50_roas": benchmark.get("p50_roas"),
+            "p75_roas": benchmark.get("p75_roas"),
+        }
+        ctx["campaign_count"] = benchmark.get("campaign_count")
+
+        return ctx
 
     def _score_performance(self, short: Dict, long: Dict) -> float:
-        """
-        Simple normalized score (0–100)
-        """
         score = 0.0
 
         if short.get("roas") and long.get("roas"):
