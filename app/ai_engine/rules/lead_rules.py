@@ -15,13 +15,14 @@ from app.ai_engine.models.action_models import (
 
 class LeadPerformanceDropRule(BaseRule):
     """
-    Phase 9.4 — Lead Performance Drop Rule (Benchmark-Aware)
+    Phase 10 — Lead Performance Drop Rule (Explainable + Benchmark-Aware)
 
     Uses:
-    - Aggregated metrics only
+    - Aggregated campaign metrics only
     - 7D vs 30D self-baseline
     - Industry benchmark comparison (category-level)
-    - AI signals: fatigue / decay
+    - Fatigue / decay signals
+    - Produces explainability timeline
     """
 
     CTR_DROP_THRESHOLD = 0.8        # 20% drop vs self baseline
@@ -37,7 +38,7 @@ class LeadPerformanceDropRule(BaseRule):
     ) -> List[AIAction]:
 
         # -------------------------------------------------
-        # Campaign eligibility
+        # Eligibility
         # -------------------------------------------------
         if campaign.objective.upper() not in (
             "LEAD",
@@ -67,13 +68,12 @@ class LeadPerformanceDropRule(BaseRule):
 
         ctr_ratio = short_ctr / long_ctr if long_ctr else 1.0
         cpl_change_pct = ((short_cpl - long_cpl) / long_cpl) * 100
-
         signals = ai_context.get("signals", {})
 
         # -------------------------------------------------
         # INDUSTRY BENCHMARK (PHASE 9.4)
         # -------------------------------------------------
-        benchmark = await db.execute(
+        benchmark_result = await db.execute(
             text(
                 """
                 SELECT avg_cpl
@@ -95,7 +95,7 @@ class LeadPerformanceDropRule(BaseRule):
             },
         )
 
-        benchmark_row = benchmark.fetchone()
+        benchmark_row = benchmark_result.fetchone()
         benchmark_cpl = (
             float(benchmark_row.avg_cpl)
             if benchmark_row and benchmark_row.avg_cpl
@@ -115,44 +115,84 @@ class LeadPerformanceDropRule(BaseRule):
             and cpl_change_pct >= self.CPL_INCREASE_THRESHOLD
         ):
             reason = "Lead efficiency dropped compared to 30-day baseline."
-
             confidence = 0.75
+
+            explain_steps = [
+                f"7D CTR = {round(short_ctr, 4)}",
+                f"30D CTR = {round(long_ctr, 4)}",
+                f"CTR change = {round((ctr_ratio - 1) * 100, 2)}%",
+                f"7D CPL = {round(short_cpl, 2)}",
+                f"30D CPL = {round(long_cpl, 2)}",
+                f"CPL change = {round(cpl_change_pct, 2)}%",
+            ]
 
             if signals.get("fatigue"):
                 reason += " Fatigue signal detected."
                 confidence += 0.05
+                explain_steps.append("Fatigue detected from CTR trend")
 
             if worse_than_benchmark:
-                reason += " Performance is also worse than industry benchmark."
+                reason += " Performance is worse than industry benchmark."
                 confidence += 0.10
+                explain_steps.append(
+                    f"Industry benchmark CPL ≈ {round(benchmark_cpl, 2)}"
+                )
 
-            return [
-                AIAction(
-                    campaign_id=campaign.id,
-                    action_type=AIActionType.REDUCE_BUDGET,
-                    summary=(
-                        "Reduce budget: CPL increased and CTR dropped "
-                        "relative to historical and industry benchmarks."
+            action = AIAction(
+                campaign_id=campaign.id,
+                action_type=AIActionType.REDUCE_BUDGET,
+                summary=(
+                    "Reduce budget: CPL increased and CTR dropped "
+                    "relative to historical and industry benchmarks."
+                ),
+                metrics=[
+                    MetricEvidence(
+                        metric="ctr",
+                        window="7D",
+                        value=round(short_ctr, 4),
+                        baseline=round(long_ctr, 4),
+                        delta_pct=round((ctr_ratio - 1) * 100, 2),
+                        source="campaign",
                     ),
-                    metrics=[
-                        MetricEvidence(
-                            metric="ctr",
-                            window="7D",
-                            value=round(short_ctr, 4),
-                            baseline=round(long_ctr, 4),
-                            delta_pct=round((ctr_ratio - 1) * 100, 2),
-                        ),
-                        MetricEvidence(
-                            metric="cpl",
-                            window="7D",
-                            value=round(short_cpl, 2),
-                            baseline=round(long_cpl, 2),
-                            delta_pct=round(cpl_change_pct, 2),
-                        ),
-                    ],
-                    confidence=ConfidenceScore(
-                        score=min(confidence, 0.95),
-                        reason=reason,
+                    MetricEvidence(
+                        metric="cpl",
+                        window="7D",
+                        value=round(short_cpl, 2),
+                        baseline=round(long_cpl, 2),
+                        delta_pct=round(cpl_change_pct, 2),
+                        source="campaign",
+                    ),
+                    *(
+                        [
+                            MetricEvidence(
+                                metric="industry_cpl",
+                                window="7D",
+                                value=round(benchmark_cpl, 2),
+                                source="industry",
+                            )
+                        ]
+                        if benchmark_cpl
+                        else []
+                    ),
+                ],
+                confidence=ConfidenceScore(
+                    score=min(confidence, 0.95),
+                    reason=reason,
+                ),
+            )
+
+            # -------------------------------------------------
+            # Phase 10 — Attach explainability
+            # -------------------------------------------------
+            return [
+                self.attach_explainability(
+                    action,
+                    steps=explain_steps,
+                    benchmark_used=bool(benchmark_cpl),
+                    trust_note=(
+                        "Confirmed by industry benchmark"
+                        if worse_than_benchmark
+                        else "Based on campaign performance trend"
                     ),
                 )
             ]
