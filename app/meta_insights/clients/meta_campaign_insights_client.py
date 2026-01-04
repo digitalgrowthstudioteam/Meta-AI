@@ -1,16 +1,20 @@
+"""
+Meta Campaign Insights Client
+
+Purpose:
+- Fetch daily campaign-level insights from Meta
+- Isolated client (no DB writes)
+"""
+
 from datetime import date
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.campaigns.models import Campaign
 
 
 class MetaCampaignInsightsClient:
-    """
-    Temporary safe client stub.
-    Real Meta API logic will be added later.
-    """
-
     def __init__(self, db: AsyncSession):
         self.db = db
 
@@ -18,13 +22,10 @@ class MetaCampaignInsightsClient:
         self,
         campaign: Campaign,
         target_date: date,
-    ) -> Dict[str, Any]:
-        # SAFE placeholder to unblock system
-        return {
-            "impressions": 0,
-            "clicks": 0,
-            "spend": 0,
-            "leads": 0,
-            "purchases": 0,
-            "purchase_value": 0,
-        }
+    ) -> Optional[Dict[str, Any]]:
+        """
+        TEMP stub.
+        Replace with real Meta Graph API integration.
+        Must return a dict matching expected metrics or None.
+        """
+        return None
