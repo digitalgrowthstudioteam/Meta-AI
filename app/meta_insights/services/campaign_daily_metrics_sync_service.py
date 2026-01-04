@@ -35,7 +35,7 @@ class CampaignDailyMetricsSyncService:
         """
         Phase 6.5 responsibility:
         - Raw metrics ingestion
-        - Per-campaign isolation (fail-safe)
+        - Stub-safe behavior (no false failures)
         """
 
         campaigns = await self._get_active_campaigns()
@@ -51,7 +51,29 @@ class CampaignDailyMetricsSyncService:
                     target_date=target_date,
                 )
 
+                # -----------------------------
+                # STUB / NO-DATA → SKIP
+                # -----------------------------
                 if not insights:
+                    skipped += 1
+                    continue
+
+                impressions = int(insights.get("impressions", 0))
+                clicks = int(insights.get("clicks", 0))
+                spend = float(insights.get("spend", 0))
+                leads = int(insights.get("leads", 0))
+                purchases = int(insights.get("purchases", 0))
+                revenue = float(insights.get("purchase_value", 0))
+
+                # All-zero payload = Meta stub → SKIP (NOT failure)
+                if (
+                    impressions == 0
+                    and clicks == 0
+                    and spend == 0
+                    and leads == 0
+                    and purchases == 0
+                    and revenue == 0
+                ):
                     skipped += 1
                     continue
 
