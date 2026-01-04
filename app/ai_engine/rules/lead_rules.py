@@ -1,6 +1,7 @@
 from typing import List, Dict
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 
 from app.campaigns.models import Campaign
 from app.ai_engine.rules.base import BaseRule
@@ -14,16 +15,18 @@ from app.ai_engine.models.action_models import (
 
 class LeadPerformanceDropRule(BaseRule):
     """
-    Phase 8 — AI-Aware Lead Performance Drop Rule
+    Phase 9.4 — Lead Performance Drop Rule (Benchmark-Aware)
 
     Uses:
-    - Aggregated metrics only (NO raw daily data)
-    - 7D vs 30D comparison
+    - Aggregated metrics only
+    - 7D vs 30D self-baseline
+    - Industry benchmark comparison (category-level)
     - AI signals: fatigue / decay
     """
 
-    CTR_DROP_THRESHOLD = 0.8        # 20% drop
-    CPL_INCREASE_THRESHOLD = 25.0   # %
+    CTR_DROP_THRESHOLD = 0.8        # 20% drop vs self baseline
+    CPL_INCREASE_THRESHOLD = 25.0   # % increase vs self baseline
+    BENCHMARK_CPL_DELTA = 1.20      # 20% worse than industry avg
 
     async def evaluate(
         self,
@@ -48,45 +51,61 @@ class LeadPerformanceDropRule(BaseRule):
         if ai_context.get("status") == "insufficient_data":
             return []
 
-        short = ai_context.get("short_window")
-        long = ai_context.get("long_window")
-
-        short_metrics = ai_context.get("signals") is not None
-        data = ai_context
-
-        # Extract aggregated values
-        short_data = ai_context.get("short_window")
-        long_data = ai_context.get("long_window")
-
-        # Defensive — but should exist if complete window
-        short_cpl = ai_context.get("short_window") and ai_context.get("short_window")
-        # Instead, read from aggregate payload
         short_row = ai_context.get("short_window")
         long_row = ai_context.get("long_window")
 
-        short_cpl = ai_context.get("short_window") and ai_context.get("short_window")
-        # Correct source
-        short_cpl = ai_context.get("short_window")
-        long_cpl = ai_context.get("long_window")
-
-        # We actually rely on numeric fields from aggregates
-        short_ctr = ai_context.get("short_window") and ai_context.get("short_window")
-        long_ctr = ai_context.get("long_window") and ai_context.get("long_window")
-
-        # Pull metrics safely
-        short_ctr = ai_context.get("short_window") and ai_context["short_window"].get("ctr")
-        long_ctr = ai_context.get("long_window") and ai_context["long_window"].get("ctr")
-
-        short_cpl = ai_context.get("short_window") and ai_context["short_window"].get("cpl")
-        long_cpl = ai_context.get("long_window") and ai_context["long_window"].get("cpl")
-
-        if not short_cpl or not long_cpl or not short_ctr or not long_ctr:
+        if not short_row or not long_row:
             return []
 
-        cpl_change_pct = ((short_cpl - long_cpl) / long_cpl) * 100
+        short_ctr = short_row.get("ctr")
+        long_ctr = long_row.get("ctr")
+        short_cpl = short_row.get("cpl")
+        long_cpl = long_row.get("cpl")
+
+        if not short_ctr or not long_ctr or not short_cpl or not long_cpl:
+            return []
+
         ctr_ratio = short_ctr / long_ctr if long_ctr else 1.0
+        cpl_change_pct = ((short_cpl - long_cpl) / long_cpl) * 100
 
         signals = ai_context.get("signals", {})
+
+        # -------------------------------------------------
+        # INDUSTRY BENCHMARK (PHASE 9.4)
+        # -------------------------------------------------
+        benchmark = await db.execute(
+            text(
+                """
+                SELECT avg_cpl
+                FROM industry_benchmarks
+                WHERE category = (
+                    SELECT category
+                    FROM campaign_category_map
+                    WHERE campaign_id = :campaign_id
+                )
+                  AND objective_type = :objective
+                  AND window_type = '7d'
+                ORDER BY as_of_date DESC
+                LIMIT 1
+                """
+            ),
+            {
+                "campaign_id": str(campaign.id),
+                "objective": campaign.objective,
+            },
+        )
+
+        benchmark_row = benchmark.fetchone()
+        benchmark_cpl = (
+            float(benchmark_row.avg_cpl)
+            if benchmark_row and benchmark_row.avg_cpl
+            else None
+        )
+
+        worse_than_benchmark = (
+            benchmark_cpl
+            and short_cpl > benchmark_cpl * self.BENCHMARK_CPL_DELTA
+        )
 
         # -------------------------------------------------
         # Decision logic
@@ -97,15 +116,23 @@ class LeadPerformanceDropRule(BaseRule):
         ):
             reason = "Lead efficiency dropped compared to 30-day baseline."
 
+            confidence = 0.75
+
             if signals.get("fatigue"):
                 reason += " Fatigue signal detected."
+                confidence += 0.05
+
+            if worse_than_benchmark:
+                reason += " Performance is also worse than industry benchmark."
+                confidence += 0.10
 
             return [
                 AIAction(
                     campaign_id=campaign.id,
                     action_type=AIActionType.REDUCE_BUDGET,
                     summary=(
-                        "Reduce budget: CPL increased and CTR dropped in the last 7 days."
+                        "Reduce budget: CPL increased and CTR dropped "
+                        "relative to historical and industry benchmarks."
                     ),
                     metrics=[
                         MetricEvidence(
@@ -124,7 +151,7 @@ class LeadPerformanceDropRule(BaseRule):
                         ),
                     ],
                     confidence=ConfidenceScore(
-                        score=0.8,
+                        score=min(confidence, 0.95),
                         reason=reason,
                     ),
                 )
