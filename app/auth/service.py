@@ -10,7 +10,6 @@ Responsibilities:
 IMPORTANT (LOCKED DESIGN):
 - Trial subscription assignment is INTENTIONALLY DISABLED
 - Plan & billing logic will be re-enabled in Phase 5
-- Code is preserved but execution is disabled explicitly
 """
 
 from datetime import datetime, timedelta
@@ -38,13 +37,12 @@ from app.users.models import User
 # =========================================================
 IST_ZONE = ZoneInfo("Asia/Kolkata")
 
-# Abuse protection (soft, safe)
 MAX_ACTIVE_TOKENS_PER_EMAIL = 3
 TOKEN_COOLDOWN_MINUTES = 2
 
 
 # =========================================================
-# EMAIL SUBJECT (LOCKED FORMAT)
+# EMAIL SUBJECT
 # =========================================================
 def build_magic_link_subject() -> str:
     now_ist = datetime.now(IST_ZONE)
@@ -55,7 +53,7 @@ def build_magic_link_subject() -> str:
 
 
 # =========================================================
-# EMAIL SENDER
+# EMAIL SENDER (STRICT)
 # =========================================================
 def send_magic_link_email(
     to_email: str,
@@ -83,6 +81,8 @@ def send_magic_link_email(
     </html>
     """
 
+    # IMPORTANT:
+    # Do NOT swallow errors here.
     send_email(
         to_email=to_email,
         subject=subject,
@@ -92,13 +92,18 @@ def send_magic_link_email(
 
 
 # =========================================================
-# LOGIN REQUEST FLOW
+# LOGIN REQUEST FLOW (FIXED)
 # =========================================================
 async def request_magic_login(
     db: AsyncSession,
     email: str,
-) -> None:
-    # Soft abuse control: clean old / excessive tokens
+) -> bool:
+    """
+    Returns:
+        True  -> email sent
+        False -> blocked / failed
+    """
+
     cutoff = datetime.utcnow() - timedelta(minutes=TOKEN_COOLDOWN_MINUTES)
 
     await db.execute(
@@ -119,8 +124,7 @@ async def request_magic_login(
     active_tokens = result.scalars().all()
 
     if len(active_tokens) >= MAX_ACTIVE_TOKENS_PER_EMAIL:
-        # Silent fail to avoid email enumeration
-        return None
+        return False
 
     raw_token, token_hash = create_magic_token_pair()
 
@@ -137,16 +141,25 @@ async def request_magic_login(
     subject = build_magic_link_subject()
 
     base_url = settings.PUBLIC_APP_URL.rstrip("/")
-    magic_link = (
-        f"{base_url}/api/auth/verify"
-        f"?token={raw_token}"
-    )
+    magic_link = f"{base_url}/api/auth/verify?token={raw_token}"
 
-    send_magic_link_email(
-        to_email=email,
-        magic_link=magic_link,
-        subject=subject,
-    )
+    try:
+        send_magic_link_email(
+            to_email=email,
+            magic_link=magic_link,
+            subject=subject,
+        )
+    except Exception:
+        # HARD FAIL — rollback token
+        await db.execute(
+            delete(MagicLoginToken).where(
+                MagicLoginToken.token_hash == token_hash
+            )
+        )
+        await db.commit()
+        return False
+
+    return True
 
 
 # =========================================================
@@ -169,18 +182,14 @@ async def verify_magic_login(
     if not magic_token or is_token_expired(magic_token.expires_at):
         return None
 
-    # Mark token as used (single-use guarantee)
     magic_token.is_used = True
     magic_token.used_at = datetime.utcnow()
     await db.commit()
 
-    # Fetch or create user
     user = await _get_or_create_user(db, magic_token.email)
 
-    # Create session
     session = await create_session(db, user)
 
-    # Update last login
     user.last_login_at = datetime.utcnow()
     await db.commit()
 
@@ -214,9 +223,3 @@ async def _get_or_create_user(
     await db.refresh(user)
 
     return user
-
-
-# =========================================================
-# PHASE 5 — TRIAL ASSIGNMENT (INTENTIONALLY DISABLED)
-# =========================================================
-# Preserved intentionally. DO NOT ENABLE before Phase 5.
