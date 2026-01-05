@@ -13,6 +13,7 @@ Rules:
 
 import secrets
 import hashlib
+import hmac
 from datetime import datetime, timedelta, timezone
 from typing import Tuple
 
@@ -44,6 +45,13 @@ def hash_magic_token(raw_token: str) -> str:
     return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
 
+def timing_safe_compare(a: str, b: str) -> bool:
+    """
+    Prevent timing attacks during token comparison.
+    """
+    return hmac.compare_digest(a, b)
+
+
 def create_magic_token_pair() -> Tuple[str, str]:
     """
     Create a raw token + hashed token pair.
@@ -64,7 +72,9 @@ def magic_token_expiry() -> datetime:
     Returns expiry datetime for magic token.
     Uses UTC internally (conversion to IST happens elsewhere).
     """
-    return datetime.now(timezone.utc) + timedelta(minutes=MAGIC_LINK_EXPIRE_MINUTES)
+    return datetime.now(timezone.utc) + timedelta(
+        minutes=MAGIC_LINK_EXPIRE_MINUTES
+    )
 
 
 def is_token_expired(expires_at: datetime) -> bool:
