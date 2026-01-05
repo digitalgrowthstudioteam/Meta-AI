@@ -11,6 +11,22 @@ export default function RootLayout({
 }) {
   const pathname = usePathname();
 
+  // --------------------------------------------------
+  // LOGIN PAGE — NO DASHBOARD LAYOUT
+  // --------------------------------------------------
+  if (pathname === "/login") {
+    return (
+      <html lang="en">
+        <body className="bg-slate-50 text-gray-900">
+          {children}
+        </body>
+      </html>
+    );
+  }
+
+  // --------------------------------------------------
+  // MAIN APP LAYOUT
+  // --------------------------------------------------
   return (
     <html lang="en">
       <body className="bg-amber-50 text-gray-900">
