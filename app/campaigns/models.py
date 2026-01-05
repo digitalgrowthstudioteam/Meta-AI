@@ -43,16 +43,8 @@ class Campaign(Base):
     # META SNAPSHOT (READ-ONLY)
     # =========================
     name: Mapped[str] = mapped_column(String, nullable=False)
-
-    objective: Mapped[str] = mapped_column(
-        String,
-        nullable=False,
-    )
-
-    status: Mapped[str] = mapped_column(
-        String,
-        nullable=False,
-    )
+    objective: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, nullable=False)
 
     last_meta_sync_at: Mapped[datetime | None] = mapped_column(
         DateTime,
@@ -68,15 +60,8 @@ class Campaign(Base):
         nullable=False,
     )
 
-    ai_activated_at: Mapped[datetime | None] = mapped_column(
-        DateTime,
-        nullable=True,
-    )
-
-    ai_deactivated_at: Mapped[datetime | None] = mapped_column(
-        DateTime,
-        nullable=True,
-    )
+    ai_activated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    ai_deactivated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # =========================
     # PHASE 11 — EXECUTION GUARDRAILS
@@ -88,48 +73,58 @@ class Campaign(Base):
         doc="Hard lock: prevents any auto execution",
     )
 
-    ai_max_budget_change_pct: Mapped[float | None] = mapped_column(
-        Float,
-        nullable=True,
-        doc="Maximum allowed budget change % for approved actions",
-    )
+    ai_max_budget_change_pct: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ai_budget_floor: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ai_budget_ceiling: Mapped[float | None] = mapped_column(Float, nullable=True)
 
-    ai_budget_floor: Mapped[float | None] = mapped_column(
-        Float,
-        nullable=True,
-        doc="Minimum daily budget allowed by AI suggestions",
-    )
-
-    ai_budget_ceiling: Mapped[float | None] = mapped_column(
-        Float,
-        nullable=True,
-        doc="Maximum daily budget allowed by AI suggestions",
-    )
-
-    ai_execution_window_start: Mapped[datetime | None] = mapped_column(
-        DateTime,
-        nullable=True,
-        doc="AI actions valid only after this time",
-    )
-
-    ai_execution_window_end: Mapped[datetime | None] = mapped_column(
-        DateTime,
-        nullable=True,
-        doc="AI actions invalid after this time",
-    )
+    ai_execution_window_start: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    ai_execution_window_end: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     # =========================
-    # BILLING
+    # PHASE 11 — MANUAL CAMPAIGN PURCHASE (SOURCE OF TRUTH)
     # =========================
     is_manual: Mapped[bool] = mapped_column(
         Boolean,
         default=False,
         nullable=False,
+        doc="True if campaign is manually purchased",
     )
 
-    manual_expiry_date: Mapped[date | None] = mapped_column(
+    manual_purchased_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+        doc="When manual campaign was purchased",
+    )
+
+    manual_valid_from: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
+        doc="Manual campaign validity start",
+    )
+
+    manual_valid_till: Mapped[date | None] = mapped_column(
+        Date,
+        nullable=True,
+        doc="Manual campaign validity end",
+    )
+
+    manual_purchase_plan: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+        doc="0-5 | 6-29 | 30+",
+    )
+
+    manual_price_paid: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+        doc="Amount paid for manual campaign",
+    )
+
+    manual_status: Mapped[str] = mapped_column(
+        String,
+        default="inactive",
+        nullable=False,
+        doc="inactive | active | expired | revoked",
     )
 
     # =========================
@@ -190,26 +185,13 @@ class CampaignActionLog(Base):
     action_type: Mapped[str] = mapped_column(
         String,
         nullable=False,
-        doc="ai_toggle | budget_change | status_change | rollback",
+        doc="ai_toggle | manual_purchase | manual_expiry | rollback",
     )
 
-    before_state: Mapped[dict] = mapped_column(
-        JSON,
-        nullable=False,
-        doc="Immutable snapshot before change",
-    )
+    before_state: Mapped[dict] = mapped_column(JSON, nullable=False)
+    after_state: Mapped[dict] = mapped_column(JSON, nullable=False)
 
-    after_state: Mapped[dict] = mapped_column(
-        JSON,
-        nullable=False,
-        doc="Immutable snapshot after change",
-    )
-
-    reason: Mapped[str | None] = mapped_column(
-        String,
-        nullable=True,
-        doc="Why this action happened",
-    )
+    reason: Mapped[str | None] = mapped_column(String, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
@@ -228,8 +210,9 @@ Index(
 )
 
 Index(
-    "ix_campaign_ai_execution_locked",
-    Campaign.ai_execution_locked,
+    "ix_campaign_manual_status",
+    Campaign.is_manual,
+    Campaign.manual_status,
 )
 
 Index(
