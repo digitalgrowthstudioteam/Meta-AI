@@ -19,16 +19,28 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 # =========================================================
-# REQUEST MAGIC LINK
+# REQUEST MAGIC LINK (FIXED)
 # =========================================================
-@router.post("/login", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/login")
 async def login_request(
     email: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
-    # Idempotent + safe (service handles rate / reuse)
-    await request_magic_login(db, email=email)
-    return None
+    """
+    Returns:
+    - 204 → email sent
+    - 429 → rate limited / blocked
+    - 500 → email failed
+    """
+    sent = await request_magic_login(db, email=email)
+
+    if not sent:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send login link",
+        )
+
+    return None  # FastAPI will default to 200, frontend already handles success
 
 
 # =========================================================
@@ -37,7 +49,7 @@ async def login_request(
 @router.get("/verify")
 async def verify_login(
     token: str = Query(...),
-    next: str = Query("/dashboard"),  # frontend-controlled redirect
+    next: str = Query("/dashboard"),
     db: AsyncSession = Depends(get_db),
 ):
     session_token = await verify_magic_login(db, raw_token=token)
@@ -53,7 +65,6 @@ async def verify_login(
         status_code=status.HTTP_302_FOUND,
     )
 
-    # 🔐 AUTH COOKIE — MAGIC LINK SAFE CONFIG
     response.set_cookie(
         key="meta_ai_session",
         value=session_token,
@@ -61,14 +72,14 @@ async def verify_login(
         secure=True,
         samesite="none",
         path="/",
-        max_age=60 * 60 * 24 * 3,  # 3 days
+        max_age=60 * 60 * 24 * 3,
     )
 
     return response
 
 
 # =========================================================
-# AUTH SESSION CHECK (USED BY NEXT.JS)
+# AUTH SESSION CHECK
 # =========================================================
 @router.get("/me")
 async def auth_me(
