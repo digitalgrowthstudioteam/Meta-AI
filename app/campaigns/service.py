@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, date
 import logging
 
 from app.campaigns.models import Campaign, CampaignActionLog
@@ -114,7 +114,50 @@ class CampaignService:
         return synced
 
     # =====================================================
-    # AI TOGGLE (PHASE 10 — LOGGED & ROLLBACK-SAFE)
+    # MANUAL CAMPAIGN VALIDITY ENFORCEMENT (PHASE 11.2)
+    # =====================================================
+    @staticmethod
+    async def enforce_manual_campaign_validity(
+        db: AsyncSession,
+        *,
+        campaign: Campaign,
+    ) -> None:
+        if not campaign.is_manual:
+            return
+
+        today = date.today()
+
+        if (
+            campaign.manual_status == "active"
+            and campaign.manual_valid_till
+            and today > campaign.manual_valid_till
+        ):
+            before_state = {
+                "manual_status": campaign.manual_status,
+            }
+
+            campaign.manual_status = "expired"
+            campaign.ai_active = False
+            campaign.ai_deactivated_at = datetime.utcnow()
+
+            after_state = {
+                "manual_status": campaign.manual_status,
+            }
+
+            db.add(
+                CampaignActionLog(
+                    campaign_id=campaign.id,
+                    user_id=campaign.ad_account_id,  # system trace
+                    actor_type="system",
+                    action_type="manual_expiry",
+                    before_state=before_state,
+                    after_state=after_state,
+                    reason="Manual campaign expired",
+                )
+            )
+
+    # =====================================================
+    # AI TOGGLE (PHASE 11 — MANUAL + PLAN ENFORCED)
     # =====================================================
     @staticmethod
     async def toggle_ai(
@@ -143,39 +186,41 @@ class CampaignService:
         if not campaign:
             raise ValueError("Campaign not found")
 
-        # 🔒 Snapshot BEFORE
+        # 🔒 Enforce manual validity before any toggle
+        await CampaignService.enforce_manual_campaign_validity(
+            db=db,
+            campaign=campaign,
+        )
+
+        if campaign.is_manual and campaign.manual_status != "active":
+            raise EnforcementError(
+                code="MANUAL_CAMPAIGN_INACTIVE",
+                message="Manual campaign is not active.",
+                action="RENEW_MANUAL",
+            )
+
+        # Snapshot BEFORE
         before_state = {
             "ai_active": campaign.ai_active,
-            "ai_activated_at": campaign.ai_activated_at.isoformat() if campaign.ai_activated_at else None,
-            "ai_deactivated_at": campaign.ai_deactivated_at.isoformat() if campaign.ai_deactivated_at else None,
         }
 
-        # -------------------------------------------------
-        # ENABLE AI — STRICT PLAN ENFORCEMENT
-        # -------------------------------------------------
+        # Plan enforcement
         if enable and not campaign.ai_active:
             await PlanEnforcementService.assert_ai_allowed(
                 db=db,
                 user_id=user_id,
             )
 
-        # -------------------------------------------------
-        # APPLY TOGGLE
-        # -------------------------------------------------
+        # Apply toggle
         campaign.ai_active = enable
         campaign.ai_activated_at = datetime.utcnow() if enable else None
         campaign.ai_deactivated_at = None if enable else datetime.utcnow()
 
-        # 🔒 Snapshot AFTER
+        # Snapshot AFTER
         after_state = {
             "ai_active": campaign.ai_active,
-            "ai_activated_at": campaign.ai_activated_at.isoformat() if campaign.ai_activated_at else None,
-            "ai_deactivated_at": campaign.ai_deactivated_at.isoformat() if campaign.ai_deactivated_at else None,
         }
 
-        # =================================================
-        # ACTION LOG (IMMUTABLE)
-        # =================================================
         db.add(
             CampaignActionLog(
                 campaign_id=campaign.id,
