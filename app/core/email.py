@@ -4,7 +4,7 @@ SMTP Email Utility
 Responsibilities:
 - Send transactional emails via SMTP
 - Fail safely (no auth breakage)
-- Config-driven (Gmail / Zoho switchable)
+- Config-driven (Gmail / Zoho / SES)
 
 Rules:
 - No auth logic
@@ -13,6 +13,7 @@ Rules:
 """
 
 import smtplib
+import ssl
 from email.message import EmailMessage
 from typing import Optional
 
@@ -28,10 +29,28 @@ def send_email(
 ) -> None:
     """
     Send email via configured SMTP.
-    Failures are logged but never raised.
+    MUST NEVER raise.
     """
-    if not settings.SMTP_HOST:
-        # SMTP not configured — silently ignore
+
+    # --------------------------------------------------
+    # CONFIG VALIDATION (HARD STOP, SAFE)
+    # --------------------------------------------------
+    if not all(
+        [
+            settings.SMTP_HOST,
+            settings.SMTP_PORT,
+            settings.SMTP_FROM_EMAIL,
+            settings.SMTP_USER,
+            settings.SMTP_PASSWORD,
+        ]
+    ):
+        print("[EMAIL] SMTP not fully configured — skipping send")
+        return
+
+    try:
+        port = int(settings.SMTP_PORT)
+    except Exception:
+        print("[EMAIL] Invalid SMTP_PORT — skipping send")
         return
 
     msg = EmailMessage()
@@ -45,13 +64,40 @@ def send_email(
     msg.add_alternative(html_body, subtype="html")
 
     try:
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
-            server.starttls()
-            server.login(
-                settings.SMTP_USER,
-                settings.SMTP_PASSWORD,
-            )
-            server.send_message(msg)
+        # --------------------------------------------------
+        # SSL (465)
+        # --------------------------------------------------
+        if port == 465:
+            context = ssl.create_default_context()
+            with smtplib.SMTP_SSL(
+                settings.SMTP_HOST,
+                port,
+                context=context,
+            ) as server:
+                server.login(
+                    settings.SMTP_USER,
+                    settings.SMTP_PASSWORD,
+                )
+                server.send_message(msg)
+
+        # --------------------------------------------------
+        # STARTTLS (587 / others)
+        # --------------------------------------------------
+        else:
+            with smtplib.SMTP(
+                settings.SMTP_HOST,
+                port,
+                timeout=10,
+            ) as server:
+                server.ehlo()
+                server.starttls()
+                server.login(
+                    settings.SMTP_USER,
+                    settings.SMTP_PASSWORD,
+                )
+                server.send_message(msg)
+
     except Exception as exc:
-        # IMPORTANT: never break login flow
+        # ABSOLUTE RULE: NEVER BREAK LOGIN FLOW
         print(f"[EMAIL ERROR] {exc}")
+        return
