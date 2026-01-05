@@ -14,21 +14,20 @@ type DashboardSummary = {
     ai_active?: number;
     ai_limit?: number;
   };
+};
 
-  ai?: {
-    engine_status?: "on" | "off";
-    last_action_at?: string | null;
-  };
-
-  subscription?: {
-    plan?: string;
-    expires_at?: string | null;
-    manual_campaign_credits?: number;
-  };
+type AdAccount = {
+  id: string;
+  name: string;
+  meta_account_id: string;
+  is_selected: boolean;
 };
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardSummary | null>(null);
+  const [adAccountsList, setAdAccountsList] = useState<AdAccount[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -48,7 +47,6 @@ export default function DashboardPage() {
       });
 
       if (!res.ok) throw new Error();
-
       const json = await res.json();
       setData(json ?? {});
     } catch {
@@ -59,9 +57,57 @@ export default function DashboardPage() {
     }
   };
 
+  // --------------------------------------------------
+  // LOAD AD ACCOUNTS (FILTER)
+  // --------------------------------------------------
+  const loadAdAccounts = async () => {
+    try {
+      const res = await fetch("/api/meta/adaccounts", {
+        credentials: "include",
+        cache: "no-store",
+      });
+
+      if (!res.ok) return;
+
+      const json = await res.json();
+      setAdAccountsList(json ?? []);
+
+      const selected = json?.find((a: AdAccount) => a.is_selected);
+      if (selected) setSelectedAccountId(selected.id);
+    } catch {
+      // Silent fail — dashboard still works
+    }
+  };
+
   useEffect(() => {
     loadSummary();
+    loadAdAccounts();
   }, []);
+
+  // --------------------------------------------------
+  // SWITCH AD ACCOUNT
+  // --------------------------------------------------
+  const switchAdAccount = async (accountId: string) => {
+    setSelectedAccountId(accountId);
+    setSuccessMsg(null);
+    setErrorMsg(null);
+
+    try {
+      const res = await fetch("/api/meta/adaccounts/select", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ ad_account_id: accountId }),
+      });
+
+      if (!res.ok) throw new Error();
+
+      await loadSummary();
+      setSuccessMsg("Ad account switched");
+    } catch {
+      setErrorMsg("Failed to switch ad account");
+    }
+  };
 
   // --------------------------------------------------
   // META CONNECT
@@ -105,6 +151,7 @@ export default function DashboardPage() {
       setSuccessMsg(
         `Synced ${json?.ad_accounts_processed ?? 0} ad accounts`
       );
+      await loadAdAccounts();
       await loadSummary();
     } catch {
       setErrorMsg("Ad account sync failed");
@@ -113,18 +160,11 @@ export default function DashboardPage() {
     }
   };
 
-  // --------------------------------------------------
-  // DERIVED SAFE VALUES
-  // --------------------------------------------------
   const metaConnected = Boolean(data?.meta_connected);
-  const adAccounts = data?.ad_accounts ?? 0;
   const totalCampaigns = data?.campaigns?.total ?? 0;
   const aiActive = data?.campaigns?.ai_active ?? 0;
   const aiLimit = data?.campaigns?.ai_limit ?? 0;
 
-  // --------------------------------------------------
-  // UI STATES
-  // --------------------------------------------------
   if (loading) {
     return (
       <div className="space-y-4">
@@ -156,6 +196,24 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* FILTER BAR */}
+      {metaConnected && adAccountsList.length > 0 && (
+        <div className="surface p-4 flex items-center gap-4">
+          <div className="text-sm text-gray-600">Ad Account:</div>
+          <select
+            className="border rounded px-2 py-1 text-sm"
+            value={selectedAccountId ?? ""}
+            onChange={(e) => switchAdAccount(e.target.value)}
+          >
+            {adAccountsList.map((acc) => (
+              <option key={acc.id} value={acc.id}>
+                {acc.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* META ACTION BAR */}
       {!metaConnected ? (
@@ -195,15 +253,9 @@ export default function DashboardPage() {
       {/* KPI GRID */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
-          label="Ad Accounts"
-          value={adAccounts}
-          hint="Connected Meta ad accounts"
-        />
-
-        <KpiCard
           label="Total Campaigns"
           value={totalCampaigns}
-          hint="Synced from Meta"
+          hint="Selected ad account"
         />
 
         <KpiCard
@@ -220,13 +272,6 @@ export default function DashboardPage() {
         />
       </div>
 
-      {metaConnected && totalCampaigns === 0 && (
-        <div className="surface p-4 text-sm text-gray-600">
-          No campaigns synced yet.  
-          Use “Sync Ad Accounts” to fetch campaigns from Meta.
-        </div>
-      )}
-
       <div className="text-xs text-gray-400">
         All data is read-only and synced from Meta Ads Manager.
       </div>
@@ -234,8 +279,6 @@ export default function DashboardPage() {
   );
 }
 
-/* -------------------------------------------------- */
-/* COMPONENTS */
 /* -------------------------------------------------- */
 
 function DevBanner() {
