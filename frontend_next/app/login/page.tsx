@@ -34,13 +34,18 @@ export default function LoginPage() {
       );
 
       if (!res.ok) {
-        throw new Error("Unable to send login link");
+        const text = await res.text();
+        throw new Error(text || `HTTP ${res.status}`);
       }
 
       setSent(true);
-      setCooldown(60); // resend protection (UX only)
-    } catch (err) {
-      setError("Something went wrong. Please try again.");
+      setCooldown(60);
+    } catch (err: any) {
+      console.error("Login error:", err);
+      setError(
+        err?.message ||
+          "Login request failed. Check console for details."
+      );
     } finally {
       setLoading(false);
     }
@@ -62,10 +67,6 @@ export default function LoginPage() {
             <div className="rounded-lg bg-green-50 p-4 text-sm text-green-700">
               ✅ Login link sent successfully.  
               Please check your inbox and spam folder.
-            </div>
-
-            <div className="text-xs text-slate-500">
-              Didn’t receive the email?
             </div>
 
             <button
@@ -98,7 +99,9 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <div className="text-sm text-red-600">{error}</div>
+              <div className="text-sm text-red-600 break-words">
+                {error}
+              </div>
             )}
 
             <button
