@@ -6,6 +6,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Float,
+    JSON,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime, date
@@ -157,6 +158,66 @@ class Campaign(Base):
     )
 
 
+# =========================================================
+# PHASE 10 — CAMPAIGN ACTION HISTORY (IMMUTABLE LOG)
+# =========================================================
+class CampaignActionLog(Base):
+    __tablename__ = "campaign_action_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    campaign_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("campaigns.id"),
+        nullable=False,
+        index=True,
+    )
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=False,
+        index=True,
+    )
+
+    actor_type: Mapped[str] = mapped_column(
+        String,
+        nullable=False,
+        doc="user | ai | admin | system",
+    )
+
+    action_type: Mapped[str] = mapped_column(
+        String,
+        nullable=False,
+        doc="ai_toggle | budget_change | status_change | rollback",
+    )
+
+    before_state: Mapped[dict] = mapped_column(
+        JSON,
+        nullable=False,
+        doc="Immutable snapshot before change",
+    )
+
+    after_state: Mapped[dict] = mapped_column(
+        JSON,
+        nullable=False,
+        doc="Immutable snapshot after change",
+    )
+
+    reason: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+        doc="Why this action happened",
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+    )
+
+
 # =========================
 # INDEXES
 # =========================
@@ -169,4 +230,10 @@ Index(
 Index(
     "ix_campaign_ai_execution_locked",
     Campaign.ai_execution_locked,
+)
+
+Index(
+    "ix_campaign_action_log_campaign_time",
+    CampaignActionLog.campaign_id,
+    CampaignActionLog.created_at,
 )
