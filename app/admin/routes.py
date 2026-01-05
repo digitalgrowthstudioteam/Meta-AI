@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from uuid import UUID
 
 from app.core.db_session import get_db
 from app.auth.dependencies import require_user
@@ -62,6 +63,33 @@ async def list_overrides(
 ):
     require_admin(current_user)
     return await AdminOverrideService.list_overrides(db)
+
+
+# =========================
+# PHASE 10.4 — ADMIN ROLLBACK
+# =========================
+@router.post("/campaigns/{action_log_id}/rollback")
+async def rollback_campaign_action(
+    action_log_id: UUID,
+    reason: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+
+    try:
+        campaign = await AdminOverrideService.rollback_campaign_action(
+            db=db,
+            action_log_id=action_log_id,
+            admin_user_id=current_user.id,
+            reason=reason,
+        )
+        return {
+            "status": "rolled_back",
+            "campaign_id": str(campaign.id),
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 # =========================
