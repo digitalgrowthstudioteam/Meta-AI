@@ -15,6 +15,7 @@ Rules:
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
@@ -74,7 +75,7 @@ async def create_session(
 
 
 # =========================================================
-# SESSION VALIDATION (FIXED — ASYNC SAFE)
+# SESSION VALIDATION (ASYNC SAFE)
 # =========================================================
 async def get_active_session(
     db: AsyncSession,
@@ -104,19 +105,22 @@ async def revoke_session(
     session_token: str,
 ) -> None:
     """
-    Soft revoke a session (logout).
+    Soft revoke a single session (logout).
     """
     await db.execute(
         update(Session)
         .where(Session.session_token == session_token)
-        .values(is_active=False)
+        .values(
+            is_active=False,
+            revoked_at=datetime.now(timezone.utc),
+        )
     )
     await db.commit()
 
 
 async def revoke_all_sessions_for_user(
     db: AsyncSession,
-    user_id,
+    user_id: UUID,
 ) -> None:
     """
     Revoke all active sessions for a user.
@@ -128,6 +132,9 @@ async def revoke_all_sessions_for_user(
             Session.user_id == user_id,
             Session.is_active.is_(True),
         )
-        .values(is_active=False)
+        .values(
+            is_active=False,
+            revoked_at=datetime.now(timezone.utc),
+        )
     )
     await db.commit()
