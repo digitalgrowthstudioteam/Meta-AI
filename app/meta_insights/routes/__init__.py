@@ -7,6 +7,7 @@ Purpose:
 - Phase 8: Audience / Breakdown Insights
 """
 
+from .admin_metrics_routes import router as admin_metrics_router
 from fastapi import APIRouter
 
 from app.meta_insights.routes.audience_insights_routes import (
