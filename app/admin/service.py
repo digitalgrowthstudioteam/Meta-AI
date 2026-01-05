@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, date
 
 from app.admin.models import AdminOverride
 from app.campaigns.models import Campaign, CampaignActionLog
@@ -9,16 +9,16 @@ from app.campaigns.models import Campaign, CampaignActionLog
 
 class AdminOverrideService:
     """
-    Admin override business logic.
+    Admin override & control business logic.
 
     🔒 RULES:
-    - Overrides are additive
-    - Overrides are time-bound
-    - Overrides never mutate plans or subscriptions
+    - Admin actions are authoritative
+    - All actions are logged
+    - No silent state mutation
     """
 
     # =====================================================
-    # ADMIN OVERRIDES
+    # ADMIN OVERRIDES (PLAN / AI LIMIT)
     # =====================================================
     @staticmethod
     async def create_override(
@@ -41,7 +41,6 @@ class AdminOverrideService:
         db.add(override)
         await db.commit()
         await db.refresh(override)
-
         return override
 
     @staticmethod
@@ -53,7 +52,7 @@ class AdminOverrideService:
         return result.scalars().all()
 
     # =====================================================
-    # PHASE 10.3 — ROLLBACK ENGINE (ADMIN / SYSTEM ONLY)
+    # PHASE 10.3 — ROLLBACK ENGINE
     # =====================================================
     @staticmethod
     async def rollback_campaign_action(
@@ -63,13 +62,7 @@ class AdminOverrideService:
         admin_user_id: UUID,
         reason: str,
     ) -> Campaign:
-        """
-        Rollback a campaign to BEFORE state from action log.
-        - Immutable audit
-        - Admin-only
-        """
 
-        # 🔒 Lock action log
         stmt = (
             select(CampaignActionLog)
             .where(CampaignActionLog.id == action_log_id)
@@ -81,7 +74,6 @@ class AdminOverrideService:
         if not log:
             raise ValueError("Action log not found")
 
-        # 🔒 Lock campaign
         stmt = (
             select(Campaign)
             .where(Campaign.id == log.campaign_id)
@@ -93,14 +85,12 @@ class AdminOverrideService:
         if not campaign:
             raise ValueError("Campaign not found")
 
-        # Snapshot BEFORE rollback (current state)
         rollback_before = {
             "ai_active": campaign.ai_active,
             "ai_activated_at": campaign.ai_activated_at.isoformat() if campaign.ai_activated_at else None,
             "ai_deactivated_at": campaign.ai_deactivated_at.isoformat() if campaign.ai_deactivated_at else None,
         }
 
-        # Restore from log.before_state
         campaign.ai_active = log.before_state.get("ai_active", campaign.ai_active)
         campaign.ai_activated_at = (
             datetime.fromisoformat(log.before_state["ai_activated_at"])
@@ -113,14 +103,12 @@ class AdminOverrideService:
             else None
         )
 
-        # Snapshot AFTER rollback
         rollback_after = {
             "ai_active": campaign.ai_active,
             "ai_activated_at": campaign.ai_activated_at.isoformat() if campaign.ai_activated_at else None,
             "ai_deactivated_at": campaign.ai_deactivated_at.isoformat() if campaign.ai_deactivated_at else None,
         }
 
-        # 🔒 Log rollback action (immutable)
         db.add(
             CampaignActionLog(
                 campaign_id=campaign.id,
@@ -129,6 +117,72 @@ class AdminOverrideService:
                 action_type="rollback",
                 before_state=rollback_before,
                 after_state=rollback_after,
+                reason=reason,
+            )
+        )
+
+        await db.commit()
+        await db.refresh(campaign)
+        return campaign
+
+    # =====================================================
+    # PHASE 11.3 — MANUAL CAMPAIGN PURCHASE / RENEWAL
+    # =====================================================
+    @staticmethod
+    async def grant_or_renew_manual_campaign(
+        db: AsyncSession,
+        *,
+        campaign_id: UUID,
+        admin_user_id: UUID,
+        valid_from: date,
+        valid_till: date,
+        price_paid: float,
+        plan_label: str,
+        reason: str,
+    ) -> Campaign:
+        """
+        Admin-only manual campaign purchase / renewal.
+        """
+
+        stmt = (
+            select(Campaign)
+            .where(Campaign.id == campaign_id)
+            .with_for_update()
+        )
+        result = await db.execute(stmt)
+        campaign = result.scalar_one_or_none()
+
+        if not campaign:
+            raise ValueError("Campaign not found")
+
+        before_state = {
+            "is_manual": campaign.is_manual,
+            "manual_status": campaign.manual_status,
+            "manual_valid_till": str(campaign.manual_valid_till) if campaign.manual_valid_till else None,
+        }
+
+        campaign.is_manual = True
+        campaign.manual_purchased_at = datetime.utcnow()
+        campaign.manual_valid_from = valid_from
+        campaign.manual_valid_till = valid_till
+        campaign.manual_price_paid = price_paid
+        campaign.manual_purchase_plan = plan_label
+        campaign.manual_status = "active"
+
+        after_state = {
+            "is_manual": campaign.is_manual,
+            "manual_status": campaign.manual_status,
+            "manual_valid_till": str(campaign.manual_valid_till),
+        }
+
+        db.add(
+            CampaignActionLog(
+                campaign_id=campaign.id,
+                user_id=admin_user_id,
+                actor_type="admin",
+                action_type="manual_purchase",
+                before_state=before_state,
+                after_state=after_state,
                 reason=reason,
             )
         )
