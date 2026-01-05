@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 from datetime import date
@@ -20,6 +20,11 @@ from app.admin.service import AdminOverrideService
 # Plan / Subscription Enforcement
 # -------------------------
 from app.plans.enforcement import PlanEnforcementService
+
+# -------------------------
+# Audit Models
+# -------------------------
+from app.campaigns.models import CampaignActionLog
 
 # -------------------------
 # Metrics Sync (Phase 6.5)
@@ -142,13 +147,6 @@ async def run_subscription_expiry_cron(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
-    """
-    Admin/system-triggered cron endpoint.
-    Safe to be called by:
-    - real cron
-    - GitHub Actions
-    - manual admin action
-    """
     require_admin(current_user)
 
     affected = await PlanEnforcementService.enforce_subscription_expiry(
@@ -158,6 +156,84 @@ async def run_subscription_expiry_cron(
     return {
         "status": "ok",
         "expired_campaigns_disabled": affected,
+    }
+
+
+# =====================================================
+# PHASE 13 — READ-ONLY ADMIN AUDIT APIs
+# =====================================================
+
+@router.get("/audit/actions")
+async def list_campaign_action_logs(
+    *,
+    campaign_id: UUID | None = Query(default=None),
+    actor_type: str | None = Query(default=None),
+    limit: int = Query(default=50, le=200),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    """
+    Read-only audit feed for admin UI.
+    """
+    require_admin(current_user)
+
+    stmt = select(CampaignActionLog).order_by(
+        CampaignActionLog.created_at.desc()
+    )
+
+    if campaign_id:
+        stmt = stmt.where(CampaignActionLog.campaign_id == campaign_id)
+
+    if actor_type:
+        stmt = stmt.where(CampaignActionLog.actor_type == actor_type)
+
+    stmt = stmt.limit(limit)
+
+    result = await db.execute(stmt)
+    logs = result.scalars().all()
+
+    return [
+        {
+            "id": str(log.id),
+            "campaign_id": str(log.campaign_id),
+            "actor_type": log.actor_type,
+            "action_type": log.action_type,
+            "reason": log.reason,
+            "created_at": log.created_at.isoformat(),
+        }
+        for log in logs
+    ]
+
+
+@router.get("/audit/actions/{action_log_id}")
+async def get_campaign_action_log(
+    action_log_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    """
+    Detailed immutable snapshot view (for modal / drawer UI).
+    """
+    require_admin(current_user)
+
+    stmt = select(CampaignActionLog).where(
+        CampaignActionLog.id == action_log_id
+    )
+    result = await db.execute(stmt)
+    log = result.scalar_one_or_none()
+
+    if not log:
+        raise HTTPException(status_code=404, detail="Audit log not found")
+
+    return {
+        "id": str(log.id),
+        "campaign_id": str(log.campaign_id),
+        "actor_type": log.actor_type,
+        "action_type": log.action_type,
+        "reason": log.reason,
+        "before_state": log.before_state,
+        "after_state": log.after_state,
+        "created_at": log.created_at.isoformat(),
     }
 
 
