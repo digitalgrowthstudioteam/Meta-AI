@@ -33,6 +33,7 @@ export default function SettingsPage() {
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [connectingMeta, setConnectingMeta] = useState(false);
 
   /* ----------------------------------
    * LOAD SETTINGS DATA
@@ -42,9 +43,9 @@ export default function SettingsPage() {
       setLoading(true);
 
       const [accountsRes, subRes, prefRes] = await Promise.all([
-        fetch("/api/meta/adaccounts", { credentials: "include" }),
-        fetch("/api/billing/subscription", { credentials: "include" }),
-        fetch("/api/user/preferences", { credentials: "include" }),
+        fetch("/api/meta/adaccounts", { credentials: "include", cache: "no-store" }),
+        fetch("/api/billing/subscription", { credentials: "include", cache: "no-store" }),
+        fetch("/api/user/preferences", { credentials: "include", cache: "no-store" }),
       ]);
 
       if (accountsRes.ok) {
@@ -72,6 +73,31 @@ export default function SettingsPage() {
   useEffect(() => {
     loadSettings();
   }, []);
+
+  /* ----------------------------------
+   * CONNECT META (REAL)
+   * ---------------------------------- */
+  const connectMeta = async () => {
+    try {
+      setConnectingMeta(true);
+
+      const res = await fetch("/api/meta/connect", {
+        credentials: "include",
+        cache: "no-store",
+      });
+
+      if (!res.ok) throw new Error();
+
+      const json = await res.json();
+      if (json?.redirect_url) {
+        window.location.href = json.redirect_url;
+      }
+    } catch {
+      alert("Failed to initiate Meta connection.");
+    } finally {
+      setConnectingMeta(false);
+    }
+  };
 
   /* ----------------------------------
    * SAVE PREFERENCES
@@ -108,9 +134,19 @@ export default function SettingsPage() {
           META AD ACCOUNTS
       =============================== */}
       <div className="bg-white border rounded p-6 space-y-4">
-        <h2 className="text-sm font-semibold text-gray-900">
-          Connected Meta Ad Accounts
-        </h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-gray-900">
+            Connected Meta Ad Accounts
+          </h2>
+
+          <button
+            onClick={connectMeta}
+            disabled={connectingMeta}
+            className="btn-primary text-sm"
+          >
+            {connectingMeta ? "Connecting…" : "Connect Meta Ads"}
+          </button>
+        </div>
 
         {adAccounts.length === 0 && (
           <div className="text-sm text-gray-600">
@@ -166,27 +202,15 @@ export default function SettingsPage() {
 
         {subscription ? (
           <div className="text-sm space-y-1">
-            <div>
-              <strong>Plan:</strong> {subscription.plan}
-            </div>
-            <div>
-              <strong>AI Campaign Limit:</strong>{" "}
-              {subscription.ai_campaign_limit}
-            </div>
-            <div>
-              <strong>Expires At:</strong>{" "}
-              {subscription.expires_at ?? "—"}
-            </div>
+            <div><strong>Plan:</strong> {subscription.plan}</div>
+            <div><strong>AI Campaign Limit:</strong> {subscription.ai_campaign_limit}</div>
+            <div><strong>Expires At:</strong> {subscription.expires_at ?? "—"}</div>
           </div>
         ) : (
           <div className="text-sm text-gray-600">
             No active subscription.
           </div>
         )}
-
-        <div className="text-xs text-gray-400">
-          Campaign purchases are managed separately from subscriptions.
-        </div>
       </div>
 
       {/* ===============================
@@ -203,10 +227,7 @@ export default function SettingsPage() {
             <select
               value={preferences.timezone}
               onChange={(e) =>
-                setPreferences((p) => ({
-                  ...p,
-                  timezone: e.target.value,
-                }))
+                setPreferences((p) => ({ ...p, timezone: e.target.value }))
               }
               className="mt-1 w-full border rounded px-2 py-1"
             >
@@ -223,10 +244,7 @@ export default function SettingsPage() {
             <select
               value={preferences.reporting_window}
               onChange={(e) =>
-                setPreferences((p) => ({
-                  ...p,
-                  reporting_window: e.target.value,
-                }))
+                setPreferences((p) => ({ ...p, reporting_window: e.target.value }))
               }
               className="mt-1 w-full border rounded px-2 py-1"
             >
@@ -247,27 +265,6 @@ export default function SettingsPage() {
         </button>
       </div>
 
-      {/* ===============================
-          SECURITY
-      =============================== */}
-      <div className="bg-white border rounded p-6 space-y-2">
-        <h2 className="text-sm font-semibold text-gray-900">
-          Session & Security
-        </h2>
-
-        <ul className="text-sm text-gray-600 list-disc ml-5 space-y-1">
-          <li>Magic link login enabled</li>
-          <li>Server-side session handling</li>
-          <li>Automatic session expiry</li>
-          <li>No password storage</li>
-        </ul>
-
-        <div className="text-xs text-gray-400">
-          Critical security changes require admin-level access.
-        </div>
-      </div>
-
-      {/* FOOTNOTE */}
       <div className="text-xs text-gray-400">
         All settings are applied safely without impacting live Meta campaigns.
       </div>
