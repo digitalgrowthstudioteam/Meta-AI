@@ -2,19 +2,31 @@
 
 import { useEffect, useState } from "react";
 
+/* -----------------------------------
+ * TYPES
+ * ----------------------------------- */
 type Campaign = {
   id: string;
   name: string;
   status: string;
   objective?: string;
   ai_active?: boolean;
+  created_at?: string;
 
-  // Phase 9.2 — category visibility
   category?: string | null;
   category_confidence?: number | null;
   category_source?: string | null;
 };
 
+type AdAccount = {
+  id: string;
+  name: string;
+  is_selected: boolean;
+};
+
+/* -----------------------------------
+ * PAGE
+ * ----------------------------------- */
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
@@ -22,15 +34,59 @@ export default function CampaignsPage() {
   const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
-  // -----------------------------------
-  // LOAD CAMPAIGNS
-  // -----------------------------------
+  /* Filters */
+  const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
+  const [selectedAdAccount, setSelectedAdAccount] = useState<string>("");
+
+  const [statusFilter, setStatusFilter] = useState("");
+  const [aiFilter, setAiFilter] = useState("");
+  const [objectiveFilter, setObjectiveFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  /* Pagination */
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  /* -----------------------------------
+   * LOAD AD ACCOUNTS
+   * ----------------------------------- */
+  const loadAdAccounts = async () => {
+    try {
+      const res = await fetch("/api/meta/adaccounts", {
+        credentials: "include",
+      });
+      if (!res.ok) return;
+
+      const data = await res.json();
+      setAdAccounts(data ?? []);
+
+      const selected = data?.find((a: AdAccount) => a.is_selected);
+      if (selected) setSelectedAdAccount(selected.id);
+    } catch {}
+  };
+
+  /* -----------------------------------
+   * LOAD CAMPAIGNS
+   * ----------------------------------- */
   const loadCampaigns = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const res = await fetch("/api/campaigns", {
+      const params = new URLSearchParams({
+        page: String(page),
+        page_size: String(pageSize),
+      });
+
+      if (selectedAdAccount) params.append("ad_account_id", selectedAdAccount);
+      if (statusFilter) params.append("status", statusFilter);
+      if (aiFilter) params.append("ai_active", aiFilter);
+      if (objectiveFilter) params.append("objective", objectiveFilter);
+      if (dateFrom) params.append("from", dateFrom);
+      if (dateTo) params.append("to", dateTo);
+
+      const res = await fetch(`/api/campaigns?${params.toString()}`, {
         credentials: "include",
       });
 
@@ -40,16 +96,12 @@ export default function CampaignsPage() {
         return;
       }
 
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
+      if (!res.ok) throw new Error();
 
       const data = await res.json();
-
       setCampaigns(Array.isArray(data) ? data : []);
       setMetaConnected(true);
-    } catch (err) {
-      console.error("Campaign load failed", err);
+    } catch {
       setError("Unable to load campaigns.");
     } finally {
       setLoading(false);
@@ -57,70 +109,69 @@ export default function CampaignsPage() {
   };
 
   useEffect(() => {
-    loadCampaigns();
+    loadAdAccounts();
   }, []);
 
-  // -----------------------------------
-  // CONNECT META
-  // -----------------------------------
+  useEffect(() => {
+    loadCampaigns();
+  }, [
+    selectedAdAccount,
+    statusFilter,
+    aiFilter,
+    objectiveFilter,
+    dateFrom,
+    dateTo,
+    page,
+    pageSize,
+  ]);
+
+  /* -----------------------------------
+   * META CONNECT
+   * ----------------------------------- */
   const connectMeta = async () => {
     const res = await fetch("/api/meta/connect", {
       credentials: "include",
     });
-
     const data = await res.json();
-    if (data?.redirect_url) {
-      window.location.href = data.redirect_url;
-    }
+    if (data?.redirect_url) window.location.href = data.redirect_url;
   };
 
-  // -----------------------------------
-  // SYNC CAMPAIGNS
-  // -----------------------------------
+  /* -----------------------------------
+   * SYNC CAMPAIGNS
+   * ----------------------------------- */
   const syncCampaigns = async () => {
     await fetch("/api/campaigns/sync", {
       method: "POST",
       credentials: "include",
     });
-
     loadCampaigns();
   };
 
-  // -----------------------------------
-  // TOGGLE AI
-  // -----------------------------------
+  /* -----------------------------------
+   * TOGGLE AI
+   * ----------------------------------- */
   const toggleAI = async (campaign: Campaign) => {
     if (togglingId) return;
 
     const nextValue = !campaign.ai_active;
+    setTogglingId(campaign.id);
 
-    // optimistic UI
     setCampaigns((prev) =>
       prev.map((c) =>
         c.id === campaign.id ? { ...c, ai_active: nextValue } : c
       )
     );
 
-    setTogglingId(campaign.id);
-
     try {
-      const res = await fetch(
-        `/api/campaigns/${campaign.id}/ai-toggle`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ enable: nextValue }),
-        }
-      );
+      const res = await fetch(`/api/campaigns/${campaign.id}/ai-toggle`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enable: nextValue }),
+      });
 
-      if (!res.ok) {
-        throw new Error("Toggle failed");
-      }
-    } catch (err) {
-      // rollback on error
+      if (!res.ok) throw new Error();
+    } catch {
       setCampaigns((prev) =>
         prev.map((c) =>
           c.id === campaign.id
@@ -128,18 +179,17 @@ export default function CampaignsPage() {
             : c
         )
       );
-      alert("Unable to change AI state. Check plan or restrictions.");
+      alert("Unable to change AI state. Check plan limits.");
     } finally {
       setTogglingId(null);
     }
   };
 
-  // -----------------------------------
-  // RENDER
-  // -----------------------------------
+  /* -----------------------------------
+   * RENDER
+   * ----------------------------------- */
   return (
     <div className="space-y-6">
-      {/* HEADER */}
       <div>
         <h1 className="text-xl font-semibold">Campaigns</h1>
         <p className="text-sm text-gray-500">
@@ -147,19 +197,108 @@ export default function CampaignsPage() {
         </p>
       </div>
 
-      {loading && <div className="text-gray-600">Loading campaigns…</div>}
+      {/* FILTER BAR */}
+      <div className="surface p-4 grid grid-cols-2 lg:grid-cols-6 gap-3 text-sm">
+        <select
+          value={selectedAdAccount}
+          onChange={(e) => setSelectedAdAccount(e.target.value)}
+          className="border rounded px-2 py-1"
+        >
+          <option value="">All Ad Accounts</option>
+          {adAccounts.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name}
+            </option>
+          ))}
+        </select>
 
-      {!loading && error && (
-        <div className="text-red-600 font-medium">{error}</div>
-      )}
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="border rounded px-2 py-1"
+        >
+          <option value="">All Status</option>
+          <option value="ACTIVE">Active</option>
+          <option value="PAUSED">Paused</option>
+        </select>
 
-      {!loading && !error && metaConnected === false && (
+        <select
+          value={aiFilter}
+          onChange={(e) => setAiFilter(e.target.value)}
+          className="border rounded px-2 py-1"
+        >
+          <option value="">AI (All)</option>
+          <option value="true">AI Active</option>
+          <option value="false">AI Inactive</option>
+        </select>
+
+        <select
+          value={objectiveFilter}
+          onChange={(e) => setObjectiveFilter(e.target.value)}
+          className="border rounded px-2 py-1"
+        >
+          <option value="">All Objectives</option>
+          <option value="LEAD">Leads</option>
+          <option value="SALES">Sales</option>
+        </select>
+
+        <input
+          type="date"
+          value={dateFrom}
+          onChange={(e) => setDateFrom(e.target.value)}
+          className="border rounded px-2 py-1"
+        />
+
+        <input
+          type="date"
+          value={dateTo}
+          onChange={(e) => setDateTo(e.target.value)}
+          className="border rounded px-2 py-1"
+        />
+      </div>
+
+      {/* PAGINATION */}
+      <div className="flex justify-between items-center text-sm">
+        <select
+          value={pageSize}
+          onChange={(e) => {
+            setPageSize(Number(e.target.value));
+            setPage(1);
+          }}
+          className="border rounded px-2 py-1"
+        >
+          {[10, 20, 50, 100].map((n) => (
+            <option key={n} value={n}>
+              {n} per page
+            </option>
+          ))}
+        </select>
+
+        <div className="flex gap-2">
+          <button
+            disabled={page === 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="btn-secondary"
+          >
+            Prev
+          </button>
+          <button
+            onClick={() => setPage((p) => p + 1)}
+            className="btn-secondary"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+
+      {/* STATES */}
+      {loading && <div>Loading campaigns…</div>}
+      {error && <div className="text-red-600">{error}</div>}
+
+      {!loading && metaConnected === false && (
         <div className="empty-state">
           <p className="empty-state-title mb-2">
             Connect your Meta Ads account
-          </p>
-          <p className="empty-state-sub mb-4">
-            Meta connection is required to fetch campaigns.
           </p>
           <button onClick={connectMeta} className="btn-primary">
             Connect Meta Ads
@@ -167,28 +306,23 @@ export default function CampaignsPage() {
         </div>
       )}
 
-      {!loading && !error && metaConnected && campaigns.length === 0 && (
+      {!loading && campaigns.length === 0 && metaConnected && (
         <div className="empty-state">
-          <p className="empty-state-title mb-2">
-            No campaigns synced yet
-          </p>
-          <p className="empty-state-sub mb-4">
-            Fetch your campaigns from Meta Ads Manager.
-          </p>
+          <p className="empty-state-title mb-2">No campaigns found</p>
           <button onClick={syncCampaigns} className="btn-secondary">
             Sync Campaigns
           </button>
         </div>
       )}
 
-      {!loading && !error && campaigns.length > 0 && (
+      {/* TABLE */}
+      {!loading && campaigns.length > 0 && (
         <div className="surface overflow-hidden">
           <table className="w-full text-sm">
             <thead className="border-b">
               <tr>
                 <th className="px-4 py-3 text-left">Campaign</th>
                 <th className="px-4 py-3 text-left">Objective</th>
-                <th className="px-4 py-3 text-left">Category</th>
                 <th className="px-4 py-3 text-left">Status</th>
                 <th className="px-4 py-3 text-left">AI</th>
               </tr>
@@ -198,35 +332,13 @@ export default function CampaignsPage() {
                 <tr key={c.id} className="border-b last:border-0">
                   <td className="px-4 py-3 font-medium">{c.name}</td>
                   <td className="px-4 py-3">{c.objective ?? "—"}</td>
-
-                  <td className="px-4 py-3">
-                    {c.category ? (
-                      <div className="space-y-1">
-                        <div className="font-medium">{c.category}</div>
-                        <div className="text-xs text-gray-500">
-                          {c.category_source} ·{" "}
-                          {c.category_confidence
-                            ? `${Math.round(
-                                c.category_confidence * 100
-                              )}%`
-                            : "—"}
-                        </div>
-                      </div>
-                    ) : (
-                      <span className="text-gray-400">Uncategorized</span>
-                    )}
-                  </td>
-
                   <td className="px-4 py-3">{c.status}</td>
-
                   <td className="px-4 py-3">
                     <button
                       onClick={() => toggleAI(c)}
                       disabled={togglingId === c.id}
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
-                        c.ai_active
-                          ? "bg-green-600"
-                          : "bg-gray-300"
+                        c.ai_active ? "bg-green-600" : "bg-gray-300"
                       }`}
                     >
                       <span
