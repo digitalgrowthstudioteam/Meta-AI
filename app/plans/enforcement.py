@@ -2,12 +2,12 @@ from datetime import datetime
 from uuid import UUID
 from typing import Optional
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.plans.subscription_models import Subscription
 from app.admin.models import AdminOverride
-from app.campaigns.models import Campaign
+from app.campaigns.models import Campaign, CampaignActionLog
 from app.meta_api.models import MetaAdAccount, UserMetaAdAccount
 
 
@@ -36,7 +36,7 @@ class EnforcementError(Exception):
 
 class PlanEnforcementService:
     """
-    🔒 SINGLE SOURCE OF TRUTH FOR PLAN + ADD-ON ENFORCEMENT
+    🔒 SINGLE SOURCE OF TRUTH FOR PLAN, EXPIRY & DOWNGRADE ENFORCEMENT
     """
 
     # =====================================================
@@ -96,7 +96,7 @@ class PlanEnforcementService:
         return result.scalar_one()
 
     # =====================================================
-    # PUBLIC ENFORCEMENT GATES
+    # AI ACTIVATION GATE
     # =====================================================
     @staticmethod
     async def assert_ai_allowed(
@@ -104,11 +104,6 @@ class PlanEnforcementService:
         *,
         user_id: UUID,
     ) -> None:
-        """
-        Master gate.
-        Used before ANY AI activation.
-        """
-
         subscription = await PlanEnforcementService._get_active_subscription(
             db=db,
             user_id=user_id,
@@ -146,25 +141,92 @@ class PlanEnforcementService:
         )
 
         if active_count >= effective_limit:
-            # Distinguish plan vs add-on overflow
             if addon_extra > 0:
                 raise EnforcementError(
                     code="AI_ADDON_LIMIT_REACHED",
-                    message=(
-                        f"AI add-on limit reached "
-                        f"({effective_limit})."
-                    ),
+                    message=f"AI add-on limit reached ({effective_limit}).",
                     action="BUY_ADDON",
                 )
 
             raise EnforcementError(
                 code="AI_PLAN_LIMIT_REACHED",
-                message=(
-                    f"AI campaign limit reached "
-                    f"({effective_limit})."
-                ),
+                message=f"AI campaign limit reached ({effective_limit}).",
                 action="UPGRADE_PLAN",
             )
+
+    # =====================================================
+    # PHASE 12 — CRON ENFORCEMENT (EXPIRY + DOWNGRADE)
+    # =====================================================
+    @staticmethod
+    async def enforce_subscription_expiry(
+        db: AsyncSession,
+    ) -> int:
+        """
+        CRON-SAFE:
+        - Marks expired subscriptions
+        - Disables AI across all campaigns
+        - Creates audit logs
+        """
+
+        now = datetime.utcnow()
+
+        stmt = select(Subscription).where(
+            Subscription.status.in_(["trial", "active"]),
+            Subscription.ends_at.is_not(None),
+            Subscription.ends_at < now,
+        )
+        result = await db.execute(stmt)
+        expired_subs = result.scalars().all()
+
+        affected = 0
+
+        for sub in expired_subs:
+            sub.status = "expired"
+            sub.is_active = False
+
+            # Disable AI campaigns
+            camp_stmt = (
+                select(Campaign)
+                .join(MetaAdAccount, Campaign.ad_account_id == MetaAdAccount.id)
+                .join(
+                    UserMetaAdAccount,
+                    UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
+                )
+                .where(
+                    UserMetaAdAccount.user_id == sub.user_id,
+                    Campaign.ai_active.is_(True),
+                )
+            )
+            camp_result = await db.execute(camp_stmt)
+            campaigns = camp_result.scalars().all()
+
+            for campaign in campaigns:
+                before_state = {
+                    "ai_active": campaign.ai_active,
+                }
+
+                campaign.ai_active = False
+                campaign.ai_deactivated_at = now
+
+                after_state = {
+                    "ai_active": campaign.ai_active,
+                }
+
+                db.add(
+                    CampaignActionLog(
+                        campaign_id=campaign.id,
+                        user_id=sub.user_id,
+                        actor_type="system",
+                        action_type="subscription_expiry",
+                        before_state=before_state,
+                        after_state=after_state,
+                        reason="Subscription expired",
+                    )
+                )
+                affected += 1
+
+        await db.commit()
+        return affected
 
     # =====================================================
     # UI SUPPORT (READ-ONLY)
@@ -175,10 +237,6 @@ class PlanEnforcementService:
         *,
         user_id: UUID,
     ) -> dict:
-        """
-        UI helper:
-        Returns limits + reason for lock.
-        """
 
         subscription = await PlanEnforcementService._get_active_subscription(
             db=db,
