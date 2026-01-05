@@ -58,7 +58,7 @@ export default function DashboardPage() {
   };
 
   // --------------------------------------------------
-  // LOAD AD ACCOUNTS (FILTER)
+  // LOAD AD ACCOUNTS
   // --------------------------------------------------
   const loadAdAccounts = async () => {
     try {
@@ -75,7 +75,7 @@ export default function DashboardPage() {
       const selected = json?.find((a: AdAccount) => a.is_selected);
       if (selected) setSelectedAccountId(selected.id);
     } catch {
-      // Silent fail — dashboard still works
+      // silent
     }
   };
 
@@ -174,12 +174,71 @@ export default function DashboardPage() {
     );
   }
 
+  // --------------------------------------------------
+  // FIRST-TIME USER FLOW
+  // --------------------------------------------------
+  if (!metaConnected) {
+    return (
+      <div className="space-y-6">
+        <DevBanner />
+
+        <div className="rounded-xl border border-gray-200 bg-white p-6 max-w-2xl">
+          <h1 className="text-xl font-semibold mb-2">
+            Welcome to Digital Growth Studio 👋
+          </h1>
+          <p className="text-sm text-gray-600 mb-4">
+            To get started, connect your Meta Ads account. We only read data —
+            we never change your campaigns.
+          </p>
+
+          <ul className="text-sm text-gray-600 space-y-2 mb-6">
+            <li>• See which creatives & audiences are working</li>
+            <li>• Get AI-powered optimization suggestions</li>
+            <li>• Track performance by city, age & placement</li>
+          </ul>
+
+          <button onClick={connectMeta} className="btn-primary">
+            Connect Meta Ads
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (metaConnected && totalCampaigns === 0) {
+    return (
+      <div className="space-y-6">
+        <DevBanner />
+
+        <div className="rounded-xl border border-gray-200 bg-white p-6 max-w-2xl">
+          <h1 className="text-xl font-semibold mb-2">
+            Almost there 🚀
+          </h1>
+          <p className="text-sm text-gray-600 mb-4">
+            Your Meta account is connected. Now sync ad accounts to fetch campaigns.
+          </p>
+
+          <button
+            onClick={syncAdAccounts}
+            disabled={syncing}
+            className="btn-primary disabled:opacity-60"
+          >
+            {syncing ? "Syncing…" : "Sync Ad Accounts"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // --------------------------------------------------
+  // NORMAL DASHBOARD
+  // --------------------------------------------------
   return (
     <div className="space-y-8">
       <DevBanner />
 
       {/* HEADER */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>
           <h1 className="text-xl font-semibold">Dashboard</h1>
           <p className="text-sm text-gray-500">
@@ -189,20 +248,16 @@ export default function DashboardPage() {
 
         <div className="text-xs">
           Meta account:{" "}
-          {metaConnected ? (
-            <span className="text-green-600 font-medium">Connected</span>
-          ) : (
-            <span className="text-red-600 font-medium">Not connected</span>
-          )}
+          <span className="text-green-600 font-medium">Connected</span>
         </div>
       </div>
 
       {/* FILTER BAR */}
-      {metaConnected && adAccountsList.length > 0 && (
-        <div className="surface p-4 flex items-center gap-4">
+      {adAccountsList.length > 0 && (
+        <div className="surface p-4 flex flex-col sm:flex-row sm:items-center gap-3">
           <div className="text-sm text-gray-600">Ad Account:</div>
           <select
-            className="border rounded px-2 py-1 text-sm"
+            className="border rounded px-2 py-1 text-sm max-w-xs"
             value={selectedAccountId ?? ""}
             onChange={(e) => switchAdAccount(e.target.value)}
           >
@@ -212,34 +267,6 @@ export default function DashboardPage() {
               </option>
             ))}
           </select>
-        </div>
-      )}
-
-      {/* META ACTION BAR */}
-      {!metaConnected ? (
-        <div className="empty-state">
-          <p className="empty-state-title mb-2">
-            Connect your Meta Ads account
-          </p>
-          <p className="empty-state-sub mb-4">
-            Meta connection is required to sync campaigns and enable AI features.
-          </p>
-          <button onClick={connectMeta} className="btn-primary">
-            Connect Meta Ads
-          </button>
-        </div>
-      ) : (
-        <div className="surface flex items-center justify-between p-4">
-          <div className="text-sm text-gray-600">
-            Meta Ads is connected. Sync ad accounts anytime.
-          </div>
-          <button
-            onClick={syncAdAccounts}
-            disabled={syncing}
-            className="btn-secondary disabled:opacity-50"
-          >
-            {syncing ? "Syncing…" : "Sync Ad Accounts"}
-          </button>
         </div>
       )}
 
@@ -266,9 +293,8 @@ export default function DashboardPage() {
 
         <KpiCard
           label="Account Status"
-          value={metaConnected ? "Connected" : "Disconnected"}
+          value="Connected"
           hint="Meta Ads"
-          warning={!metaConnected}
         />
       </div>
 
@@ -284,7 +310,7 @@ export default function DashboardPage() {
 function DevBanner() {
   return (
     <div className="text-xs bg-yellow-50 border border-yellow-200 rounded px-3 py-2 text-yellow-800">
-      Meta Ads AI • Development Mode | Auth: Disabled
+      Meta Ads AI • Development Mode
     </div>
   );
 }
@@ -293,21 +319,15 @@ function KpiCard({
   label,
   value,
   hint,
-  warning,
 }: {
   label: string;
   value: string | number;
   hint: string;
-  warning?: boolean;
 }) {
   return (
     <div className="surface p-5 space-y-1">
       <div className="text-xs text-gray-500">{label}</div>
-      <div
-        className={`text-xl font-semibold ${
-          warning ? "text-red-600" : "text-gray-900"
-        }`}
-      >
+      <div className="text-xl font-semibold text-gray-900">
         {value}
       </div>
       <div className="text-xs text-gray-400">{hint}</div>
