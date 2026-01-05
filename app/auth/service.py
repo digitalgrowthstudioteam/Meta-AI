@@ -18,8 +18,9 @@ from zoneinfo import ZoneInfo
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 
+from app.core.config import settings
 from app.core.email import send_email
 from app.auth.models import MagicLoginToken
 from app.auth.tokens import (
@@ -31,20 +32,15 @@ from app.auth.tokens import (
 from app.auth.sessions import create_session
 from app.users.models import User
 
-# 🚫 PHASE 5 ONLY — DO NOT ENABLE NOW
-# from app.plans.subscription_models import Subscription
-# from app.plans.plan_models import Plan
-
 
 # =========================================================
 # CONSTANTS (LOCKED)
 # =========================================================
 IST_ZONE = ZoneInfo("Asia/Kolkata")
 
-# Trial-related constants are preserved for Phase 5
-TRIAL_DAYS = 7
-GRACE_DAYS = 3
-TRIAL_AI_LIMIT = 3
+# Abuse protection (soft, safe)
+MAX_ACTIVE_TOKENS_PER_EMAIL = 3
+TOKEN_COOLDOWN_MINUTES = 2
 
 
 # =========================================================
@@ -102,6 +98,30 @@ async def request_magic_login(
     db: AsyncSession,
     email: str,
 ) -> None:
+    # Soft abuse control: clean old / excessive tokens
+    cutoff = datetime.utcnow() - timedelta(minutes=TOKEN_COOLDOWN_MINUTES)
+
+    await db.execute(
+        delete(MagicLoginToken).where(
+            MagicLoginToken.email == email,
+            MagicLoginToken.is_used.is_(False),
+            MagicLoginToken.created_at < cutoff,
+        )
+    )
+    await db.commit()
+
+    result = await db.execute(
+        select(MagicLoginToken).where(
+            MagicLoginToken.email == email,
+            MagicLoginToken.is_used.is_(False),
+        )
+    )
+    active_tokens = result.scalars().all()
+
+    if len(active_tokens) >= MAX_ACTIVE_TOKENS_PER_EMAIL:
+        # Silent fail to avoid email enumeration
+        return None
+
     raw_token, token_hash = create_magic_token_pair()
 
     magic_token = MagicLoginToken(
@@ -116,9 +136,10 @@ async def request_magic_login(
 
     subject = build_magic_link_subject()
 
+    base_url = settings.PUBLIC_APP_URL.rstrip("/")
     magic_link = (
-        f"https://meta-ai.digitalgrowthstudio.in"
-        f"/api/auth/verify?token={raw_token}"
+        f"{base_url}/api/auth/verify"
+        f"?token={raw_token}"
     )
 
     send_magic_link_email(
@@ -148,16 +169,13 @@ async def verify_magic_login(
     if not magic_token or is_token_expired(magic_token.expires_at):
         return None
 
-    # Mark token as used
+    # Mark token as used (single-use guarantee)
     magic_token.is_used = True
     magic_token.used_at = datetime.utcnow()
     await db.commit()
 
     # Fetch or create user
     user = await _get_or_create_user(db, magic_token.email)
-
-    # 🚫 TRIAL ASSIGNMENT DISABLED (PHASE 5)
-    # await _assign_trial_if_needed(db, user)
 
     # Create session
     session = await create_session(db, user)
@@ -201,11 +219,4 @@ async def _get_or_create_user(
 # =========================================================
 # PHASE 5 — TRIAL ASSIGNMENT (INTENTIONALLY DISABLED)
 # =========================================================
-# This function is preserved to avoid rework later.
-# It MUST NOT be executed until:
-# - plans tables exist
-# - billing rules are finalized
-# - Phase 5 is explicitly started
-#
-# async def _assign_trial_if_needed(db: AsyncSession, user: User) -> None:
-#     ...
+# Preserved intentionally. DO NOT ENABLE before Phase 5.
