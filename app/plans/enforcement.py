@@ -2,7 +2,7 @@ from datetime import datetime
 from uuid import UUID
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.plans.subscription_models import Subscription
@@ -17,6 +17,7 @@ from app.meta_api.models import MetaAdAccount, UserMetaAdAccount
 class EnforcementError(Exception):
     """
     Structured enforcement error.
+    Always UI-safe and action-driven.
     """
 
     def __init__(self, *, code: str, message: str, action: str):
@@ -35,7 +36,7 @@ class EnforcementError(Exception):
 
 class PlanEnforcementService:
     """
-    🔒 SINGLE SOURCE OF TRUTH FOR LIMITS
+    🔒 SINGLE SOURCE OF TRUTH FOR PLAN + ADD-ON ENFORCEMENT
     """
 
     # =====================================================
@@ -76,13 +77,8 @@ class PlanEnforcementService:
         db: AsyncSession,
         user_id: UUID,
     ) -> int:
-        """
-        Count ONLY campaigns belonging to the user
-        across their selected ad accounts.
-        """
-
         stmt = (
-            select(Campaign)
+            select(func.count(Campaign.id))
             .join(MetaAdAccount, Campaign.ad_account_id == MetaAdAccount.id)
             .join(
                 UserMetaAdAccount,
@@ -90,35 +86,38 @@ class PlanEnforcementService:
             )
             .where(
                 UserMetaAdAccount.user_id == user_id,
+                UserMetaAdAccount.is_selected.is_(True),
                 Campaign.ai_active.is_(True),
                 Campaign.is_archived.is_(False),
             )
         )
 
         result = await db.execute(stmt)
-        return len(result.scalars().all())
+        return result.scalar_one()
 
     # =====================================================
-    # PUBLIC GATE
+    # PUBLIC ENFORCEMENT GATES
     # =====================================================
     @staticmethod
-    async def can_activate_ai(
+    async def assert_ai_allowed(
         db: AsyncSession,
         *,
         user_id: UUID,
     ) -> None:
         """
-        Hard enforcement gate for AI activation.
+        Master gate.
+        Used before ANY AI activation.
         """
 
         subscription = await PlanEnforcementService._get_active_subscription(
-            db, user_id
+            db=db,
+            user_id=user_id,
         )
 
         if not subscription:
             raise EnforcementError(
                 code="NO_SUBSCRIPTION",
-                message="No active trial or subscription found.",
+                message="No active plan found.",
                 action="UPGRADE_PLAN",
             )
 
@@ -127,26 +126,89 @@ class PlanEnforcementService:
         if subscription.ends_at and now > subscription.ends_at:
             raise EnforcementError(
                 code="SUBSCRIPTION_EXPIRED",
-                message="Your trial or subscription has expired.",
+                message="Your subscription has expired.",
                 action="RENEW_PLAN",
             )
 
         base_limit = subscription.ai_campaign_limit_snapshot or 0
 
         override = await PlanEnforcementService._get_active_admin_override(
-            db, user_id
+            db=db,
+            user_id=user_id,
         )
 
-        extra = override.extra_ai_campaigns if override else 0
-        effective_limit = base_limit + extra
+        addon_extra = override.extra_ai_campaigns if override else 0
+        effective_limit = base_limit + addon_extra
 
         active_count = await PlanEnforcementService._count_active_ai_campaigns(
-            db, user_id
+            db=db,
+            user_id=user_id,
         )
 
         if active_count >= effective_limit:
+            # Distinguish plan vs add-on overflow
+            if addon_extra > 0:
+                raise EnforcementError(
+                    code="AI_ADDON_LIMIT_REACHED",
+                    message=(
+                        f"AI add-on limit reached "
+                        f"({effective_limit})."
+                    ),
+                    action="BUY_ADDON",
+                )
+
             raise EnforcementError(
-                code="AI_LIMIT_REACHED",
-                message=f"AI campaign limit reached ({effective_limit}).",
+                code="AI_PLAN_LIMIT_REACHED",
+                message=(
+                    f"AI campaign limit reached "
+                    f"({effective_limit})."
+                ),
                 action="UPGRADE_PLAN",
             )
+
+    # =====================================================
+    # UI SUPPORT (READ-ONLY)
+    # =====================================================
+    @staticmethod
+    async def get_ai_limit_status(
+        db: AsyncSession,
+        *,
+        user_id: UUID,
+    ) -> dict:
+        """
+        UI helper:
+        Returns limits + reason for lock.
+        """
+
+        subscription = await PlanEnforcementService._get_active_subscription(
+            db=db,
+            user_id=user_id,
+        )
+
+        if not subscription:
+            return {
+                "allowed": False,
+                "reason": "NO_SUBSCRIPTION",
+            }
+
+        override = await PlanEnforcementService._get_active_admin_override(
+            db=db,
+            user_id=user_id,
+        )
+
+        base_limit = subscription.ai_campaign_limit_snapshot or 0
+        addon_extra = override.extra_ai_campaigns if override else 0
+        effective_limit = base_limit + addon_extra
+
+        active_count = await PlanEnforcementService._count_active_ai_campaigns(
+            db=db,
+            user_id=user_id,
+        )
+
+        return {
+            "allowed": active_count < effective_limit,
+            "active": active_count,
+            "limit": effective_limit,
+            "base_limit": base_limit,
+            "addon_extra": addon_extra,
+        }
