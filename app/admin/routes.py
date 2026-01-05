@@ -17,6 +17,11 @@ from app.admin.schemas import (
 from app.admin.service import AdminOverrideService
 
 # -------------------------
+# Plan / Subscription Enforcement
+# -------------------------
+from app.plans.enforcement import PlanEnforcementService
+
+# -------------------------
 # Metrics Sync (Phase 6.5)
 # -------------------------
 from app.admin.metrics_sync_routes import router as metrics_sync_router
@@ -127,6 +132,33 @@ async def grant_or_renew_manual_campaign(
         }
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+
+# =========================
+# PHASE 12.3 — SUBSCRIPTION EXPIRY CRON TRIGGER
+# =========================
+@router.post("/cron/subscription-expiry")
+async def run_subscription_expiry_cron(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    """
+    Admin/system-triggered cron endpoint.
+    Safe to be called by:
+    - real cron
+    - GitHub Actions
+    - manual admin action
+    """
+    require_admin(current_user)
+
+    affected = await PlanEnforcementService.enforce_subscription_expiry(
+        db=db,
+    )
+
+    return {
+        "status": "ok",
+        "expired_campaigns_disabled": affected,
+    }
 
 
 # =========================
