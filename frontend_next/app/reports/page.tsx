@@ -8,8 +8,6 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  BarChart,
-  Bar,
 } from "recharts";
 
 /* ----------------------------------
@@ -31,6 +29,12 @@ type Campaign = {
   name: string;
 };
 
+type AdAccount = {
+  id: string;
+  name: string;
+  is_selected: boolean;
+};
+
 /* ----------------------------------
  * PAGE
  * ---------------------------------- */
@@ -40,20 +44,55 @@ export default function ReportsPage() {
   const [toDate, setToDate] = useState("");
   const [objective, setObjective] = useState("");
   const [campaignId, setCampaignId] = useState("");
+  const [selectedAdAccount, setSelectedAdAccount] = useState("");
 
+  const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [data, setData] = useState<ReportSummary[]>([]);
+
+  const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  /* ----------------------------------
+   * LOAD AD ACCOUNTS
+   * ---------------------------------- */
+  const loadAdAccounts = async () => {
+    try {
+      const res = await fetch("/api/meta/adaccounts", {
+        credentials: "include",
+        cache: "no-store",
+      });
+
+      if (!res.ok) throw new Error();
+
+      const json = await res.json();
+      setAdAccounts(json ?? []);
+      setMetaConnected(true);
+
+      const selected = json?.find((a: AdAccount) => a.is_selected);
+      if (selected) setSelectedAdAccount(selected.id);
+    } catch {
+      setMetaConnected(false);
+    }
+  };
 
   /* ----------------------------------
    * LOAD CAMPAIGNS
    * ---------------------------------- */
   const loadCampaigns = async () => {
-    const res = await fetch("/api/campaigns", {
-      credentials: "include",
-    });
+    if (!selectedAdAccount) {
+      setCampaigns([]);
+      return;
+    }
+
+    const res = await fetch(
+      `/api/campaigns?ad_account_id=${selectedAdAccount}`,
+      { credentials: "include", cache: "no-store" }
+    );
+
     if (!res.ok) return;
+
     const json = await res.json();
     setCampaigns(Array.isArray(json) ? json : []);
   };
@@ -62,7 +101,7 @@ export default function ReportsPage() {
    * LOAD REPORT
    * ---------------------------------- */
   const loadReport = async () => {
-    if (!fromDate || !toDate) return;
+    if (!fromDate || !toDate || !selectedAdAccount) return;
 
     try {
       setLoading(true);
@@ -71,6 +110,7 @@ export default function ReportsPage() {
       const params = new URLSearchParams({
         from: fromDate,
         to: toDate,
+        ad_account_id: selectedAdAccount,
       });
 
       if (campaignId) params.append("campaign_id", campaignId);
@@ -78,12 +118,10 @@ export default function ReportsPage() {
 
       const res = await fetch(
         `/api/reports/performance?${params.toString()}`,
-        { credentials: "include" }
+        { credentials: "include", cache: "no-store" }
       );
 
-      if (!res.ok) {
-        throw new Error("Unable to load reports.");
-      }
+      if (!res.ok) throw new Error("Unable to load reports.");
 
       const json = await res.json();
       setData(Array.isArray(json.rows) ? json.rows : []);
@@ -96,8 +134,12 @@ export default function ReportsPage() {
   };
 
   useEffect(() => {
-    loadCampaigns();
+    loadAdAccounts();
   }, []);
+
+  useEffect(() => {
+    loadCampaigns();
+  }, [selectedAdAccount]);
 
   /* ----------------------------------
    * DERIVED METRICS
@@ -116,6 +158,20 @@ export default function ReportsPage() {
     totals.spend > 0 ? totals.revenue / totals.spend : null;
 
   /* ----------------------------------
+   * STATES
+   * ---------------------------------- */
+  if (metaConnected === false) {
+    return (
+      <div className="surface p-6">
+        <h2 className="font-medium mb-1">Meta account not connected</h2>
+        <p className="text-sm text-gray-600">
+          Connect Meta Ads to generate performance reports.
+        </p>
+      </div>
+    );
+  }
+
+  /* ----------------------------------
    * RENDER
    * ---------------------------------- */
   return (
@@ -124,18 +180,32 @@ export default function ReportsPage() {
       <div>
         <h1 className="text-xl font-semibold">Reports</h1>
         <p className="text-sm text-gray-500">
-          Performance summaries, trends, and exports
+          Performance summaries and trends (read-only)
         </p>
       </div>
 
       {/* FILTER BAR */}
-      <div className="surface p-4 grid grid-cols-2 lg:grid-cols-6 gap-3 text-sm">
+      <div className="surface p-4 grid grid-cols-2 lg:grid-cols-7 gap-3 text-sm">
+        <select
+          value={selectedAdAccount}
+          onChange={(e) => setSelectedAdAccount(e.target.value)}
+          className="border rounded px-2 py-1"
+        >
+          <option value="">Select Ad Account</option>
+          {adAccounts.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name}
+            </option>
+          ))}
+        </select>
+
         <input
           type="date"
           value={fromDate}
           onChange={(e) => setFromDate(e.target.value)}
           className="border rounded px-2 py-1"
         />
+
         <input
           type="date"
           value={toDate}
@@ -168,7 +238,7 @@ export default function ReportsPage() {
 
         <button
           onClick={loadReport}
-          disabled={!fromDate || !toDate || loading}
+          disabled={!fromDate || !toDate || !selectedAdAccount || loading}
           className="btn-primary col-span-2"
         >
           {loading ? "Loading…" : "Generate Report"}
@@ -264,10 +334,8 @@ export default function ReportsPage() {
         </div>
       )}
 
-      {/* FOOTNOTE */}
       <div className="text-xs text-gray-400">
-        Reports are generated from immutable historical data. Exports
-        are audit-safe.
+        Reports are generated from immutable historical data.
       </div>
     </div>
   );
