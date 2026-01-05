@@ -20,10 +20,6 @@ class MetaAdAccount(Base):
     """
     Global Meta Ad Account.
     One row per Meta Ad Account across the platform.
-
-    business_category:
-    - User-provided primary business category (Phase 9)
-    - ML ground truth for global learning
     """
 
     __tablename__ = "meta_ad_accounts"
@@ -46,11 +42,9 @@ class MetaAdAccount(Base):
         nullable=False,
     )
 
-    # 🔥 PHASE 9 — BUSINESS CATEGORY (GROUND TRUTH)
     business_category: Mapped[str | None] = mapped_column(
         String,
         nullable=True,
-        doc="Primary business category for ML learning (e.g. Skin Care, Real Estate)",
     )
 
     is_active: Mapped[bool] = mapped_column(
@@ -71,7 +65,8 @@ class MetaAdAccount(Base):
 # =========================================================
 class UserMetaAdAccount(Base):
     """
-    Maps users to Meta Ad Accounts with role-based access.
+    Maps users to Meta Ad Accounts with selection control.
+    Only ONE account can be selected per user.
     """
 
     __tablename__ = "user_meta_ad_accounts"
@@ -106,7 +101,15 @@ class UserMetaAdAccount(Base):
     role: Mapped[str] = mapped_column(
         String,
         nullable=False,
-        default="owner",  # owner | agency | admin
+        default="owner",
+    )
+
+    # 🔥 PHASE 5 — SINGLE SELECTED AD ACCOUNT
+    is_selected: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        index=True,
     )
 
     connected_at: Mapped[datetime] = mapped_column(
@@ -117,14 +120,9 @@ class UserMetaAdAccount(Base):
 
 
 # =========================================================
-# META OAUTH STATE (CSRF & CALLBACK SAFETY)
+# META OAUTH STATE
 # =========================================================
 class MetaOAuthState(Base):
-    """
-    Temporary OAuth state storage for Meta OAuth flow.
-    Used to prevent CSRF and safely bind OAuth callbacks to users.
-    """
-
     __tablename__ = "meta_oauth_states"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -167,14 +165,9 @@ class MetaOAuthState(Base):
 
 
 # =========================================================
-# META OAUTH TOKEN (USER-SCOPED — CORRECT)
+# META OAUTH TOKEN
 # =========================================================
 class MetaOAuthToken(Base):
-    """
-    Stores Meta OAuth tokens (server-side only).
-    OAuth is USER-based, not account-based.
-    """
-
     __tablename__ = "meta_oauth_tokens"
 
     id: Mapped[uuid.UUID] = mapped_column(
