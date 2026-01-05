@@ -12,12 +12,12 @@ Purpose:
 
 from datetime import date, datetime
 from typing import Dict, Any
-from uuid import uuid4
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.campaigns.models import Campaign
+from app.meta_api.models import MetaAdAccount, UserMetaAdAccount
 from app.meta_insights.clients.meta_campaign_insights_client import (
     MetaCampaignInsightsClient,
 )
@@ -32,12 +32,6 @@ class CampaignDailyMetricsSyncService:
     # ENTRY POINT — DAILY SYNC (ADMIN ONLY)
     # =====================================================
     async def sync_for_date(self, target_date: date) -> Dict[str, int]:
-        """
-        Phase 6.5 responsibility:
-        - Raw metrics ingestion
-        - Stub-safe behavior (no false failures)
-        """
-
         campaigns = await self._get_active_campaigns()
 
         synced = 0
@@ -51,9 +45,6 @@ class CampaignDailyMetricsSyncService:
                     target_date=target_date,
                 )
 
-                # -----------------------------
-                # STUB / NO-DATA → SKIP
-                # -----------------------------
                 if not insights:
                     skipped += 1
                     continue
@@ -65,7 +56,6 @@ class CampaignDailyMetricsSyncService:
                 purchases = int(insights.get("purchases", 0))
                 revenue = float(insights.get("purchase_value", 0))
 
-                # All-zero payload = Meta stub → SKIP (NOT failure)
                 if (
                     impressions == 0
                     and clicks == 0
@@ -99,15 +89,19 @@ class CampaignDailyMetricsSyncService:
         }
 
     # =====================================================
-    # FETCH CAMPAIGNS (READ-ONLY)
+    # FETCH CAMPAIGNS — ONLY SELECTED AD ACCOUNT
     # =====================================================
     async def _get_active_campaigns(self):
         result = await self.db.execute(
             text(
                 """
-                SELECT *
-                FROM campaigns
-                WHERE is_archived = FALSE
+                SELECT c.*
+                FROM campaigns c
+                JOIN meta_ad_accounts ma ON c.ad_account_id = ma.id
+                JOIN user_meta_ad_accounts uma ON uma.meta_ad_account_id = ma.id
+                WHERE
+                    c.is_archived = FALSE
+                    AND uma.is_selected = TRUE
                 """
             )
         )
@@ -144,7 +138,6 @@ class CampaignDailyMetricsSyncService:
             roas = revenue / spend if spend > 0 else None
 
         return {
-            "id": str(uuid4()),
             "campaign_id": str(campaign.id),
             "date": target_date,
             "impressions": impressions,
@@ -168,7 +161,6 @@ class CampaignDailyMetricsSyncService:
             text(
                 """
                 INSERT INTO campaign_daily_metrics (
-                    id,
                     campaign_id,
                     date,
                     impressions,
@@ -184,7 +176,6 @@ class CampaignDailyMetricsSyncService:
                     updated_at
                 )
                 VALUES (
-                    :id,
                     :campaign_id,
                     :date,
                     :impressions,
