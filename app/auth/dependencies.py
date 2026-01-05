@@ -6,6 +6,15 @@ from app.core.db_session import get_db
 from app.users.models import User
 
 
+# =================================================
+# 🔒 LOCKED ADMIN EMAILS (SOURCE OF TRUTH)
+# =================================================
+ADMIN_EMAILS = {
+    "vikramrwadkar@gmail.com",
+    "digitalgrowthstudioteam@gmail.com",
+}
+
+
 # -------------------------------------------------
 # DEV-SAFE CURRENT USER RESOLUTION
 # -------------------------------------------------
@@ -45,17 +54,19 @@ async def require_user(
 async def require_admin(
     user: User = Depends(get_current_user),
 ) -> User:
-    if user.role != "admin":
+    """
+    🔒 ADMIN = EMAIL-BASED (HARD LOCK)
+    Role column is ignored for safety.
+    """
+    if user.email not in ADMIN_EMAILS:
         raise HTTPException(
             status_code=403,
-            detail="Admin access required",
+            detail="Admin access restricted",
         )
     return user
 
 
 # -------------------------------------------------
-# BACKWARD-COMPAT ALIAS (CRITICAL FIX)
+# BACKWARD-COMPAT ALIAS (DO NOT REMOVE)
 # -------------------------------------------------
-# Some routes still import `require_admin_user`
-# We alias it to avoid breaking changes
 require_admin_user = require_admin
