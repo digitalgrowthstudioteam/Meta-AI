@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
+from datetime import date
 
 from app.core.db_session import get_db
 from app.auth.dependencies import require_user
@@ -87,6 +88,42 @@ async def rollback_campaign_action(
         return {
             "status": "rolled_back",
             "campaign_id": str(campaign.id),
+        }
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+# =========================
+# PHASE 11.4 — MANUAL CAMPAIGN PURCHASE / RENEWAL
+# =========================
+@router.post("/campaigns/{campaign_id}/manual-grant")
+async def grant_or_renew_manual_campaign(
+    campaign_id: UUID,
+    valid_from: date,
+    valid_till: date,
+    price_paid: float,
+    plan_label: str,
+    reason: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+
+    try:
+        campaign = await AdminOverrideService.grant_or_renew_manual_campaign(
+            db=db,
+            campaign_id=campaign_id,
+            admin_user_id=current_user.id,
+            valid_from=valid_from,
+            valid_till=valid_till,
+            price_paid=price_paid,
+            plan_label=plan_label,
+            reason=reason,
+        )
+        return {
+            "status": "manual_campaign_active",
+            "campaign_id": str(campaign.id),
+            "valid_till": str(campaign.manual_valid_till),
         }
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
