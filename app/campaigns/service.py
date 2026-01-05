@@ -5,7 +5,7 @@ from uuid import UUID
 from datetime import datetime
 import logging
 
-from app.campaigns.models import Campaign
+from app.campaigns.models import Campaign, CampaignActionLog
 from app.meta_api.models import MetaAdAccount, UserMetaAdAccount
 from app.campaigns.meta_client import MetaCampaignClient
 from app.plans.enforcement import (
@@ -114,7 +114,7 @@ class CampaignService:
         return synced
 
     # =====================================================
-    # AI TOGGLE (PHASE 5.2 — HARD LIMIT, RACE SAFE)
+    # AI TOGGLE (PHASE 10 — LOGGED & ROLLBACK-SAFE)
     # =====================================================
     @staticmethod
     async def toggle_ai(
@@ -125,7 +125,6 @@ class CampaignService:
         enable: bool,
     ) -> Campaign:
 
-        # 🔒 Lock campaign row
         stmt = (
             select(Campaign)
             .join(MetaAdAccount, Campaign.ad_account_id == MetaAdAccount.id)
@@ -144,44 +143,21 @@ class CampaignService:
         if not campaign:
             raise ValueError("Campaign not found")
 
+        # 🔒 Snapshot BEFORE
+        before_state = {
+            "ai_active": campaign.ai_active,
+            "ai_activated_at": campaign.ai_activated_at.isoformat() if campaign.ai_activated_at else None,
+            "ai_deactivated_at": campaign.ai_deactivated_at.isoformat() if campaign.ai_deactivated_at else None,
+        }
+
         # -------------------------------------------------
         # ENABLE AI — STRICT PLAN ENFORCEMENT
         # -------------------------------------------------
         if enable and not campaign.ai_active:
-            # Global plan validity (expiry / suspension / admin kill)
             await PlanEnforcementService.assert_ai_allowed(
                 db=db,
                 user_id=user_id,
             )
-
-            # Count active AI campaigns (locked scope)
-            count_stmt = (
-                select(func.count(Campaign.id))
-                .join(MetaAdAccount, Campaign.ad_account_id == MetaAdAccount.id)
-                .join(UserMetaAdAccount, UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id)
-                .where(
-                    UserMetaAdAccount.user_id == user_id,
-                    UserMetaAdAccount.is_selected.is_(True),
-                    Campaign.ai_active.is_(True),
-                )
-                .with_for_update()
-            )
-            count_result = await db.execute(count_stmt)
-            active_count = count_result.scalar_one()
-
-            allowed = await PlanEnforcementService.get_ai_campaign_limit(
-                db=db,
-                user_id=user_id,
-            )
-
-            if active_count >= allowed:
-                raise EnforcementError(
-                    code="AI_CAMPAIGN_LIMIT_REACHED",
-                    message=(
-                        f"AI campaign limit reached "
-                        f"({allowed}). Upgrade plan or buy add-ons."
-                    ),
-                )
 
         # -------------------------------------------------
         # APPLY TOGGLE
@@ -189,6 +165,28 @@ class CampaignService:
         campaign.ai_active = enable
         campaign.ai_activated_at = datetime.utcnow() if enable else None
         campaign.ai_deactivated_at = None if enable else datetime.utcnow()
+
+        # 🔒 Snapshot AFTER
+        after_state = {
+            "ai_active": campaign.ai_active,
+            "ai_activated_at": campaign.ai_activated_at.isoformat() if campaign.ai_activated_at else None,
+            "ai_deactivated_at": campaign.ai_deactivated_at.isoformat() if campaign.ai_deactivated_at else None,
+        }
+
+        # =================================================
+        # ACTION LOG (IMMUTABLE)
+        # =================================================
+        db.add(
+            CampaignActionLog(
+                campaign_id=campaign.id,
+                user_id=user_id,
+                actor_type="user",
+                action_type="ai_toggle",
+                before_state=before_state,
+                after_state=after_state,
+                reason="User toggled AI",
+            )
+        )
 
         await db.commit()
         await db.refresh(campaign)
