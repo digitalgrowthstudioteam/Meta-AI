@@ -21,17 +21,14 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_BASE_URL}/auth/login`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
-          body: new URLSearchParams({ email }),
-          credentials: "include",
-        }
-      );
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({ email }),
+        credentials: "include",
+      });
 
       if (!res.ok) {
         const text = await res.text();
@@ -42,10 +39,7 @@ export default function LoginPage() {
       setCooldown(60);
     } catch (err: any) {
       console.error("Login error:", err);
-      setError(
-        err?.message ||
-          "Login request failed. Check console for details."
-      );
+      setError("Failed to send login link. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -99,9 +93,7 @@ export default function LoginPage() {
             </div>
 
             {error && (
-              <div className="text-sm text-red-600 break-words">
-                {error}
-              </div>
+              <div className="text-sm text-red-600">{error}</div>
             )}
 
             <button
