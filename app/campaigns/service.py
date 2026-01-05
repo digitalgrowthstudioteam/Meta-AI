@@ -37,6 +37,7 @@ class CampaignService:
             .where(
                 UserMetaAdAccount.user_id == user_id,
                 Campaign.is_archived.is_(False),
+                UserMetaAdAccount.is_selected.is_(True),
             )
         )
 
@@ -44,7 +45,7 @@ class CampaignService:
         return result.scalars().all()
 
     # =====================================================
-    # SYNC CAMPAIGNS FROM META (PHASE 5 — SAFE)
+    # SYNC CAMPAIGNS FROM META (PHASE 5 — LOCKED)
     # =====================================================
     @staticmethod
     async def sync_from_meta(
@@ -52,61 +53,63 @@ class CampaignService:
         user_id: UUID,
     ) -> list[Campaign]:
 
+        # 🔒 ONLY ONE SELECTED AD ACCOUNT
         stmt = (
             select(MetaAdAccount)
             .join(UserMetaAdAccount, UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id)
             .where(
                 UserMetaAdAccount.user_id == user_id,
+                UserMetaAdAccount.is_selected.is_(True),
                 MetaAdAccount.is_active.is_(True),
             )
         )
 
         result = await db.execute(stmt)
-        ad_accounts = result.scalars().all()
+        ad_account = result.scalar_one_or_none()
 
-        if not ad_accounts:
+        if not ad_account:
+            logger.warning("No selected ad account found for user=%s", user_id)
             return []
 
         synced_campaigns: list[Campaign] = []
 
-        for ad_account in ad_accounts:
-            try:
-                meta_campaigns = await MetaCampaignClient.fetch_campaigns(
-                    ad_account=ad_account,
-                )
-            except Exception as e:
-                logger.error(
-                    "Meta campaign sync failed for ad_account=%s : %s",
-                    ad_account.meta_account_id,
-                    str(e),
-                )
-                continue
+        try:
+            meta_campaigns = await MetaCampaignClient.fetch_campaigns(
+                ad_account=ad_account,
+            )
+        except Exception as e:
+            logger.error(
+                "Meta campaign sync failed for ad_account=%s : %s",
+                ad_account.meta_account_id,
+                str(e),
+            )
+            return []
 
-            for meta in meta_campaigns:
-                stmt = select(Campaign).where(
-                    Campaign.meta_campaign_id == meta["id"],
-                    Campaign.ad_account_id == ad_account.id,
+        for meta in meta_campaigns:
+            stmt = select(Campaign).where(
+                Campaign.meta_campaign_id == meta["id"],
+                Campaign.ad_account_id == ad_account.id,
+            )
+            result = await db.execute(stmt)
+            campaign = result.scalar_one_or_none()
+
+            if campaign:
+                campaign.name = meta["name"]
+                campaign.objective = meta["objective"]
+                campaign.status = meta["status"]
+                campaign.last_meta_sync_at = datetime.utcnow()
+            else:
+                campaign = Campaign(
+                    meta_campaign_id=meta["id"],
+                    ad_account_id=ad_account.id,
+                    name=meta["name"],
+                    objective=meta["objective"],
+                    status=meta["status"],
+                    last_meta_sync_at=datetime.utcnow(),
                 )
-                result = await db.execute(stmt)
-                campaign = result.scalar_one_or_none()
+                db.add(campaign)
 
-                if campaign:
-                    campaign.name = meta["name"]
-                    campaign.objective = meta["objective"]
-                    campaign.status = meta["status"]
-                    campaign.last_meta_sync_at = datetime.utcnow()
-                else:
-                    campaign = Campaign(
-                        meta_campaign_id=meta["id"],
-                        ad_account_id=ad_account.id,
-                        name=meta["name"],
-                        objective=meta["objective"],
-                        status=meta["status"],
-                        last_meta_sync_at=datetime.utcnow(),
-                    )
-                    db.add(campaign)
-
-                synced_campaigns.append(campaign)
+            synced_campaigns.append(campaign)
 
         await db.commit()
         return synced_campaigns
@@ -129,6 +132,7 @@ class CampaignService:
             .where(
                 Campaign.id == campaign_id,
                 UserMetaAdAccount.user_id == user_id,
+                UserMetaAdAccount.is_selected.is_(True),
             )
         )
 
@@ -153,13 +157,13 @@ class CampaignService:
                     message=str(e),
                 )
 
-            # Count active AI campaigns
             count_stmt = (
                 select(func.count(Campaign.id))
                 .join(MetaAdAccount, Campaign.ad_account_id == MetaAdAccount.id)
                 .join(UserMetaAdAccount, UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id)
                 .where(
                     UserMetaAdAccount.user_id == user_id,
+                    UserMetaAdAccount.is_selected.is_(True),
                     Campaign.ai_active.is_(True),
                 )
             )
