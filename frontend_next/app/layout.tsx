@@ -12,9 +12,9 @@ export default function RootLayout({
   const pathname = usePathname();
 
   // --------------------------------------------------
-  // LOGIN PAGE — NO DASHBOARD LAYOUT
+  // PUBLIC PAGES — NO DASHBOARD LAYOUT
   // --------------------------------------------------
-  if (pathname === "/login") {
+  if (pathname === "/" || pathname === "/login") {
     return (
       <html lang="en">
         <body className="bg-slate-50 text-gray-900">
@@ -25,7 +25,7 @@ export default function RootLayout({
   }
 
   // --------------------------------------------------
-  // MAIN APP LAYOUT
+  // MAIN APP LAYOUT (AUTH REQUIRED)
   // --------------------------------------------------
   return (
     <html lang="en">
@@ -90,7 +90,7 @@ export default function RootLayout({
 
             {/* FOOTER */}
             <div className="px-4 py-3 border-t border-amber-100 text-xs text-gray-500">
-              Dev Mode • Auth Disabled
+              Secure • Read-only • AI Assisted
             </div>
           </aside>
 
