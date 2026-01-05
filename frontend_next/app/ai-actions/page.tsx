@@ -48,6 +48,12 @@ type AIActionSet = {
   actions: AIAction[];
 };
 
+type AdAccount = {
+  id: string;
+  name: string;
+  is_selected: boolean;
+};
+
 /* ----------------------------- */
 /* COMPONENT */
 /* ----------------------------- */
@@ -55,16 +61,56 @@ type AIActionSet = {
 export default function AIActionsPage() {
   const [campaigns, setCampaigns] = useState<CampaignAI[]>([]);
   const [aiActionSets, setAiActionSets] = useState<AIActionSet[]>([]);
+  const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
   const [feedbackSent, setFeedbackSent] = useState<Record<string, boolean>>({});
 
+  /* FILTERS */
+  const [selectedAdAccount, setSelectedAdAccount] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [aiFilter, setAiFilter] = useState("");
+  const [objectiveFilter, setObjectiveFilter] = useState("");
+
+  /* PAGINATION */
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+
+  /* ----------------------------- */
+  /* LOAD AD ACCOUNTS */
+  /* ----------------------------- */
+  const loadAdAccounts = async () => {
+    try {
+      const res = await fetch("/api/meta/adaccounts", {
+        credentials: "include",
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setAdAccounts(data ?? []);
+      const selected = data?.find((a: AdAccount) => a.is_selected);
+      if (selected) setSelectedAdAccount(selected.id);
+    } catch {}
+  };
+
   /* ----------------------------- */
   /* LOAD CAMPAIGNS */
   /* ----------------------------- */
   const loadCampaigns = async () => {
-    const res = await fetch("/api/campaigns", { credentials: "include" });
+    const params = new URLSearchParams({
+      page: String(page),
+      page_size: String(pageSize),
+    });
+
+    if (selectedAdAccount) params.append("ad_account_id", selectedAdAccount);
+    if (statusFilter) params.append("status", statusFilter);
+    if (aiFilter) params.append("ai_active", aiFilter);
+    if (objectiveFilter) params.append("objective", objectiveFilter);
+
+    const res = await fetch(`/api/campaigns?${params}`, {
+      credentials: "include",
+    });
 
     if (res.status === 409) {
       setCampaigns([]);
@@ -84,7 +130,6 @@ export default function AIActionsPage() {
     const res = await fetch("/api/ai/actions", {
       credentials: "include",
     });
-
     if (res.ok) {
       const data = await res.json();
       setAiActionSets(Array.isArray(data) ? data : []);
@@ -95,6 +140,7 @@ export default function AIActionsPage() {
     (async () => {
       try {
         setLoading(true);
+        await loadAdAccounts();
         await loadCampaigns();
         await loadAIActions();
       } catch {
@@ -103,7 +149,14 @@ export default function AIActionsPage() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [
+    selectedAdAccount,
+    statusFilter,
+    aiFilter,
+    objectiveFilter,
+    page,
+    pageSize,
+  ]);
 
   /* ----------------------------- */
   /* TOGGLE AI */
@@ -144,16 +197,11 @@ export default function AIActionsPage() {
   };
 
   /* ----------------------------- */
-  /* RENDER */
+  /* STATES */
   /* ----------------------------- */
 
-  if (loading) {
-    return <div className="text-gray-600">Loading AI actions…</div>;
-  }
-
-  if (error) {
-    return <div className="text-red-600">{error}</div>;
-  }
+  if (loading) return <div>Loading AI actions…</div>;
+  if (error) return <div className="text-red-600">{error}</div>;
 
   if (metaConnected === false) {
     return (
@@ -166,6 +214,10 @@ export default function AIActionsPage() {
     );
   }
 
+  /* ----------------------------- */
+  /* RENDER */
+  /* ----------------------------- */
+
   return (
     <div className="space-y-8">
       <div>
@@ -175,53 +227,74 @@ export default function AIActionsPage() {
         </p>
       </div>
 
-      {/* CAMPAIGN AI CONTROL */}
-      {campaigns.length > 0 && (
-        <div className="surface overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="border-b">
-              <tr>
-                <th className="px-4 py-3 text-left">Campaign</th>
-                <th className="px-4 py-3">Objective</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">AI</th>
-              </tr>
-            </thead>
-            <tbody>
-              {campaigns.map((c) => (
-                <tr key={c.id} className="border-b last:border-0">
-                  <td className="px-4 py-3 font-medium">{c.name}</td>
-                  <td className="px-4 py-3">{c.objective ?? "—"}</td>
-                  <td className="px-4 py-3">{c.status}</td>
-                  <td className="px-4 py-3">
-                    <button
-                      onClick={() => toggleAI(c.id, !c.ai_active)}
-                      className={`px-3 py-1 rounded text-xs font-medium ${
-                        c.ai_active
-                          ? "bg-green-100 text-green-700"
-                          : "bg-gray-100 text-gray-600"
-                      }`}
-                    >
-                      {c.ai_active ? "AI Active" : "AI Inactive"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {/* FILTER BAR */}
+      <div className="surface p-4 grid grid-cols-2 lg:grid-cols-5 gap-3 text-sm">
+        <select
+          value={selectedAdAccount}
+          onChange={(e) => setSelectedAdAccount(e.target.value)}
+          className="border rounded px-2 py-1"
+        >
+          <option value="">All Ad Accounts</option>
+          {adAccounts.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name}
+            </option>
+          ))}
+        </select>
 
-      {/* EMPTY STATE */}
-      {aiActionSets.length === 0 && (
-        <div className="surface p-6 text-sm text-gray-600">
-          No AI actions yet.
-          <br />
-          Enable AI and allow sufficient data accumulation.
-        </div>
-      )}
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="border rounded px-2 py-1"
+        >
+          <option value="">All Status</option>
+          <option value="ACTIVE">Active</option>
+          <option value="PAUSED">Paused</option>
+        </select>
+
+        <select
+          value={aiFilter}
+          onChange={(e) => setAiFilter(e.target.value)}
+          className="border rounded px-2 py-1"
+        >
+          <option value="">AI (All)</option>
+          <option value="true">AI Active</option>
+          <option value="false">AI Inactive</option>
+        </select>
+
+        <select
+          value={objectiveFilter}
+          onChange={(e) => setObjectiveFilter(e.target.value)}
+          className="border rounded px-2 py-1"
+        >
+          <option value="">All Objectives</option>
+          <option value="LEAD">Leads</option>
+          <option value="SALES">Sales</option>
+        </select>
+
+        <select
+          value={pageSize}
+          onChange={(e) => {
+            setPageSize(Number(e.target.value));
+            setPage(1);
+          }}
+          className="border rounded px-2 py-1"
+        >
+          {[10, 20, 50, 100].map((n) => (
+            <option key={n} value={n}>
+              {n} / page
+            </option>
+          ))}
+        </select>
+      </div>
 
       {/* AI ACTIONS */}
+      {aiActionSets.length === 0 && (
+        <div className="surface p-6 text-sm text-gray-600">
+          No AI actions yet. Enable AI and allow data accumulation.
+        </div>
+      )}
+
       {aiActionSets.map((set) => {
         const campaign = campaigns.find(
           (c) => c.id === set.campaign_id
@@ -229,9 +302,24 @@ export default function AIActionsPage() {
 
         return (
           <div key={set.campaign_id} className="space-y-4">
-            <h2 className="text-lg font-medium">
-              {campaign?.name ?? "Campaign"}
-            </h2>
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-medium">
+                {campaign?.name ?? "Campaign"}
+              </h2>
+
+              {campaign && (
+                <button
+                  onClick={() => toggleAI(campaign.id, !campaign.ai_active)}
+                  className={`px-3 py-1 rounded text-xs font-medium ${
+                    campaign.ai_active
+                      ? "bg-green-100 text-green-700"
+                      : "bg-gray-100 text-gray-600"
+                  }`}
+                >
+                  {campaign.ai_active ? "AI Active" : "AI Inactive"}
+                </button>
+              )}
+            </div>
 
             {set.actions.map((action, i) => {
               const key = `${action.campaign_id}_${action.action_type}_${action.summary}`;
@@ -253,53 +341,6 @@ export default function AIActionsPage() {
                   {action.confidence.reason && (
                     <div className="text-xs text-gray-600 italic">
                       Why: {action.confidence.reason}
-                    </div>
-                  )}
-
-                  {/* METRIC EVIDENCE */}
-                  {action.metrics && action.metrics.length > 0 && (
-                    <div className="mt-2">
-                      <div className="text-xs font-medium text-gray-700 mb-1">
-                        Evidence
-                      </div>
-                      <ul className="text-xs text-gray-700 space-y-1">
-                        {action.metrics.map((m, idx) => (
-                          <li key={idx}>
-                            • <strong>{m.metric}</strong> ({m.window}):{" "}
-                            {m.value}
-                            {m.delta_pct !== undefined &&
-                              ` (${m.delta_pct}% vs baseline)`}
-                            {m.source && (
-                              <span className="ml-1 text-gray-500">
-                                [{m.source}]
-                              </span>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* BREAKDOWN EVIDENCE */}
-                  {action.breakdowns && action.breakdowns.length > 0 && (
-                    <div className="mt-3">
-                      <div className="text-xs font-medium text-gray-700 mb-1">
-                        Breakdown Insights
-                      </div>
-                      {action.breakdowns.map((b, idx) => (
-                        <div key={idx} className="text-xs mb-2">
-                          <div className="font-medium">
-                            {b.dimension.replace("_", " ")}: {b.key}
-                          </div>
-                          <ul className="ml-3 list-disc">
-                            {b.metrics.map((m, mi) => (
-                              <li key={mi}>
-                                {m.metric} ({m.window}): {m.value}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ))}
                     </div>
                   )}
 
@@ -325,6 +366,23 @@ export default function AIActionsPage() {
           </div>
         );
       })}
+
+      {/* PAGINATION */}
+      <div className="flex justify-end gap-2">
+        <button
+          disabled={page === 1}
+          onClick={() => setPage((p) => Math.max(1, p - 1))}
+          className="btn-secondary"
+        >
+          Prev
+        </button>
+        <button
+          onClick={() => setPage((p) => p + 1)}
+          className="btn-secondary"
+        >
+          Next
+        </button>
+      </div>
     </div>
   );
 }
