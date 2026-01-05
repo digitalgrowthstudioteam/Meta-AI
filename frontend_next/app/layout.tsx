@@ -1,8 +1,9 @@
 "use client";
 
 import "./globals.css";
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 import { usePathname } from "next/navigation";
+import { Menu, X } from "lucide-react";
 
 export default function RootLayout({
   children,
@@ -10,6 +11,7 @@ export default function RootLayout({
   children: ReactNode;
 }) {
   const pathname = usePathname();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // --------------------------------------------------
   // PUBLIC PAGES — NO DASHBOARD LAYOUT
@@ -17,34 +19,55 @@ export default function RootLayout({
   if (pathname === "/" || pathname === "/login") {
     return (
       <html lang="en">
-        <body className="bg-slate-50 text-gray-900">
-          {children}
-        </body>
+        <body className="bg-slate-50 text-gray-900">{children}</body>
       </html>
     );
   }
 
   // --------------------------------------------------
-  // MAIN APP LAYOUT (AUTH REQUIRED)
+  // MAIN APP LAYOUT (RESPONSIVE)
   // --------------------------------------------------
   return (
     <html lang="en">
       <body className="bg-amber-50 text-gray-900">
         <div className="flex h-screen w-screen overflow-hidden">
+          {/* MOBILE OVERLAY */}
+          {sidebarOpen && (
+            <div
+              className="fixed inset-0 z-40 bg-black/40 md:hidden"
+              onClick={() => setSidebarOpen(false)}
+            />
+          )}
+
           {/* SIDEBAR */}
-          <aside className="w-64 bg-white border-r border-amber-100 flex flex-col">
+          <aside
+            className={`
+              fixed z-50 inset-y-0 left-0 w-64 bg-white border-r border-amber-100
+              flex flex-col transform transition-transform duration-200
+              ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+              md:static md:translate-x-0
+            `}
+          >
             {/* BRAND */}
-            <div className="px-5 py-4 border-b border-amber-100">
-              <div className="text-sm uppercase tracking-wide text-amber-700">
-                Digital Growth Studio
+            <div className="px-5 py-4 border-b border-amber-100 flex items-center justify-between">
+              <div>
+                <div className="text-sm uppercase tracking-wide text-amber-700">
+                  Digital Growth Studio
+                </div>
+                <div className="text-xs text-gray-500">
+                  Meta Ads AI Platform
+                </div>
               </div>
-              <div className="text-xs text-gray-500">
-                Meta Ads AI Platform
-              </div>
+              <button
+                className="md:hidden"
+                onClick={() => setSidebarOpen(false)}
+              >
+                <X size={20} />
+              </button>
             </div>
 
             {/* NAV */}
-            <nav className="flex-1 px-3 py-4 space-y-1">
+            <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
               <SectionLabel label="Core" />
               <NavLink href="/dashboard" current={pathname === "/dashboard"}>
                 Dashboard
@@ -95,11 +118,23 @@ export default function RootLayout({
           </aside>
 
           {/* MAIN */}
-          <main className="flex-1 overflow-y-auto p-8">
-            <div className="max-w-7xl mx-auto space-y-6">
-              {children}
-            </div>
-          </main>
+          <div className="flex flex-col flex-1 min-w-0">
+            {/* MOBILE HEADER */}
+            <header className="md:hidden flex items-center gap-3 px-4 py-3 border-b bg-white">
+              <button onClick={() => setSidebarOpen(true)}>
+                <Menu size={22} />
+              </button>
+              <span className="text-sm font-medium">
+                Digital Growth Studio
+              </span>
+            </header>
+
+            <main className="flex-1 overflow-y-auto p-4 md:p-8">
+              <div className="max-w-7xl mx-auto space-y-6">
+                {children}
+              </div>
+            </main>
+          </div>
         </div>
       </body>
     </html>
