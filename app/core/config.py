@@ -11,8 +11,16 @@ class Settings:
     # ======================
     # Database
     # ======================
-    DATABASE_URL: str = os.getenv(
-        "DATABASE_URL"
+    DATABASE_URL: str = os.getenv("DATABASE_URL")
+
+    # ======================
+    # Public App URL (CRITICAL FOR MAGIC LINK)
+    # ======================
+    # Used to build absolute URLs in emails
+    # Fallback is safe for prod if env is missing
+    PUBLIC_APP_URL: str = os.getenv(
+        "PUBLIC_APP_URL",
+        "https://meta-ai.digitalgrowthstudio.in",
     )
 
     # ======================
