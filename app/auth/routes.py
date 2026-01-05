@@ -6,7 +6,7 @@ Auth Routes
 - /auth/me
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Form
+from fastapi import APIRouter, Depends, HTTPException, status, Form, Query
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,16 +26,18 @@ async def login_request(
     email: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
+    # Idempotent + safe (service handles rate / reuse)
     await request_magic_login(db, email=email)
     return None
 
 
 # =========================================================
-# VERIFY MAGIC LINK (SET COOKIE + REDIRECT → NEXT.JS)
+# VERIFY MAGIC LINK (SET COOKIE + REDIRECT)
 # =========================================================
 @router.get("/verify")
 async def verify_login(
-    token: str,
+    token: str = Query(...),
+    next: str = Query("/dashboard"),  # frontend-controlled redirect
     db: AsyncSession = Depends(get_db),
 ):
     session_token = await verify_magic_login(db, raw_token=token)
@@ -47,7 +49,7 @@ async def verify_login(
         )
 
     response = RedirectResponse(
-        url="/dashboard",
+        url=next,
         status_code=status.HTTP_302_FOUND,
     )
 
@@ -57,7 +59,7 @@ async def verify_login(
         value=session_token,
         httponly=True,
         secure=True,
-        samesite="none",   # ✅ CRITICAL FIX
+        samesite="none",
         path="/",
         max_age=60 * 60 * 24 * 3,  # 3 days
     )
