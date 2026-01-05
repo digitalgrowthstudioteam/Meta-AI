@@ -37,26 +37,68 @@ type Campaign = {
   name: string;
 };
 
+type AdAccount = {
+  id: string;
+  name: string;
+  is_selected: boolean;
+};
+
 /* ---------------------------------
  * PAGE
  * --------------------------------- */
 export default function AudienceInsightsPage() {
   const [rows, setRows] = useState<AudienceRow[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
 
-  /* Filters */
+  const [selectedAdAccount, setSelectedAdAccount] = useState("");
   const [campaignId, setCampaignId] = useState("");
   const [dimension, setDimension] = useState("age_gender");
   const [objective, setObjective] = useState("");
+
+  const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  /* ---------------------------------
+   * LOAD AD ACCOUNTS
+   * --------------------------------- */
+  const loadAdAccounts = async () => {
+    try {
+      const res = await fetch("/api/meta/adaccounts", {
+        credentials: "include",
+        cache: "no-store",
+      });
+
+      if (!res.ok) throw new Error();
+
+      const data = await res.json();
+      setAdAccounts(data ?? []);
+      setMetaConnected(true);
+
+      const selected = data?.find((a: AdAccount) => a.is_selected);
+      if (selected) setSelectedAdAccount(selected.id);
+    } catch {
+      setMetaConnected(false);
+    }
+  };
 
   /* ---------------------------------
    * LOAD CAMPAIGNS
    * --------------------------------- */
   const loadCampaigns = async () => {
-    const res = await fetch("/api/campaigns", { credentials: "include" });
+    if (!selectedAdAccount) {
+      setCampaigns([]);
+      return;
+    }
+
+    const res = await fetch(
+      `/api/campaigns?ad_account_id=${selectedAdAccount}`,
+      { credentials: "include", cache: "no-store" }
+    );
+
     if (!res.ok) return;
+
     const data = await res.json();
     setCampaigns(Array.isArray(data) ? data : []);
   };
@@ -65,21 +107,30 @@ export default function AudienceInsightsPage() {
    * LOAD AUDIENCE INSIGHTS
    * --------------------------------- */
   const loadInsights = async () => {
+    if (!selectedAdAccount) {
+      setRows([]);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
 
-      const params = new URLSearchParams();
+      const params = new URLSearchParams({
+        ad_account_id: selectedAdAccount,
+      });
+
       if (campaignId) params.append("campaign_id", campaignId);
       if (dimension) params.append("dimension", dimension);
       if (objective) params.append("objective", objective);
 
       const res = await fetch(
         `/api/ai/audience-insights?${params.toString()}`,
-        { credentials: "include" }
+        { credentials: "include", cache: "no-store" }
       );
 
       if (!res.ok) throw new Error();
+
       const json = await res.json();
       setRows(Array.isArray(json) ? json : []);
     } catch {
@@ -91,10 +142,34 @@ export default function AudienceInsightsPage() {
 
   useEffect(() => {
     (async () => {
-      await loadCampaigns();
-      await loadInsights();
+      setLoading(true);
+      await loadAdAccounts();
+      setLoading(false);
     })();
-  }, [campaignId, dimension, objective]);
+  }, []);
+
+  useEffect(() => {
+    loadCampaigns();
+    loadInsights();
+  }, [selectedAdAccount, campaignId, dimension, objective]);
+
+  /* ---------------------------------
+   * STATES
+   * --------------------------------- */
+  if (loading) return <div>Loading audience insights…</div>;
+
+  if (metaConnected === false) {
+    return (
+      <div className="surface p-6">
+        <h2 className="font-medium mb-1">Meta account not connected</h2>
+        <p className="text-sm text-gray-600">
+          Connect Meta Ads to unlock audience insights.
+        </p>
+      </div>
+    );
+  }
+
+  if (error) return <div className="text-red-600">{error}</div>;
 
   /* ---------------------------------
    * CHART DATA
@@ -106,14 +181,7 @@ export default function AudienceInsightsPage() {
         .join(" · ") || "Unknown",
     spend: Number(r.spend),
     conversions: Number(r.conversions),
-    roas: r.roas ?? 0,
   }));
-
-  /* ---------------------------------
-   * STATES
-   * --------------------------------- */
-  if (loading) return <div>Loading audience insights…</div>;
-  if (error) return <div className="text-red-600">{error}</div>;
 
   /* ---------------------------------
    * RENDER
@@ -123,12 +191,25 @@ export default function AudienceInsightsPage() {
       <div>
         <h1 className="text-xl font-semibold">Audience Insights</h1>
         <p className="text-sm text-gray-500">
-          AI-driven audience analysis and recommendations (read-only)
+          AI-driven audience analysis (read-only)
         </p>
       </div>
 
       {/* FILTER BAR */}
       <div className="surface p-4 grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+        <select
+          value={selectedAdAccount}
+          onChange={(e) => setSelectedAdAccount(e.target.value)}
+          className="border rounded px-2 py-1"
+        >
+          <option value="">Select Ad Account</option>
+          {adAccounts.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name}
+            </option>
+          ))}
+        </select>
+
         <select
           value={campaignId}
           onChange={(e) => setCampaignId(e.target.value)}
@@ -186,8 +267,6 @@ export default function AudienceInsightsPage() {
       {rows.length === 0 && (
         <div className="surface p-6 text-sm text-gray-600">
           No audience insights available yet.
-          <br />
-          Allow metrics to accumulate or select another campaign.
         </div>
       )}
 
@@ -237,7 +316,7 @@ export default function AudienceInsightsPage() {
       )}
 
       <div className="text-xs text-gray-400">
-        Audience changes are suggestions only and require explicit user approval.
+        Audience suggestions are advisory only and never auto-applied.
       </div>
     </div>
   );
