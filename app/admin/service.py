@@ -5,6 +5,7 @@ from datetime import datetime, date
 
 from app.admin.models import AdminOverride, GlobalSettings
 from app.campaigns.models import Campaign, CampaignActionLog
+from app.chat.models import ChatThread, ChatMessage
 from app.users.models import User
 from app.plans.subscription_models import Subscription
 
@@ -123,6 +124,41 @@ class AdminOverrideService:
         return campaign
 
     # =====================================================
+    # PHASE 18 — ADMIN CHAT AUDIT LOGGING
+    # =====================================================
+    @staticmethod
+    async def log_admin_chat_message(
+        db: AsyncSession,
+        *,
+        admin_user_id: UUID,
+        thread: ChatThread,
+        message: ChatMessage,
+    ) -> None:
+        """
+        Audit log for admin → user chat message.
+        """
+
+        db.add(
+            CampaignActionLog(
+                campaign_id=None,
+                user_id=admin_user_id,
+                actor_type="admin",
+                action_type="support_message_sent",
+                before_state={
+                    "thread_id": str(thread.id),
+                    "thread_status": thread.status,
+                },
+                after_state={
+                    "message_id": str(message.id),
+                    "sent_at": message.created_at.isoformat(),
+                },
+                reason="admin_support_message",
+            )
+        )
+
+        await db.commit()
+
+    # =====================================================
     # PHASE 11.3 — MANUAL CAMPAIGN PURCHASE / RENEWAL
     # =====================================================
     @staticmethod
@@ -228,14 +264,7 @@ class AdminOverrideService:
     async def get_global_settings(
         db: AsyncSession,
     ) -> GlobalSettings:
-        """
-        Fetch global settings.
-        Auto-creates singleton row if missing.
-        """
-
-        result = await db.execute(
-            select(GlobalSettings).limit(1)
-        )
+        result = await db.execute(select(GlobalSettings).limit(1))
         settings = result.scalar_one_or_none()
 
         if not settings:
@@ -254,9 +283,6 @@ class AdminOverrideService:
         updates: dict,
         reason: str,
     ) -> GlobalSettings:
-        """
-        Admin-only global settings update (audited).
-        """
 
         settings = await AdminOverrideService.get_global_settings(db)
 
