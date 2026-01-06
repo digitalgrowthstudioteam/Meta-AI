@@ -176,3 +176,4 @@ async def close_thread(
         "status": "closed",
         "thread_id": str(thread.id),
     }
+
