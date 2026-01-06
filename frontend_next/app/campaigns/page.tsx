@@ -15,7 +15,8 @@ type Campaign = {
 
 type AdAccount = {
   id: string;
-  name: string;
+  meta_account_id: string;
+  account_name: string;
   is_selected: boolean;
 };
 
@@ -59,10 +60,27 @@ export default function CampaignsPage() {
       setMetaConnected(true);
 
       const selected = data?.find((a: AdAccount) => a.is_selected);
-      if (selected) setSelectedAdAccount(selected.id);
+      if (selected) setSelectedAdAccount(selected.meta_account_id);
     } catch {
       setMetaConnected(false);
     }
+  };
+
+  /* -----------------------------------
+   * SELECT AD ACCOUNT (SERVER TRUTH)
+   * ----------------------------------- */
+  const selectAdAccount = async (metaAccountId: string) => {
+    setSelectedAdAccount(metaAccountId);
+
+    await fetch(
+      `/api/meta/adaccounts/select?meta_ad_account_id=${metaAccountId}`,
+      {
+        method: "POST",
+        credentials: "include",
+      }
+    );
+
+    await loadCampaigns();
   };
 
   /* -----------------------------------
@@ -204,7 +222,7 @@ export default function CampaignsPage() {
       <div>
         <h1 className="text-xl font-semibold">Campaigns</h1>
         <p className="text-sm text-gray-500">
-          Synced from Meta Ads Manager · Read-only
+          Synced from Meta Ads Manager · One ad account at a time
         </p>
       </div>
 
@@ -212,13 +230,13 @@ export default function CampaignsPage() {
       <div className="surface p-4 grid grid-cols-2 lg:grid-cols-5 gap-3 text-sm">
         <select
           value={selectedAdAccount}
-          onChange={(e) => setSelectedAdAccount(e.target.value)}
+          onChange={(e) => selectAdAccount(e.target.value)}
           className="border rounded px-2 py-1"
         >
           <option value="">Select Ad Account</option>
           {adAccounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
+            <option key={a.id} value={a.meta_account_id}>
+              {a.account_name}
             </option>
           ))}
         </select>
@@ -255,7 +273,7 @@ export default function CampaignsPage() {
 
         <button
           onClick={syncCampaigns}
-          disabled={syncing}
+          disabled={syncing || !selectedAdAccount}
           className="btn-secondary"
         >
           {syncing ? "Syncing…" : "Sync"}
