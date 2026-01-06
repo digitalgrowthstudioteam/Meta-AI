@@ -17,7 +17,7 @@ ADMIN_EMAILS = {
 
 
 # -------------------------------------------------
-# INTERNAL: LOAD GLOBAL SETTINGS (SAFE)
+# INTERNAL: LOAD GLOBAL SETTINGS
 # -------------------------------------------------
 async def _get_global_settings(
     db: AsyncSession,
@@ -29,7 +29,7 @@ async def _get_global_settings(
 
 
 # -------------------------------------------------
-# BASE USER RESOLUTION (REAL USER)
+# BASE USER RESOLUTION (TEMP DEV MODE)
 # -------------------------------------------------
 async def _resolve_real_user(
     db: AsyncSession,
@@ -53,16 +53,16 @@ async def _resolve_real_user(
 
 
 # -------------------------------------------------
-# CURRENT USER (WITH IMPERSONATION SUPPORT)
+# CURRENT USER (WITH IMPERSONATION)
 # -------------------------------------------------
 async def get_current_user(
     db: AsyncSession = Depends(get_db),
     x_impersonate_user: str | None = Header(default=None),
 ) -> User:
     """
-    🔒 USER RESOLUTION ORDER:
-    1. Resolve real logged-in user
-    2. If admin + X-Impersonate-User header present → impersonate
+    Resolution order:
+    1. Real user
+    2. Admin impersonation (read-only)
     """
 
     real_user = await _resolve_real_user(db)
@@ -76,7 +76,9 @@ async def get_current_user(
                 detail="System under maintenance",
             )
 
+    # -------------------------------------------------
     # 🔑 ADMIN IMPERSONATION
+    # -------------------------------------------------
     if x_impersonate_user:
         if real_user.email not in ADMIN_EMAILS:
             raise HTTPException(
@@ -97,8 +99,10 @@ async def get_current_user(
                 detail="Impersonated user not found",
             )
 
+        # 🔒 NON-PERSISTENT FLAGS
         target_user._is_impersonated = True
         target_user._impersonated_by = real_user.email
+
         return target_user
 
     return real_user
@@ -125,7 +129,7 @@ async def require_admin(
 
 
 # -------------------------------------------------
-# 🔒 WRITE-SAFETY GUARD
+# 🔒 WRITE SAFETY (IMPERSONATION)
 # -------------------------------------------------
 async def forbid_impersonated_writes(
     user: User = Depends(get_current_user),
@@ -136,3 +140,9 @@ async def forbid_impersonated_writes(
             detail="Write operations disabled during impersonation",
         )
     return user
+
+
+# -------------------------------------------------
+# 🔁 BACKWARD-COMPAT ALIAS (CRITICAL)
+# -------------------------------------------------
+require_admin_user = require_admin
