@@ -1,9 +1,14 @@
 "use client";
 
 import "./globals.css";
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
+
+type ImpersonationState = {
+  active: boolean;
+  userEmail: string | null;
+};
 
 export default function RootLayout({
   children,
@@ -12,6 +17,35 @@ export default function RootLayout({
 }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const [impersonation, setImpersonation] = useState<ImpersonationState>({
+    active: false,
+    userEmail: null,
+  });
+
+  // --------------------------------------------------
+  // LOAD IMPERSONATION STATE (CLIENT ONLY)
+  // --------------------------------------------------
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const flag = sessionStorage.getItem("impersonate_active");
+    const email = sessionStorage.getItem("impersonate_email");
+
+    if (flag === "true" && email) {
+      setImpersonation({
+        active: true,
+        userEmail: email,
+      });
+    }
+  }, []);
+
+  const exitImpersonation = () => {
+    sessionStorage.removeItem("impersonate_active");
+    sessionStorage.removeItem("impersonate_user_id");
+    sessionStorage.removeItem("impersonate_email");
+    window.location.reload();
+  };
 
   // --------------------------------------------------
   // PUBLIC PAGES — NO DASHBOARD LAYOUT
@@ -25,7 +59,7 @@ export default function RootLayout({
   }
 
   // --------------------------------------------------
-  // MAIN APP LAYOUT (RESPONSIVE)
+  // MAIN APP LAYOUT
   // --------------------------------------------------
   return (
     <html lang="en">
@@ -111,7 +145,6 @@ export default function RootLayout({
               </NavLink>
             </nav>
 
-            {/* FOOTER */}
             <div className="px-4 py-3 border-t border-amber-100 text-xs text-gray-500">
               Secure • Read-only • AI Assisted
             </div>
@@ -119,6 +152,24 @@ export default function RootLayout({
 
           {/* MAIN */}
           <div className="flex flex-col flex-1 min-w-0">
+            {/* IMPERSONATION BANNER */}
+            {impersonation.active && (
+              <div className="bg-yellow-100 border-b border-yellow-300 px-4 py-2 flex items-center justify-between text-sm">
+                <div className="text-yellow-900">
+                  🔒 Viewing as{" "}
+                  <span className="font-medium">
+                    {impersonation.userEmail}
+                  </span>
+                </div>
+                <button
+                  onClick={exitImpersonation}
+                  className="text-xs font-medium text-red-700 hover:underline"
+                >
+                  Exit Impersonation
+                </button>
+              </div>
+            )}
+
             {/* MOBILE HEADER */}
             <header className="md:hidden flex items-center gap-3 px-4 py-3 border-b bg-white">
               <button onClick={() => setSidebarOpen(true)}>
