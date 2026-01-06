@@ -80,18 +80,6 @@ def upgrade() -> None:
         ),
     )
 
-    op.create_index(
-        "ix_campaign_action_logs_campaign_time",
-        "campaign_action_logs",
-        ["campaign_id", "created_at"],
-    )
-
-    op.create_index(
-        "ix_campaign_action_logs_actor_time",
-        "campaign_action_logs",
-        ["actor_type", "created_at"],
-    )
-
     # -------------------------------------------------
     # PHASE 14 — ADMIN OVERRIDES (ADD-ON / FORCE)
     # -------------------------------------------------
@@ -137,12 +125,6 @@ def upgrade() -> None:
             server_default=sa.func.now(),
             nullable=False,
         ),
-    )
-
-    op.create_index(
-        "ix_admin_overrides_user_id",
-        "admin_overrides",
-        ["user_id"],
     )
 
     op.create_index(
