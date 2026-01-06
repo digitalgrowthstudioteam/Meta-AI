@@ -22,22 +22,14 @@ ADMIN_EMAILS = {
 async def _get_global_settings(
     db: AsyncSession,
 ) -> GlobalSettings | None:
-    result = await db.execute(
-        select(GlobalSettings).limit(1)
-    )
+    result = await db.execute(select(GlobalSettings).limit(1))
     return result.scalar_one_or_none()
 
 
 # -------------------------------------------------
-# BASE USER RESOLUTION (TEMP DEV MODE)
+# BASE USER RESOLUTION (DEV MODE)
 # -------------------------------------------------
-async def _resolve_real_user(
-    db: AsyncSession,
-) -> User:
-    """
-    DEV MODE:
-    - Always resolve to first real user in DB
-    """
+async def _resolve_real_user(db: AsyncSession) -> User:
     result = await db.execute(
         select(User).order_by(User.created_at.asc()).limit(1)
     )
@@ -53,18 +45,12 @@ async def _resolve_real_user(
 
 
 # -------------------------------------------------
-# CURRENT USER (WITH IMPERSONATION)
+# CORE USER RESOLVER (INTERNAL ONLY)
 # -------------------------------------------------
-async def get_current_user(
-    db: AsyncSession = Depends(get_db),
-    x_impersonate_user: str | None = Header(default=None),
+async def _get_current_user_internal(
+    db: AsyncSession,
+    x_impersonate_user: str | None,
 ) -> User:
-    """
-    Resolution order:
-    1. Real user
-    2. Admin impersonation (read-only)
-    """
-
     real_user = await _resolve_real_user(db)
 
     # 🔒 MAINTENANCE MODE
@@ -76,9 +62,7 @@ async def get_current_user(
                 detail="System under maintenance",
             )
 
-    # -------------------------------------------------
     # 🔑 ADMIN IMPERSONATION
-    # -------------------------------------------------
     if x_impersonate_user:
         if real_user.email not in ADMIN_EMAILS:
             raise HTTPException(
@@ -86,11 +70,12 @@ async def get_current_user(
                 detail="Impersonation not allowed",
             )
 
-        stmt = select(User).where(
-            (User.id == x_impersonate_user)
-            | (User.email == x_impersonate_user)
+        result = await db.execute(
+            select(User).where(
+                (User.id == x_impersonate_user)
+                | (User.email == x_impersonate_user)
+            )
         )
-        result = await db.execute(stmt)
         target_user = result.scalar_one_or_none()
 
         if not target_user:
@@ -99,18 +84,26 @@ async def get_current_user(
                 detail="Impersonated user not found",
             )
 
-        # 🔒 NON-PERSISTENT FLAGS
         target_user._is_impersonated = True
         target_user._impersonated_by = real_user.email
-
         return target_user
 
     return real_user
 
 
 # -------------------------------------------------
-# AUTH GUARDS
+# 🔑 PUBLIC DEPENDENCIES (NO CIRCULAR IMPORTS)
 # -------------------------------------------------
+async def get_current_user(
+    db: AsyncSession = Depends(get_db),
+    x_impersonate_user: str | None = Header(default=None),
+) -> User:
+    return await _get_current_user_internal(
+        db=db,
+        x_impersonate_user=x_impersonate_user,
+    )
+
+
 async def require_user(
     user: User = Depends(get_current_user),
 ) -> User:
@@ -128,9 +121,6 @@ async def require_admin(
     return user
 
 
-# -------------------------------------------------
-# 🔒 WRITE SAFETY (IMPERSONATION)
-# -------------------------------------------------
 async def forbid_impersonated_writes(
     user: User = Depends(get_current_user),
 ) -> User:
@@ -143,6 +133,6 @@ async def forbid_impersonated_writes(
 
 
 # -------------------------------------------------
-# 🔁 BACKWARD-COMPAT ALIAS (CRITICAL)
+# 🔁 BACKWARD-COMPAT (DO NOT REMOVE)
 # -------------------------------------------------
 require_admin_user = require_admin
