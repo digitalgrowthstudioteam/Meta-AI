@@ -14,19 +14,23 @@ class BillingService:
     """
     Razorpay payment lifecycle service.
 
-    🔒 RULES:
-    - Order is created first
-    - Payment is immutable after capture
+    RULES:
+    - Order creation is idempotent
     - Webhook is source of truth
+    - Client verification is secondary safety
     """
 
     def __init__(self):
+        if not settings.RAZORPAY_KEY_ID or not settings.RAZORPAY_KEY_SECRET:
+            raise RuntimeError("Razorpay keys not configured")
+
         self.client = razorpay.Client(
             auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET)
         )
+        self.public_key = settings.RAZORPAY_KEY_ID
 
     # =====================================================
-    # CREATE RAZORPAY ORDER
+    # CREATE RAZORPAY ORDER (IDEMPOTENT)
     # =====================================================
     async def create_order(
         self,
@@ -41,6 +45,19 @@ class BillingService:
         Creates Razorpay order + local payment record.
         Amount is in paise.
         """
+
+        # Prevent duplicate open orders
+        result = await db.execute(
+            select(Payment).where(
+                Payment.user_id == user.id,
+                Payment.amount == amount,
+                Payment.payment_for == payment_for,
+                Payment.status == "created",
+            )
+        )
+        existing = result.scalar_one_or_none()
+        if existing:
+            return existing
 
         order = self.client.order.create(
             {
@@ -77,7 +94,8 @@ class BillingService:
         razorpay_signature: str,
     ) -> Payment:
         """
-        Called after client-side payment success.
+        Client-side verification.
+        Webhook will still re-verify.
         """
 
         result = await db.execute(
@@ -87,6 +105,9 @@ class BillingService:
 
         if not payment:
             raise ValueError("Payment record not found")
+
+        if payment.status == "captured":
+            return payment
 
         self.client.utility.verify_payment_signature(
             {
