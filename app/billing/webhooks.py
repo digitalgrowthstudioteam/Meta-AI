@@ -1,4 +1,6 @@
 import json
+import hmac
+import hashlib
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -37,9 +39,6 @@ async def razorpay_webhook(
     # -------------------------------------------------
     # VERIFY SIGNATURE
     # -------------------------------------------------
-    import hmac
-    import hashlib
-
     expected_signature = hmac.new(
         settings.RAZORPAY_WEBHOOK_SECRET.encode(),
         body,
@@ -59,6 +58,9 @@ async def razorpay_webhook(
     if not razorpay_order_id:
         return {"status": "ignored"}
 
+    # -------------------------------------------------
+    # FETCH PAYMENT (IDEMPOTENT)
+    # -------------------------------------------------
     result = await db.execute(
         select(Payment).where(Payment.razorpay_order_id == razorpay_order_id)
     )
@@ -67,9 +69,6 @@ async def razorpay_webhook(
     if not payment:
         return {"status": "ignored"}
 
-    # -------------------------------------------------
-    # APPLY PAYMENT STATUS (IMMUTABLE AFTER CAPTURE)
-    # -------------------------------------------------
     if payment.status == "captured":
         return {"status": "already_processed"}
 
@@ -83,7 +82,7 @@ async def razorpay_webhook(
     payment.paid_at = datetime.utcnow()
 
     # -------------------------------------------------
-    # ACTIVATE BUSINESS OBJECT (PHASE 19 STEP 6)
+    # ACTIVATE BUSINESS OBJECT
     # -------------------------------------------------
     if payment.payment_for == "subscription":
         plan = await db.scalar(
@@ -110,7 +109,7 @@ async def razorpay_webhook(
 
         db.add(subscription)
 
-    # (manual_campaign / addon hooks will plug here later)
+    # future: manual_campaign / addon hooks
 
     await db.commit()
     return {"status": "activated"}
