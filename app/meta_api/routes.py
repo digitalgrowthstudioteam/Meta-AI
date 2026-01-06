@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
@@ -37,12 +37,12 @@ async def get_dev_user(db: AsyncSession) -> Optional[User]:
 async def connect_meta_account(
     db: AsyncSession = Depends(get_db),
 ):
-    current_user = await get_dev_user(db)
-    if not current_user:
+    user = await get_dev_user(db)
+    if not user:
         raise HTTPException(status_code=400, detail="No user available")
 
     state = str(uuid.uuid4())
-    db.add(MetaOAuthState(user_id=current_user.id, state=state))
+    db.add(MetaOAuthState(user_id=user.id, state=state))
     await db.commit()
 
     return {"redirect_url": build_meta_oauth_url(state)}
@@ -86,7 +86,7 @@ async def meta_oauth_callback(
 
 
 # =========================================================
-# LIST ALL META AD ACCOUNTS (WITH SELECTION STATE)
+# LIST META AD ACCOUNTS (UUID + SELECT STATE)
 # =========================================================
 @router.get("/adaccounts")
 async def list_meta_ad_accounts(
@@ -99,20 +99,21 @@ async def list_meta_ad_accounts(
     result = await db.execute(
         select(
             MetaAdAccount.id,
-            MetaAdAccount.meta_account_id,
             MetaAdAccount.account_name,
             UserMetaAdAccount.is_selected,
         )
-        .join(UserMetaAdAccount, UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id)
+        .join(
+            UserMetaAdAccount,
+            UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
+        )
         .where(UserMetaAdAccount.user_id == user.id)
         .order_by(MetaAdAccount.account_name)
     )
 
     return [
         {
-            "id": r.id,
-            "meta_account_id": r.meta_account_id,
-            "account_name": r.account_name,
+            "id": r.id,                 # ✅ UUID used everywhere
+            "name": r.account_name,     # ✅ matches frontend
             "is_selected": r.is_selected,
         }
         for r in result.all()
@@ -120,43 +121,43 @@ async def list_meta_ad_accounts(
 
 
 # =========================================================
-# SELECT ONE META AD ACCOUNT (ATOMIC)
+# SELECT ONE META AD ACCOUNT (STRICT — ONE AT A TIME)
 # =========================================================
 @router.post("/adaccounts/select")
 async def select_meta_ad_account(
-    meta_ad_account_id: str = Query(...),
+    ad_account_id: uuid.UUID = Query(...),
     db: AsyncSession = Depends(get_db),
 ):
     user = await get_dev_user(db)
     if not user:
         raise HTTPException(status_code=400, detail="No user available")
 
-    # deselect all
+    # 1️⃣ deselect all
     await db.execute(
         update(UserMetaAdAccount)
         .where(UserMetaAdAccount.user_id == user.id)
         .values(is_selected=False)
     )
 
-    # select one
+    # 2️⃣ select exactly one (UUID-based)
     result = await db.execute(
         update(UserMetaAdAccount)
         .where(
             UserMetaAdAccount.user_id == user.id,
-            UserMetaAdAccount.meta_ad_account_id
-            == select(MetaAdAccount.id)
-            .where(MetaAdAccount.meta_account_id == meta_ad_account_id)
-            .scalar_subquery(),
+            UserMetaAdAccount.meta_ad_account_id == ad_account_id,
         )
         .values(is_selected=True)
     )
 
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Ad account not found")
+
     await db.commit()
 
-    # sync campaigns ONLY for selected account
+    # 3️⃣ sync campaigns ONLY for selected account
     await MetaCampaignService.sync_campaigns_for_user(
         db=db,
         user_id=user.id,
     )
 
-    return {"status": "selected", "meta_ad_account_id": meta_ad_account_id}
+    return {"status": "selected", "ad_account_id": str(ad_account_id)}
