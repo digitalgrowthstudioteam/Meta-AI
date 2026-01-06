@@ -136,3 +136,4 @@ Index(
     ChatMessage.thread_id,
     ChatMessage.created_at,
 )
+
