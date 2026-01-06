@@ -22,21 +22,27 @@ class CampaignService:
     """
 
     # =====================================================
-    # LIST CAMPAIGNS + CATEGORY VISIBILITY (PHASE 9.2)
+    # LIST CAMPAIGNS — STRICT SELECTED AD ACCOUNT (LOCKED)
     # =====================================================
     @staticmethod
     async def list_campaigns_with_visibility(
         db: AsyncSession,
+        *,
         user_id: UUID,
+        ad_account_id: UUID,
     ) -> list[Campaign]:
         stmt = (
             select(Campaign)
             .options(selectinload(Campaign.category_map))
             .join(MetaAdAccount, Campaign.ad_account_id == MetaAdAccount.id)
-            .join(UserMetaAdAccount, UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id)
+            .join(
+                UserMetaAdAccount,
+                UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
+            )
             .where(
                 UserMetaAdAccount.user_id == user_id,
                 UserMetaAdAccount.is_selected.is_(True),
+                Campaign.ad_account_id == ad_account_id,
                 Campaign.is_archived.is_(False),
             )
         )
@@ -45,7 +51,7 @@ class CampaignService:
         return result.scalars().all()
 
     # =====================================================
-    # SYNC CAMPAIGNS FROM META (PHASE 5 — HARDENED)
+    # SYNC CAMPAIGNS FROM META (SELECTED ACCOUNT ONLY)
     # =====================================================
     @staticmethod
     async def sync_from_meta(
@@ -55,7 +61,10 @@ class CampaignService:
 
         stmt = (
             select(MetaAdAccount)
-            .join(UserMetaAdAccount, UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id)
+            .join(
+                UserMetaAdAccount,
+                UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
+            )
             .where(
                 UserMetaAdAccount.user_id == user_id,
                 UserMetaAdAccount.is_selected.is_(True),
@@ -114,7 +123,7 @@ class CampaignService:
         return synced
 
     # =====================================================
-    # MANUAL CAMPAIGN VALIDITY ENFORCEMENT (PHASE 11.2)
+    # MANUAL CAMPAIGN VALIDITY ENFORCEMENT
     # =====================================================
     @staticmethod
     async def enforce_manual_campaign_validity(
@@ -157,7 +166,7 @@ class CampaignService:
             )
 
     # =====================================================
-    # AI TOGGLE (PHASE 11 — MANUAL + PLAN ENFORCED)
+    # AI TOGGLE — STRICT AD ACCOUNT SCOPE
     # =====================================================
     @staticmethod
     async def toggle_ai(
@@ -171,7 +180,10 @@ class CampaignService:
         stmt = (
             select(Campaign)
             .join(MetaAdAccount, Campaign.ad_account_id == MetaAdAccount.id)
-            .join(UserMetaAdAccount, UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id)
+            .join(
+                UserMetaAdAccount,
+                UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
+            )
             .where(
                 Campaign.id == campaign_id,
                 UserMetaAdAccount.user_id == user_id,
@@ -186,7 +198,7 @@ class CampaignService:
         if not campaign:
             raise ValueError("Campaign not found")
 
-        # 🔒 Enforce manual validity before any toggle
+        # 🔒 Enforce manual validity
         await CampaignService.enforce_manual_campaign_validity(
             db=db,
             campaign=campaign,
@@ -199,24 +211,20 @@ class CampaignService:
                 action="RENEW_MANUAL",
             )
 
-        # Snapshot BEFORE
         before_state = {
             "ai_active": campaign.ai_active,
         }
 
-        # Plan enforcement
         if enable and not campaign.ai_active:
             await PlanEnforcementService.assert_ai_allowed(
                 db=db,
                 user_id=user_id,
             )
 
-        # Apply toggle
         campaign.ai_active = enable
         campaign.ai_activated_at = datetime.utcnow() if enable else None
         campaign.ai_deactivated_at = None if enable else datetime.utcnow()
 
-        # Snapshot AFTER
         after_state = {
             "ai_active": campaign.ai_active,
         }
