@@ -20,9 +20,8 @@ from app.core.base import Base
 # =========================================================
 class ChatThread(Base):
     """
-    One conversation between:
-    - 1 user
-    - 1 or more admins (admin has global access)
+    One immutable support thread per user.
+    Admins have global visibility.
     """
 
     __tablename__ = "chat_threads"
@@ -46,11 +45,18 @@ class ChatThread(Base):
         doc="Optional topic or title",
     )
 
+    status: Mapped[str] = mapped_column(
+        String,
+        default="open",
+        nullable=False,
+        doc="open | pending | closed",
+    )
+
     is_closed: Mapped[bool] = mapped_column(
         Boolean,
         default=False,
         nullable=False,
-        doc="Admin can close chat; history remains read-only",
+        doc="Hard lock when closed",
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -59,11 +65,19 @@ class ChatThread(Base):
         nullable=False,
     )
 
+    last_message_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+        doc="Used for inbox ordering",
+    )
+
     # Relationships
     messages = relationship(
         "ChatMessage",
         back_populates="thread",
         lazy="selectin",
+        order_by="ChatMessage.created_at",
     )
 
 
@@ -72,7 +86,7 @@ class ChatThread(Base):
 # =========================================================
 class ChatMessage(Base):
     """
-    Immutable message.
+    Immutable chat message.
     NEVER updated or deleted.
     """
 
@@ -91,17 +105,16 @@ class ChatMessage(Base):
         index=True,
     )
 
-    sender_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-
     sender_type: Mapped[str] = mapped_column(
         String,
         nullable=False,
         doc="user | admin | system",
+    )
+
+    sender_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+        doc="User ID or Admin ID; NULL for system",
     )
 
     message: Mapped[str] = mapped_column(
@@ -132,8 +145,12 @@ Index(
 )
 
 Index(
+    "ix_chat_thread_last_message",
+    ChatThread.last_message_at,
+)
+
+Index(
     "ix_chat_message_thread_time",
     ChatMessage.thread_id,
     ChatMessage.created_at,
 )
-
