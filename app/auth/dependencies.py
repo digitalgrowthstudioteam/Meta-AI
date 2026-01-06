@@ -92,3 +92,4 @@ async def require_admin(
 # BACKWARD-COMPAT ALIAS (DO NOT REMOVE)
 # -------------------------------------------------
 require_admin_user = require_admin
+
