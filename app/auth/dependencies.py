@@ -63,7 +63,7 @@ async def get_current_user(
     🔒 USER RESOLUTION ORDER:
     1. Resolve real logged-in user
     2. If admin + X-Impersonate-User header present → impersonate
-    3. Impersonation is READ-ONLY (no mutation allowed downstream)
+    3. Impersonation is READ-ONLY (enforced downstream)
     """
 
     real_user = await _resolve_real_user(db)
@@ -78,7 +78,7 @@ async def get_current_user(
             )
 
     # -------------------------------------------------
-    # 🔑 ADMIN IMPERSONATION (SAFE)
+    # 🔑 ADMIN IMPERSONATION (SAFE, READ-ONLY)
     # -------------------------------------------------
     if x_impersonate_user:
         if real_user.email not in ADMIN_EMAILS:
@@ -100,9 +100,9 @@ async def get_current_user(
                 detail="Impersonated user not found",
             )
 
-        # 🔒 Mark impersonation context (non-persistent)
-        target_user._impersonated_by_admin = True
-        target_user._real_admin_email = real_user.email
+        # 🔒 NON-PERSISTENT FLAGS (CRITICAL)
+        target_user._is_impersonated = True
+        target_user._impersonated_by = real_user.email
 
         return target_user
 
@@ -128,6 +128,24 @@ async def require_admin(
         raise HTTPException(
             status_code=403,
             detail="Admin access restricted",
+        )
+    return user
+
+
+# -------------------------------------------------
+# 🔒 WRITE-SAFETY GUARD (PHASE 17.5)
+# -------------------------------------------------
+async def forbid_impersonated_writes(
+    user: User = Depends(get_current_user),
+) -> User:
+    """
+    Blocks ALL write / mutation routes during impersonation.
+    Use on POST / PUT / PATCH / DELETE routes.
+    """
+    if getattr(user, "_is_impersonated", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Write operations disabled during impersonation",
         )
     return user
 
