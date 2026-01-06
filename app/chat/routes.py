@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from uuid import UUID
 
 from app.core.db_session import get_db
@@ -29,9 +30,10 @@ async def get_or_create_thread(
 
     return {
         "thread_id": str(thread.id),
-        "user_id": str(thread.user_id),
+        "status": thread.status,
         "is_closed": thread.is_closed,
         "created_at": thread.created_at.isoformat(),
+        "last_message_at": thread.last_message_at.isoformat(),
     }
 
 
@@ -55,6 +57,7 @@ async def get_my_thread(
 
     return {
         "id": str(thread.id),
+        "status": thread.status,
         "is_closed": thread.is_closed,
         "messages": [
             {
@@ -84,6 +87,9 @@ async def send_user_message(
             user=current_user,
             thread_id=thread_id,
         )
+
+        if thread.is_closed:
+            raise ValueError("Thread is closed")
 
         msg = await ChatService.send_message(
             db=db,
@@ -115,8 +121,10 @@ async def list_all_threads(
         {
             "id": str(t.id),
             "user_id": str(t.user_id),
+            "status": t.status,
             "is_closed": t.is_closed,
             "created_at": t.created_at.isoformat(),
+            "last_message_at": t.last_message_at.isoformat(),
             "message_count": len(t.messages),
         }
         for t in threads
@@ -140,6 +148,9 @@ async def send_admin_message(
 
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
+
+    if thread.is_closed:
+        raise HTTPException(status_code=400, detail="Thread is closed")
 
     msg = await ChatService.send_message(
         db=db,
@@ -176,4 +187,3 @@ async def close_thread(
         "status": "closed",
         "thread_id": str(thread.id),
     }
-
