@@ -9,6 +9,8 @@ from sqlalchemy import (
     Integer,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.dialects.postgresql import UUID
+import uuid
 
 from app.core.base import Base
 from app.plans.models import Plan
@@ -40,6 +42,17 @@ class Subscription(Base):
     )
 
     # =====================================================
+    # PAYMENT LINK (PHASE 19)
+    # =====================================================
+    payment_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("payments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        doc="Payment that activated this subscription",
+    )
+
+    # =====================================================
     # SUBSCRIPTION STATE
     # =====================================================
     status: Mapped[str] = mapped_column(
@@ -59,7 +72,7 @@ class Subscription(Base):
     )
 
     # =====================================================
-    # TRIAL METADATA (OPTION A)
+    # TRIAL METADATA
     # =====================================================
     is_trial: Mapped[bool] = mapped_column(
         Boolean,
