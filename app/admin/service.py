@@ -1,10 +1,12 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from uuid import UUID
 from datetime import datetime, date
 
 from app.admin.models import AdminOverride
 from app.campaigns.models import Campaign, CampaignActionLog
+from app.users.models import User
+from app.plans.subscription_models import Subscription
 
 
 class AdminOverrideService:
@@ -140,9 +142,6 @@ class AdminOverrideService:
         plan_label: str,
         reason: str,
     ) -> Campaign:
-        """
-        Admin-only manual campaign purchase / renewal.
-        """
 
         stmt = (
             select(Campaign)
@@ -157,8 +156,8 @@ class AdminOverrideService:
 
         before_state = {
             "is_manual": campaign.is_manual,
-            "manual_status": campaign.manual_status,
-            "manual_valid_till": str(campaign.manual_valid_till) if campaign.manual_valid_till else None,
+            "manual_status": getattr(campaign, "manual_status", None),
+            "manual_valid_till": str(getattr(campaign, "manual_valid_till", None)),
         }
 
         campaign.is_manual = True
@@ -190,3 +189,70 @@ class AdminOverrideService:
         await db.commit()
         await db.refresh(campaign)
         return campaign
+
+    # =====================================================
+    # PHASE 14.1 — ADMIN DASHBOARD STATS (READ-ONLY)
+    # =====================================================
+    @staticmethod
+    async def get_dashboard_stats(
+        db: AsyncSession,
+    ) -> dict:
+        """
+        Read-only system health & counts for admin dashboard.
+        """
+
+        total_users = await db.scalar(
+            select(func.count(User.id))
+        )
+
+        active_subscriptions = await db.scalar(
+            select(func.count(Subscription.id)).where(
+                Subscription.status == "active"
+            )
+        )
+
+        expired_subscriptions = await db.scalar(
+            select(func.count(Subscription.id)).where(
+                Subscription.status == "expired"
+            )
+        )
+
+        total_campaigns = await db.scalar(
+            select(func.count(Campaign.id))
+        )
+
+        ai_active_campaigns = await db.scalar(
+            select(func.count(Campaign.id)).where(
+                Campaign.ai_active.is_(True)
+            )
+        )
+
+        manual_campaigns = await db.scalar(
+            select(func.count(Campaign.id)).where(
+                Campaign.is_manual.is_(True)
+            )
+        )
+
+        last_action = await db.execute(
+            select(CampaignActionLog)
+            .order_by(CampaignActionLog.created_at.desc())
+            .limit(1)
+        )
+        last_log = last_action.scalar_one_or_none()
+
+        return {
+            "users": total_users,
+            "subscriptions": {
+                "active": active_subscriptions,
+                "expired": expired_subscriptions,
+            },
+            "campaigns": {
+                "total": total_campaigns,
+                "ai_active": ai_active_campaigns,
+                "manual": manual_campaigns,
+            },
+            "last_activity": last_log.created_at.isoformat()
+            if last_log
+            else None,
+            "system_status": "OK",
+        }
