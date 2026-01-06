@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Header
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -29,18 +29,15 @@ async def _get_global_settings(
 
 
 # -------------------------------------------------
-# DEV-SAFE CURRENT USER RESOLUTION
+# BASE USER RESOLUTION (REAL USER)
 # -------------------------------------------------
-async def get_current_user(
-    db: AsyncSession = Depends(get_db),
+async def _resolve_real_user(
+    db: AsyncSession,
 ) -> User:
     """
     DEV MODE:
     - Always resolve to first real user in DB
-    - No env flags
-    - No fake IDs
     """
-
     result = await db.execute(
         select(User).order_by(User.created_at.asc()).limit(1)
     )
@@ -52,16 +49,64 @@ async def get_current_user(
             detail="No user found in database",
         )
 
-    # 🔒 MAINTENANCE MODE ENFORCEMENT
+    return user
+
+
+# -------------------------------------------------
+# CURRENT USER (WITH IMPERSONATION SUPPORT)
+# -------------------------------------------------
+async def get_current_user(
+    db: AsyncSession = Depends(get_db),
+    x_impersonate_user: str | None = Header(default=None),
+) -> User:
+    """
+    🔒 USER RESOLUTION ORDER:
+    1. Resolve real logged-in user
+    2. If admin + X-Impersonate-User header present → impersonate
+    3. Impersonation is READ-ONLY (no mutation allowed downstream)
+    """
+
+    real_user = await _resolve_real_user(db)
+
+    # 🔒 MAINTENANCE MODE
     settings = await _get_global_settings(db)
     if settings and settings.maintenance_mode:
-        if user.email not in ADMIN_EMAILS:
+        if real_user.email not in ADMIN_EMAILS:
             raise HTTPException(
                 status_code=503,
                 detail="System under maintenance. Please try again later.",
             )
 
-    return user
+    # -------------------------------------------------
+    # 🔑 ADMIN IMPERSONATION (SAFE)
+    # -------------------------------------------------
+    if x_impersonate_user:
+        if real_user.email not in ADMIN_EMAILS:
+            raise HTTPException(
+                status_code=403,
+                detail="Impersonation not allowed",
+            )
+
+        stmt = select(User).where(
+            (User.id == x_impersonate_user)
+            | (User.email == x_impersonate_user)
+        )
+        result = await db.execute(stmt)
+        target_user = result.scalar_one_or_none()
+
+        if not target_user:
+            raise HTTPException(
+                status_code=404,
+                detail="Impersonated user not found",
+            )
+
+        # 🔒 Mark impersonation context (non-persistent)
+        target_user._impersonated_by_admin = True
+        target_user._real_admin_email = real_user.email
+
+        return target_user
+
+    return real_user
 
 
 # -------------------------------------------------
@@ -78,7 +123,6 @@ async def require_admin(
 ) -> User:
     """
     🔒 ADMIN = EMAIL-BASED (HARD LOCK)
-    Role column is ignored for safety.
     """
     if user.email not in ADMIN_EMAILS:
         raise HTTPException(
@@ -92,4 +136,3 @@ async def require_admin(
 # BACKWARD-COMPAT ALIAS (DO NOT REMOVE)
 # -------------------------------------------------
 require_admin_user = require_admin
-
