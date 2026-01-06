@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
@@ -8,6 +9,7 @@ from app.auth.dependencies import require_user
 from app.users.models import User
 from app.billing.service import BillingService
 from app.billing.invoice_models import Invoice
+from app.billing.invoice_service import InvoicePDFService
 
 
 router = APIRouter(prefix="/billing", tags=["Billing"])
@@ -25,10 +27,6 @@ async def create_razorpay_order(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
-    """
-    Creates a Razorpay order.
-    """
-
     service = BillingService()
 
     try:
@@ -65,10 +63,6 @@ async def verify_razorpay_payment(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
-    """
-    Client-side verification (webhook is source of truth).
-    """
-
     service = BillingService()
 
     try:
@@ -97,10 +91,6 @@ async def list_invoices(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
-    """
-    Returns all invoices for the logged-in user.
-    """
-
     result = await db.execute(
         select(Invoice)
         .where(Invoice.user_id == current_user.id)
@@ -119,7 +109,38 @@ async def list_invoices(
             "period_from": inv.period_from.isoformat() if inv.period_from else None,
             "period_to": inv.period_to.isoformat() if inv.period_to else None,
             "created_at": inv.created_at.isoformat(),
-            "download_url": inv.invoice_url,
+            "download_url": f"/api/billing/invoices/{inv.id}/download",
         }
         for inv in invoices
     ]
+
+
+# =====================================================
+# DOWNLOAD INVOICE PDF
+# =====================================================
+@router.get("/invoices/{invoice_id}/download")
+async def download_invoice(
+    invoice_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    result = await db.execute(
+        select(Invoice).where(
+            Invoice.id == invoice_id,
+            Invoice.user_id == current_user.id,
+        )
+    )
+    invoice = result.scalar_one_or_none()
+
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    pdf_bytes = InvoicePDFService.generate_pdf(invoice)
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{invoice.invoice_number}.pdf"'
+        },
+    )
