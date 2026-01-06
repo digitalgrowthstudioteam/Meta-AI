@@ -8,7 +8,7 @@ from app.auth.dependencies import require_user
 from app.users.models import User
 
 # -------------------------
-# Admin Overrides
+# Admin Schemas / Services
 # -------------------------
 from app.admin.schemas import (
     AdminOverrideCreate,
@@ -52,12 +52,66 @@ async def get_admin_dashboard(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
-    """
-    Read-only admin dashboard:
-    system health, counts, last activity.
-    """
     require_admin(current_user)
     return await AdminOverrideService.get_dashboard_stats(db=db)
+
+
+# =========================
+# PHASE 14.4.3 — GLOBAL SETTINGS
+# =========================
+@router.get("/settings")
+async def get_global_settings(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    """
+    Read global system settings (admin-only).
+    """
+    require_admin(current_user)
+    settings = await AdminOverrideService.get_global_settings(db=db)
+
+    return {
+        "site_name": settings.site_name,
+        "dashboard_title": settings.dashboard_title,
+        "logo_url": settings.logo_url,
+        "ai_globally_enabled": settings.ai_globally_enabled,
+        "meta_sync_enabled": settings.meta_sync_enabled,
+        "maintenance_mode": settings.maintenance_mode,
+        "updated_at": settings.updated_at.isoformat(),
+    }
+
+
+@router.put("/settings")
+async def update_global_settings(
+    payload: dict,
+    reason: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    """
+    Update global system settings (admin-only, audited).
+    """
+    require_admin(current_user)
+
+    settings = await AdminOverrideService.update_global_settings(
+        db=db,
+        admin_user_id=current_user.id,
+        updates=payload,
+        reason=reason,
+    )
+
+    return {
+        "status": "updated",
+        "settings": {
+            "site_name": settings.site_name,
+            "dashboard_title": settings.dashboard_title,
+            "logo_url": settings.logo_url,
+            "ai_globally_enabled": settings.ai_globally_enabled,
+            "meta_sync_enabled": settings.meta_sync_enabled,
+            "maintenance_mode": settings.maintenance_mode,
+            "updated_at": settings.updated_at.isoformat(),
+        },
+    }
 
 
 # =========================
@@ -70,8 +124,7 @@ async def create_override(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
-
-    override = await AdminOverrideService.create_override(
+    return await AdminOverrideService.create_override(
         db=db,
         user_id=payload.user_id,
         extra_ai_campaigns=payload.extra_ai_campaigns,
@@ -79,8 +132,6 @@ async def create_override(
         override_expires_at=payload.override_expires_at,
         reason=payload.reason,
     )
-
-    return override
 
 
 @router.get("/overrides", response_model=list[AdminOverrideResponse])
@@ -104,19 +155,16 @@ async def rollback_campaign_action(
 ):
     require_admin(current_user)
 
-    try:
-        campaign = await AdminOverrideService.rollback_campaign_action(
-            db=db,
-            action_log_id=action_log_id,
-            admin_user_id=current_user.id,
-            reason=reason,
-        )
-        return {
-            "status": "rolled_back",
-            "campaign_id": str(campaign.id),
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    campaign = await AdminOverrideService.rollback_campaign_action(
+        db=db,
+        action_log_id=action_log_id,
+        admin_user_id=current_user.id,
+        reason=reason,
+    )
+    return {
+        "status": "rolled_back",
+        "campaign_id": str(campaign.id),
+    }
 
 
 # =========================
@@ -135,24 +183,22 @@ async def grant_or_renew_manual_campaign(
 ):
     require_admin(current_user)
 
-    try:
-        campaign = await AdminOverrideService.grant_or_renew_manual_campaign(
-            db=db,
-            campaign_id=campaign_id,
-            admin_user_id=current_user.id,
-            valid_from=valid_from,
-            valid_till=valid_till,
-            price_paid=price_paid,
-            plan_label=plan_label,
-            reason=reason,
-        )
-        return {
-            "status": "manual_campaign_active",
-            "campaign_id": str(campaign.id),
-            "valid_till": str(campaign.manual_valid_till),
-        }
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+    campaign = await AdminOverrideService.grant_or_renew_manual_campaign(
+        db=db,
+        campaign_id=campaign_id,
+        admin_user_id=current_user.id,
+        valid_from=valid_from,
+        valid_till=valid_till,
+        price_paid=price_paid,
+        plan_label=plan_label,
+        reason=reason,
+    )
+
+    return {
+        "status": "manual_campaign_active",
+        "campaign_id": str(campaign.id),
+        "valid_till": str(campaign.manual_valid_till),
+    }
 
 
 # =========================
@@ -164,11 +210,7 @@ async def run_subscription_expiry_cron(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
-
-    affected = await PlanEnforcementService.enforce_subscription_expiry(
-        db=db,
-    )
-
+    affected = await PlanEnforcementService.enforce_subscription_expiry(db=db)
     return {
         "status": "ok",
         "expired_campaigns_disabled": affected,
@@ -195,13 +237,10 @@ async def list_campaign_action_logs(
 
     if campaign_id:
         stmt = stmt.where(CampaignActionLog.campaign_id == campaign_id)
-
     if actor_type:
         stmt = stmt.where(CampaignActionLog.actor_type == actor_type)
 
-    stmt = stmt.limit(limit)
-
-    result = await db.execute(stmt)
+    result = await db.execute(stmt.limit(limit))
     logs = result.scalars().all()
 
     return [
@@ -225,10 +264,11 @@ async def get_campaign_action_log(
 ):
     require_admin(current_user)
 
-    stmt = select(CampaignActionLog).where(
-        CampaignActionLog.id == action_log_id
+    result = await db.execute(
+        select(CampaignActionLog).where(
+            CampaignActionLog.id == action_log_id
+        )
     )
-    result = await db.execute(stmt)
     log = result.scalar_one_or_none()
 
     if not log:
