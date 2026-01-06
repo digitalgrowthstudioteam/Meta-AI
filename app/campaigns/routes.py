@@ -10,14 +10,14 @@ from app.users.models import User
 from app.campaigns.service import CampaignService
 from app.campaigns.schemas import CampaignResponse, ToggleAIRequest
 from app.plans.enforcement import EnforcementError
-from app.meta_api.models import MetaOAuthToken
+from app.meta_api.models import MetaOAuthToken, UserMetaAdAccount
 
 
 router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
 
 
 # =========================================================
-# LIST CAMPAIGNS + CATEGORY VISIBILITY (PHASE 9.2)
+# LIST CAMPAIGNS — STRICT AD ACCOUNT SELECTION (LOCKED)
 # =========================================================
 @router.get(
     "",
@@ -31,15 +31,17 @@ async def list_campaigns(
     if current_user is None:
         return []
 
-    result = await db.execute(
-        select(MetaOAuthToken)
-        .where(
-            MetaOAuthToken.user_id == current_user.id,
-            MetaOAuthToken.is_active.is_(True),
+    # 1️⃣ Ensure Meta is connected
+    token = (
+        await db.execute(
+            select(MetaOAuthToken)
+            .where(
+                MetaOAuthToken.user_id == current_user.id,
+                MetaOAuthToken.is_active.is_(True),
+            )
+            .limit(1)
         )
-        .limit(1)
-    )
-    token = result.scalar_one_or_none()
+    ).scalar_one_or_none()
 
     if not token:
         raise HTTPException(
@@ -47,9 +49,26 @@ async def list_campaigns(
             detail="Meta account not connected",
         )
 
+    # 2️⃣ Get SINGLE selected ad account (SOURCE OF TRUTH)
+    selected_account = (
+        await db.execute(
+            select(UserMetaAdAccount)
+            .where(
+                UserMetaAdAccount.user_id == current_user.id,
+                UserMetaAdAccount.is_selected.is_(True),
+            )
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+
+    if not selected_account:
+        return []  # frontend will show “Select Ad Account”
+
+    # 3️⃣ Fetch campaigns ONLY for selected ad account
     campaigns = await CampaignService.list_campaigns_with_visibility(
         db=db,
         user_id=current_user.id,
+        ad_account_id=selected_account.meta_ad_account_id,
     )
 
     response: list[CampaignResponse] = []
@@ -75,7 +94,7 @@ async def list_campaigns(
 
 
 # =========================================================
-# SYNC CAMPAIGNS FROM META
+# SYNC CAMPAIGNS FROM META (SELECTED ACCOUNT ONLY)
 # =========================================================
 @router.post(
     "/sync",
