@@ -12,10 +12,27 @@ from app.meta_api.models import (
 )
 from app.campaigns.models import Campaign
 from app.core.config import settings
+from app.plans.enforcement import EnforcementError
 
 
 META_GRAPH_BASE = "https://graph.facebook.com/v19.0"
 META_TOKEN_URL = "https://graph.facebook.com/v19.0/oauth/access_token"
+
+
+# =====================================================
+# 🔒 GLOBAL META SYNC KILL SWITCH
+# =====================================================
+def assert_meta_sync_enabled():
+    """
+    Hard kill switch for ALL Meta interactions.
+    Controlled by admin global setting.
+    """
+    if not getattr(settings, "META_SYNC_ENABLED", True):
+        raise EnforcementError(
+            code="META_SYNC_DISABLED",
+            message="Meta sync is temporarily disabled by admin.",
+            action="CONTACT_ADMIN",
+        )
 
 
 class MetaOAuthService:
@@ -25,6 +42,8 @@ class MetaOAuthService:
 
     @staticmethod
     async def _exchange_for_long_lived_token(short_token: str) -> dict:
+        assert_meta_sync_enabled()
+
         async with httpx.AsyncClient(timeout=10) as client:
             response = await client.get(
                 META_TOKEN_URL,
@@ -45,6 +64,8 @@ class MetaOAuthService:
         user_id: UUID,
         code: str,
     ) -> MetaOAuthToken:
+        assert_meta_sync_enabled()
+
         from app.meta_api.oauth import exchange_code_for_token
 
         short_token_data = await exchange_code_for_token(code)
@@ -88,9 +109,7 @@ class MetaOAuthService:
 class MetaAdAccountService:
     """
     Read-only sync of Meta Ad Accounts.
-    HARDENED:
-    - Does NOT auto-switch selected account if one already exists
-    - Per-account isolation safe
+    HARDENED + KILL-SWITCHED
     """
 
     @staticmethod
@@ -99,6 +118,8 @@ class MetaAdAccountService:
         db: AsyncSession,
         user_id: UUID,
     ) -> int:
+        assert_meta_sync_enabled()
+
         result = await db.execute(
             select(MetaOAuthToken)
             .where(
@@ -122,7 +143,6 @@ class MetaAdAccountService:
             response.raise_for_status()
             data = response.json()
 
-        # Check if user already has a selected account
         result = await db.execute(
             select(UserMetaAdAccount)
             .where(
@@ -176,7 +196,6 @@ class MetaAdAccountService:
 
             processed += 1
 
-        # 🔒 Select ONLY if none selected yet (hard lock)
         if not has_selected and first_account_id:
             await db.execute(
                 update(UserMetaAdAccount)
@@ -199,9 +218,7 @@ class MetaAdAccountService:
 class MetaCampaignService:
     """
     Read-only Meta Campaign sync.
-    HARDENED:
-    - Selected ad account ONLY
-    - Per-ad-account failure isolation
+    HARDENED + KILL-SWITCHED
     """
 
     @staticmethod
@@ -210,6 +227,8 @@ class MetaCampaignService:
         db: AsyncSession,
         user_id: UUID,
     ) -> int:
+        assert_meta_sync_enabled()
+
         result = await db.execute(
             select(MetaOAuthToken)
             .where(
@@ -281,6 +300,5 @@ class MetaCampaignService:
             return total
 
         except Exception:
-            # 🔒 Isolation: one ad account failure never breaks system
             await db.rollback()
             return 0
