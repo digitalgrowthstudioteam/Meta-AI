@@ -1,24 +1,29 @@
-import os
 import urllib.parse
 import httpx
+
+from app.core.config import settings
 
 META_AUTH_BASE = "https://www.facebook.com/v19.0/dialog/oauth"
 META_TOKEN_URL = "https://graph.facebook.com/v19.0/oauth/access_token"
 
 
 def build_meta_oauth_url(state: str) -> str:
-    meta_app_id = os.environ.get("META_APP_ID")
-    meta_redirect_uri = os.environ.get("META_REDIRECT_URI")
+    """
+    Builds Meta OAuth authorization URL.
 
-    if not meta_app_id:
-        raise RuntimeError("META_APP_ID is not set in environment")
+    - Uses centralized settings (not raw os.environ)
+    - Prevents silent runtime crashes
+    """
 
-    if not meta_redirect_uri:
-        raise RuntimeError("META_REDIRECT_URI is not set in environment")
+    if not settings.META_APP_ID:
+        raise ValueError("META_APP_ID is not configured")
+
+    if not settings.META_REDIRECT_URI:
+        raise ValueError("META_REDIRECT_URI is not configured")
 
     params = {
-        "client_id": meta_app_id,
-        "redirect_uri": meta_redirect_uri,
+        "client_id": settings.META_APP_ID,
+        "redirect_uri": settings.META_REDIRECT_URI,
         "state": state,
         "scope": "ads_read,business_management",
         "response_type": "code",
@@ -28,20 +33,20 @@ def build_meta_oauth_url(state: str) -> str:
 
 
 async def exchange_code_for_token(code: str) -> dict:
-    meta_app_id = os.environ.get("META_APP_ID")
-    meta_app_secret = os.environ.get("META_APP_SECRET")
-    meta_redirect_uri = os.environ.get("META_REDIRECT_URI")
+    """
+    Exchanges OAuth code for access token.
+    """
 
-    if not meta_app_id or not meta_app_secret or not meta_redirect_uri:
-        raise RuntimeError("Meta OAuth environment variables are missing")
+    if not settings.META_APP_ID or not settings.META_APP_SECRET:
+        raise ValueError("Meta OAuth credentials are not configured")
 
     async with httpx.AsyncClient(timeout=10) as client:
         response = await client.get(
             META_TOKEN_URL,
             params={
-                "client_id": meta_app_id,
-                "client_secret": meta_app_secret,
-                "redirect_uri": meta_redirect_uri,
+                "client_id": settings.META_APP_ID,
+                "client_secret": settings.META_APP_SECRET,
+                "redirect_uri": settings.META_REDIRECT_URI,
                 "code": code,
             },
         )
