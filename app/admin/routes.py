@@ -45,6 +45,22 @@ def require_admin(user: User):
 
 
 # =========================
+# PHASE 14.2 — ADMIN DASHBOARD
+# =========================
+@router.get("/dashboard")
+async def get_admin_dashboard(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    """
+    Read-only admin dashboard:
+    system health, counts, last activity.
+    """
+    require_admin(current_user)
+    return await AdminOverrideService.get_dashboard_stats(db=db)
+
+
+# =========================
 # ADMIN OVERRIDES
 # =========================
 @router.post("/overrides", response_model=AdminOverrideResponse)
@@ -162,7 +178,6 @@ async def run_subscription_expiry_cron(
 # =====================================================
 # PHASE 13 — READ-ONLY ADMIN AUDIT APIs
 # =====================================================
-
 @router.get("/audit/actions")
 async def list_campaign_action_logs(
     *,
@@ -172,9 +187,6 @@ async def list_campaign_action_logs(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
-    """
-    Read-only audit feed for admin UI.
-    """
     require_admin(current_user)
 
     stmt = select(CampaignActionLog).order_by(
@@ -211,9 +223,6 @@ async def get_campaign_action_log(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
-    """
-    Detailed immutable snapshot view (for modal / drawer UI).
-    """
     require_admin(current_user)
 
     stmt = select(CampaignActionLog).where(
