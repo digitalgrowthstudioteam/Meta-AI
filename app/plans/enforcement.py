@@ -2,11 +2,11 @@ from datetime import datetime
 from uuid import UUID
 from typing import Optional
 
-from sqlalchemy import select, func, update
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.plans.subscription_models import Subscription
-from app.admin.models import AdminOverride
+from app.admin.models import AdminOverride, GlobalSettings
 from app.campaigns.models import Campaign, CampaignActionLog
 from app.meta_api.models import MetaAdAccount, UserMetaAdAccount
 
@@ -36,22 +36,32 @@ class EnforcementError(Exception):
 
 class PlanEnforcementService:
     """
-    🔒 SINGLE SOURCE OF TRUTH FOR PLAN, EXPIRY & DOWNGRADE ENFORCEMENT
+    🔒 SINGLE SOURCE OF TRUTH FOR PLAN, EXPIRY & AI ENFORCEMENT
     """
 
     # =====================================================
     # INTERNAL HELPERS
     # =====================================================
     @staticmethod
+    async def _get_global_settings(
+        db: AsyncSession,
+    ) -> Optional[GlobalSettings]:
+        result = await db.execute(
+            select(GlobalSettings).limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
     async def _get_active_subscription(
         db: AsyncSession,
         user_id: UUID,
     ) -> Optional[Subscription]:
-        stmt = select(Subscription).where(
-            Subscription.user_id == user_id,
-            Subscription.status.in_(["trial", "active"]),
+        result = await db.execute(
+            select(Subscription).where(
+                Subscription.user_id == user_id,
+                Subscription.status.in_(["trial", "active"]),
+            )
         )
-        result = await db.execute(stmt)
         return result.scalar_one_or_none()
 
     @staticmethod
@@ -61,15 +71,15 @@ class PlanEnforcementService:
     ) -> Optional[AdminOverride]:
         now = datetime.utcnow()
 
-        stmt = select(AdminOverride).where(
-            AdminOverride.user_id == user_id,
-            (
-                AdminOverride.override_expires_at.is_(None)
-                | (AdminOverride.override_expires_at > now)
-            ),
+        result = await db.execute(
+            select(AdminOverride).where(
+                AdminOverride.user_id == user_id,
+                (
+                    AdminOverride.override_expires_at.is_(None)
+                    | (AdminOverride.override_expires_at > now)
+                ),
+            )
         )
-
-        result = await db.execute(stmt)
         return result.scalar_one_or_none()
 
     @staticmethod
@@ -77,7 +87,7 @@ class PlanEnforcementService:
         db: AsyncSession,
         user_id: UUID,
     ) -> int:
-        stmt = (
+        result = await db.execute(
             select(func.count(Campaign.id))
             .join(MetaAdAccount, Campaign.ad_account_id == MetaAdAccount.id)
             .join(
@@ -91,12 +101,10 @@ class PlanEnforcementService:
                 Campaign.is_archived.is_(False),
             )
         )
-
-        result = await db.execute(stmt)
         return result.scalar_one()
 
     # =====================================================
-    # AI ACTIVATION GATE
+    # AI ACTIVATION GATE (GLOBAL + PLAN)
     # =====================================================
     @staticmethod
     async def assert_ai_allowed(
@@ -104,6 +112,23 @@ class PlanEnforcementService:
         *,
         user_id: UUID,
     ) -> None:
+        """
+        Master AI gate.
+        Enforces:
+        - Global kill switch
+        - Subscription validity
+        - Plan + add-on limits
+        """
+
+        # 🔒 GLOBAL AI KILL SWITCH
+        settings = await PlanEnforcementService._get_global_settings(db)
+        if settings and not settings.ai_globally_enabled:
+            raise EnforcementError(
+                code="AI_GLOBALLY_DISABLED",
+                message="AI is temporarily disabled by admin.",
+                action="CONTACT_SUPPORT",
+            )
+
         subscription = await PlanEnforcementService._get_active_subscription(
             db=db,
             user_id=user_id,
@@ -170,12 +195,13 @@ class PlanEnforcementService:
 
         now = datetime.utcnow()
 
-        stmt = select(Subscription).where(
-            Subscription.status.in_(["trial", "active"]),
-            Subscription.ends_at.is_not(None),
-            Subscription.ends_at < now,
+        result = await db.execute(
+            select(Subscription).where(
+                Subscription.status.in_(["trial", "active"]),
+                Subscription.ends_at.is_not(None),
+                Subscription.ends_at < now,
+            )
         )
-        result = await db.execute(stmt)
         expired_subs = result.scalars().all()
 
         affected = 0
@@ -184,8 +210,7 @@ class PlanEnforcementService:
             sub.status = "expired"
             sub.is_active = False
 
-            # Disable AI campaigns
-            camp_stmt = (
+            camp_result = await db.execute(
                 select(Campaign)
                 .join(MetaAdAccount, Campaign.ad_account_id == MetaAdAccount.id)
                 .join(
@@ -197,20 +222,15 @@ class PlanEnforcementService:
                     Campaign.ai_active.is_(True),
                 )
             )
-            camp_result = await db.execute(camp_stmt)
             campaigns = camp_result.scalars().all()
 
             for campaign in campaigns:
-                before_state = {
-                    "ai_active": campaign.ai_active,
-                }
+                before_state = {"ai_active": True}
 
                 campaign.ai_active = False
                 campaign.ai_deactivated_at = now
 
-                after_state = {
-                    "ai_active": campaign.ai_active,
-                }
+                after_state = {"ai_active": False}
 
                 db.add(
                     CampaignActionLog(
@@ -237,6 +257,13 @@ class PlanEnforcementService:
         *,
         user_id: UUID,
     ) -> dict:
+
+        settings = await PlanEnforcementService._get_global_settings(db)
+        if settings and not settings.ai_globally_enabled:
+            return {
+                "allowed": False,
+                "reason": "AI_GLOBALLY_DISABLED",
+            }
 
         subscription = await PlanEnforcementService._get_active_subscription(
             db=db,
