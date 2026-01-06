@@ -14,8 +14,8 @@ type Campaign = {
 };
 
 type AdAccount = {
-  id: string;          // ✅ UUID (DB truth)
-  name: string;        // ✅ backend now returns `name`
+  id: string;          // ✅ UUID (SERVER TRUTH)
+  name: string;
   is_selected: boolean;
 };
 
@@ -54,11 +54,11 @@ export default function CampaignsPage() {
 
       if (!res.ok) throw new Error();
 
-      const data = await res.json();
-      setAdAccounts(data ?? []);
+      const data: AdAccount[] = await res.json();
+      setAdAccounts(data);
       setMetaConnected(true);
 
-      const selected = data?.find((a: AdAccount) => a.is_selected);
+      const selected = data.find((a) => a.is_selected);
       if (selected) setSelectedAdAccount(selected.id);
     } catch {
       setMetaConnected(false);
@@ -66,7 +66,7 @@ export default function CampaignsPage() {
   };
 
   /* -----------------------------------
-   * SELECT AD ACCOUNT (UUID → SERVER)
+   * SELECT AD ACCOUNT (UUID ONLY)
    * ----------------------------------- */
   const selectAdAccount = async (adAccountId: string) => {
     setSelectedAdAccount(adAccountId);
@@ -189,7 +189,7 @@ export default function CampaignsPage() {
             : c
         )
       );
-      alert("Plan limit reached or action failed");
+      alert("Action failed");
     } finally {
       setTogglingId(null);
     }
@@ -217,7 +217,7 @@ export default function CampaignsPage() {
       <div>
         <h1 className="text-xl font-semibold">Campaigns</h1>
         <p className="text-sm text-gray-500">
-          Synced from Meta Ads Manager · One ad account at a time
+          One Meta ad account active at a time
         </p>
       </div>
 
