@@ -109,10 +109,22 @@ class ExplainabilityContext(BaseModel):
 
 
 # =========================================================
-# CONFIDENCE MODEL
+# CONFIDENCE MODEL (PHASE 21)
 # =========================================================
+class ConfidenceBand(str, Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+
+
 class ConfidenceScore(BaseModel):
     score: float = Field(..., ge=0.0, le=1.0, example=0.82)
+
+    band: Optional[ConfidenceBand] = Field(
+        None,
+        description="LOW | MEDIUM | HIGH (Phase 21)",
+    )
+
     reason: str = Field(
         ...,
         example="Confirmed by industry benchmark and stable 30D trend",
@@ -145,7 +157,7 @@ class AIAction(BaseModel):
     # Explainability
     explainability: Optional[ExplainabilityContext] = None
 
-    # Confidence
+    # Confidence (Phase 21 exposed)
     confidence: ConfidenceScore
 
     # =====================================================
@@ -158,7 +170,7 @@ class AIAction(BaseModel):
 
     requires_human_approval: bool = Field(
         default=True,
-        description="Always true in Phase 11",
+        description="Always true until auto-apply is unlocked",
     )
 
     approved_by_user_id: Optional[UUID] = Field(
