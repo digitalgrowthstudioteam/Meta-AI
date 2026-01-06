@@ -1,148 +1,138 @@
-import uuid
-from datetime import datetime
-from typing import Optional
-
-from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import RedirectResponse
+from fastapi import Depends, HTTPException, Header
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select
 
 from app.core.db_session import get_db
 from app.users.models import User
-from app.auth.dependencies import get_current_user
-
-from app.meta_api.oauth import build_meta_oauth_url
-from app.meta_api.service import (
-    MetaOAuthService,
-    MetaAdAccountService,
-    MetaCampaignService,
-)
-from app.meta_api.schemas import MetaConnectResponse
-from app.meta_api.models import MetaOAuthState, MetaAdAccount, UserMetaAdAccount
-
-router = APIRouter(prefix="/meta", tags=["Meta"])
+from app.admin.models import GlobalSettings
 
 
-# ---------------------------------------------------------
-# CONNECT META (OAUTH)
-# ---------------------------------------------------------
-@router.get("/connect", response_model=MetaConnectResponse)
-async def connect_meta_account(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    state = str(uuid.uuid4())
-    db.add(MetaOAuthState(user_id=current_user.id, state=state))
-    await db.commit()
-
-    return {"redirect_url": build_meta_oauth_url(state)}
+# =================================================
+# 🔒 LOCKED ADMIN EMAILS (SOURCE OF TRUTH)
+# =================================================
+ADMIN_EMAILS = {
+    "vikramrwadkar@gmail.com",
+    "digitalgrowthstudioteam@gmail.com",
+}
 
 
-# ---------------------------------------------------------
-# OAUTH CALLBACK
-# ---------------------------------------------------------
-@router.get("/oauth/callback")
-async def meta_oauth_callback(
-    code: str = Query(...),
-    state: str = Query(...),
-    db: AsyncSession = Depends(get_db),
-):
+# -------------------------------------------------
+# INTERNAL: LOAD GLOBAL SETTINGS (SAFE)
+# -------------------------------------------------
+async def _get_global_settings(
+    db: AsyncSession,
+) -> GlobalSettings | None:
     result = await db.execute(
-        select(MetaOAuthState).where(
-            MetaOAuthState.state == state,
-            MetaOAuthState.is_used.is_(False),
-            MetaOAuthState.expires_at > datetime.utcnow(),
-        )
+        select(GlobalSettings).limit(1)
     )
-    oauth_state = result.scalar_one_or_none()
-
-    if not oauth_state:
-        raise HTTPException(status_code=400, detail="Invalid OAuth state")
-
-    oauth_state.is_used = True
-    await db.commit()
-
-    await MetaOAuthService.store_token(
-        db=db,
-        user_id=oauth_state.user_id,
-        code=code,
-    )
-
-    await MetaAdAccountService.sync_user_ad_accounts(
-        db=db,
-        user_id=oauth_state.user_id,
-    )
-
-    return RedirectResponse(url="/campaigns", status_code=302)
+    return result.scalar_one_or_none()
 
 
-# =========================================================
-# LIST META AD ACCOUNTS (UUID + SELECT STATE)
-# =========================================================
-@router.get("/adaccounts")
-async def list_meta_ad_accounts(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
+# -------------------------------------------------
+# BASE USER RESOLUTION (REAL USER)
+# -------------------------------------------------
+async def _resolve_real_user(
+    db: AsyncSession,
+) -> User:
+    """
+    DEV MODE:
+    - Always resolve to first real user in DB
+    """
     result = await db.execute(
-        select(
-            MetaAdAccount.id,
-            MetaAdAccount.account_name,
-            UserMetaAdAccount.is_selected,
-        )
-        .join(
-            UserMetaAdAccount,
-            UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
-        )
-        .where(UserMetaAdAccount.user_id == current_user.id)
-        .order_by(MetaAdAccount.account_name)
+        select(User).order_by(User.created_at.asc()).limit(1)
     )
+    user = result.scalar_one_or_none()
 
-    return [
-        {
-            "id": r.id,
-            "name": r.account_name,
-            "is_selected": r.is_selected,
-        }
-        for r in result.all()
-    ]
+    if not user:
+        raise HTTPException(
+            status_code=500,
+            detail="No user found in database",
+        )
+
+    return user
 
 
-# =========================================================
-# SELECT ONE META AD ACCOUNT (STRICT — ONE AT A TIME)
-# =========================================================
-@router.post("/adaccounts/select")
-async def select_meta_ad_account(
-    ad_account_id: uuid.UUID = Query(...),
+# -------------------------------------------------
+# CURRENT USER (WITH IMPERSONATION SUPPORT)
+# -------------------------------------------------
+async def get_current_user(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    # deselect all
-    await db.execute(
-        update(UserMetaAdAccount)
-        .where(UserMetaAdAccount.user_id == current_user.id)
-        .values(is_selected=False)
-    )
+    x_impersonate_user: str | None = Header(default=None),
+) -> User:
+    """
+    🔒 USER RESOLUTION ORDER:
+    1. Resolve real logged-in user
+    2. If admin + X-Impersonate-User header present → impersonate
+    """
 
-    # select exactly one
-    result = await db.execute(
-        update(UserMetaAdAccount)
-        .where(
-            UserMetaAdAccount.user_id == current_user.id,
-            UserMetaAdAccount.meta_ad_account_id == ad_account_id,
+    real_user = await _resolve_real_user(db)
+
+    # 🔒 MAINTENANCE MODE
+    settings = await _get_global_settings(db)
+    if settings and settings.maintenance_mode:
+        if real_user.email not in ADMIN_EMAILS:
+            raise HTTPException(
+                status_code=503,
+                detail="System under maintenance",
+            )
+
+    # 🔑 ADMIN IMPERSONATION
+    if x_impersonate_user:
+        if real_user.email not in ADMIN_EMAILS:
+            raise HTTPException(
+                status_code=403,
+                detail="Impersonation not allowed",
+            )
+
+        stmt = select(User).where(
+            (User.id == x_impersonate_user)
+            | (User.email == x_impersonate_user)
         )
-        .values(is_selected=True)
-    )
+        result = await db.execute(stmt)
+        target_user = result.scalar_one_or_none()
 
-    if result.rowcount == 0:
-        raise HTTPException(status_code=404, detail="Ad account not found")
+        if not target_user:
+            raise HTTPException(
+                status_code=404,
+                detail="Impersonated user not found",
+            )
 
-    await db.commit()
+        target_user._is_impersonated = True
+        target_user._impersonated_by = real_user.email
+        return target_user
 
-    # sync campaigns ONLY for selected account
-    await MetaCampaignService.sync_campaigns_for_user(
-        db=db,
-        user_id=current_user.id,
-    )
+    return real_user
 
-    return {"status": "selected", "ad_account_id": str(ad_account_id)}
+
+# -------------------------------------------------
+# AUTH GUARDS
+# -------------------------------------------------
+async def require_user(
+    user: User = Depends(get_current_user),
+) -> User:
+    return user
+
+
+async def require_admin(
+    user: User = Depends(get_current_user),
+) -> User:
+    if user.email not in ADMIN_EMAILS:
+        raise HTTPException(
+            status_code=403,
+            detail="Admin access restricted",
+        )
+    return user
+
+
+# -------------------------------------------------
+# 🔒 WRITE-SAFETY GUARD
+# -------------------------------------------------
+async def forbid_impersonated_writes(
+    user: User = Depends(get_current_user),
+) -> User:
+    if getattr(user, "_is_impersonated", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Write operations disabled during impersonation",
+        )
+    return user
