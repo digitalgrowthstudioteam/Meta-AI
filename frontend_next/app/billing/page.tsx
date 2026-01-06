@@ -19,8 +19,8 @@ type Invoice = {
   amount: number;
   currency: string;
   status: "paid" | "pending" | "failed";
-  period_from: string;
-  period_to: string;
+  period_from: string | null;
+  period_to: string | null;
   created_at: string;
   download_url?: string | null;
 };
@@ -111,8 +111,8 @@ export default function BillingPage() {
   /* ----------------------------------
    * STATES
    * ---------------------------------- */
-  if (loading) return <div>Loading billing information…</div>;
-  if (error) return <div className="text-red-600">{error}</div>;
+  if (loading) return <div className="text-sm">Loading billing information…</div>;
+  if (error) return <div className="text-red-600 text-sm">{error}</div>;
 
   const usagePct =
     plan && plan.ai_campaign_limit > 0
@@ -120,10 +120,22 @@ export default function BillingPage() {
       : 0;
 
   /* ----------------------------------
+   * HELPERS
+   * ---------------------------------- */
+  const statusBadge = (status: Invoice["status"]) => {
+    if (status === "paid")
+      return "bg-green-100 text-green-700";
+    if (status === "pending")
+      return "bg-yellow-100 text-yellow-700";
+    return "bg-red-100 text-red-700";
+  };
+
+  /* ----------------------------------
    * RENDER
    * ---------------------------------- */
   return (
     <div className="space-y-8">
+      {/* HEADER */}
       <div>
         <h1 className="text-xl font-semibold text-gray-900">Billing & Plan</h1>
         <p className="text-sm text-gray-500">
@@ -131,6 +143,7 @@ export default function BillingPage() {
         </p>
       </div>
 
+      {/* TOP GRID */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* CURRENT PLAN */}
         <div className="bg-white border rounded-lg p-6 shadow-sm">
@@ -188,37 +201,68 @@ export default function BillingPage() {
       </div>
 
       {/* INVOICES */}
-      <div>
-        <h2 className="text-lg font-medium mb-2">Invoices</h2>
+      <div className="space-y-3">
+        <h2 className="text-lg font-medium">Invoices</h2>
 
         {invoices.length === 0 && (
-          <div className="text-sm text-gray-500">No invoices yet.</div>
+          <div className="text-sm text-gray-500 bg-white border rounded p-4">
+            No invoices yet. Completed purchases will appear here.
+          </div>
         )}
 
         {invoices.length > 0 && (
-          <table className="w-full text-sm border">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="p-2 text-left">Invoice</th>
-                <th className="p-2">Amount</th>
-                <th className="p-2">Status</th>
-                <th className="p-2">Date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoices.map((inv) => (
-                <tr key={inv.id} className="border-t">
-                  <td className="p-2">{inv.invoice_number}</td>
-                  <td className="p-2">
-                    {inv.currency} {inv.amount}
-                  </td>
-                  <td className="p-2">{inv.status}</td>
-                  <td className="p-2">{inv.created_at}</td>
+          <div className="overflow-x-auto bg-white border rounded-lg">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="p-3 text-left">Invoice</th>
+                  <th className="p-3 text-left">Amount</th>
+                  <th className="p-3 text-left">Status</th>
+                  <th className="p-3 text-left">Date</th>
+                  <th className="p-3 text-left">Download</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {invoices.map((inv) => (
+                  <tr key={inv.id} className="border-b last:border-0">
+                    <td className="p-3 font-medium">
+                      {inv.invoice_number}
+                    </td>
+                    <td className="p-3">
+                      {inv.currency} {inv.amount.toFixed(2)}
+                    </td>
+                    <td className="p-3">
+                      <span
+                        className={`text-xs px-2 py-1 rounded ${statusBadge(
+                          inv.status
+                        )}`}
+                      >
+                        {inv.status.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="p-3">{inv.created_at}</td>
+                    <td className="p-3">
+                      {inv.download_url ? (
+                        <a
+                          href={inv.download_url}
+                          className="text-blue-600 hover:underline text-sm"
+                        >
+                          Download PDF
+                        </a>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
+      </div>
+
+      <div className="text-xs text-gray-400">
+        Billing data is immutable and retained for compliance.
       </div>
     </div>
   );
