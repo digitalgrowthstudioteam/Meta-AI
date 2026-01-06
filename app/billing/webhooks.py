@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +8,8 @@ from sqlalchemy import select
 from app.core.db_session import get_db
 from app.core.config import settings
 from app.billing.payment_models import Payment
+from app.plans.subscription_models import Subscription
+from app.plans.models import Plan
 
 
 router = APIRouter(prefix="/billing/webhook", tags=["Billing Webhooks"])
@@ -23,7 +25,7 @@ async def razorpay_webhook(
 ):
     """
     Razorpay webhook handler.
-    This is the FINAL authority for payment status.
+    FINAL authority for payment + activation.
     """
 
     body = await request.body()
@@ -48,9 +50,8 @@ async def razorpay_webhook(
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     payload = json.loads(body.decode())
-    event = payload.get("event")
-
     entity = payload.get("payload", {}).get("payment", {}).get("entity", {})
+
     razorpay_order_id = entity.get("order_id")
     razorpay_payment_id = entity.get("id")
     status = entity.get("status")
@@ -67,14 +68,49 @@ async def razorpay_webhook(
         return {"status": "ignored"}
 
     # -------------------------------------------------
-    # APPLY STATUS (IMMUTABLE AFTER CAPTURE)
+    # APPLY PAYMENT STATUS (IMMUTABLE AFTER CAPTURE)
     # -------------------------------------------------
-    if payment.status != "captured":
-        payment.razorpay_payment_id = razorpay_payment_id
-        payment.status = status
-        if status == "captured":
-            payment.paid_at = datetime.utcnow()
+    if payment.status == "captured":
+        return {"status": "already_processed"}
 
+    payment.razorpay_payment_id = razorpay_payment_id
+    payment.status = status
+
+    if status != "captured":
         await db.commit()
+        return {"status": "updated"}
 
-    return {"status": "ok"}
+    payment.paid_at = datetime.utcnow()
+
+    # -------------------------------------------------
+    # ACTIVATE BUSINESS OBJECT (PHASE 19 STEP 6)
+    # -------------------------------------------------
+    if payment.payment_for == "subscription":
+        plan = await db.scalar(
+            select(Plan).where(Plan.id == payment.related_reference_id)
+        )
+        if not plan:
+            raise HTTPException(status_code=400, detail="Plan not found")
+
+        starts_at = datetime.utcnow()
+        ends_at = starts_at + timedelta(days=plan.validity_days)
+
+        subscription = Subscription(
+            user_id=payment.user_id,
+            plan_id=plan.id,
+            payment_id=payment.id,
+            status="active",
+            starts_at=starts_at,
+            ends_at=ends_at,
+            ai_campaign_limit_snapshot=plan.ai_campaign_limit,
+            is_trial=False,
+            created_by_admin=False,
+            assigned_by_admin=False,
+        )
+
+        db.add(subscription)
+
+    # (manual_campaign / addon hooks will plug here later)
+
+    await db.commit()
+    return {"status": "activated"}
