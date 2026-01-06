@@ -33,6 +33,7 @@ export default function BillingPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [paying, setPaying] = useState(false);
 
   /* ----------------------------------
    * LOAD BILLING DATA
@@ -50,11 +51,8 @@ export default function BillingPage() {
       if (!planRes.ok) throw new Error("Unable to load plan details.");
       if (!invoiceRes.ok) throw new Error("Unable to load invoices.");
 
-      const planJson = await planRes.json();
-      const invoiceJson = await invoiceRes.json();
-
-      setPlan(planJson ?? null);
-      setInvoices(Array.isArray(invoiceJson) ? invoiceJson : []);
+      setPlan(await planRes.json());
+      setInvoices(await invoiceRes.json());
     } catch (err: any) {
       setError(err.message || "Unexpected billing error.");
     } finally {
@@ -67,6 +65,50 @@ export default function BillingPage() {
   }, []);
 
   /* ----------------------------------
+   * RAZORPAY CHECKOUT
+   * ---------------------------------- */
+  const startCheckout = async () => {
+    try {
+      setPaying(true);
+
+      const res = await fetch(
+        "/api/billing/razorpay/order?amount=99900&payment_for=subscription",
+        { method: "POST", credentials: "include" }
+      );
+
+      if (!res.ok) throw new Error("Unable to create payment order");
+
+      const data = await res.json();
+
+      const options = {
+        key: data.key,
+        order_id: data.razorpay_order_id,
+        amount: data.amount,
+        currency: "INR",
+        name: "Digital Growth Studio",
+        description: "Subscription Purchase",
+        handler: async (response: any) => {
+          await fetch("/api/billing/razorpay/verify", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(response),
+          });
+          await loadBilling();
+        },
+        theme: { color: "#2563eb" },
+      };
+
+      // @ts-ignore
+      new window.Razorpay(options).open();
+    } catch (e: any) {
+      alert(e.message || "Payment failed");
+    } finally {
+      setPaying(false);
+    }
+  };
+
+  /* ----------------------------------
    * STATES
    * ---------------------------------- */
   if (loading) return <div>Loading billing information…</div>;
@@ -74,10 +116,7 @@ export default function BillingPage() {
 
   const usagePct =
     plan && plan.ai_campaign_limit > 0
-      ? Math.min(
-          plan.ai_active_campaigns / plan.ai_campaign_limit,
-          1
-        )
+      ? Math.min(plan.ai_active_campaigns / plan.ai_campaign_limit, 1)
       : 0;
 
   /* ----------------------------------
@@ -85,198 +124,101 @@ export default function BillingPage() {
    * ---------------------------------- */
   return (
     <div className="space-y-8">
-      {/* ===============================
-          PAGE HEADER
-      =============================== */}
       <div>
-        <h1 className="text-xl font-semibold text-gray-900">
-          Billing & Plan
-        </h1>
+        <h1 className="text-xl font-semibold text-gray-900">Billing & Plan</h1>
         <p className="text-sm text-gray-500">
           Subscription details, usage limits, and invoices
         </p>
       </div>
 
-      {/* ===============================
-          GRID LAYOUT
-      =============================== */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* CURRENT PLAN */}
-        <div className="bg-white border border-blue-100 rounded-lg p-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-gray-900">
-              Current Plan
-            </h2>
-            <span className="inline-flex rounded-full bg-blue-100 text-blue-700 px-2.5 py-1 text-xs font-medium">
+        <div className="bg-white border rounded-lg p-6 shadow-sm">
+          <div className="flex justify-between mb-4">
+            <h2 className="text-sm font-semibold">Current Plan</h2>
+            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
               {plan?.plan_name ?? "—"}
             </span>
           </div>
 
-          <div className="text-2xl font-semibold text-gray-900">
-            {plan?.plan_name ?? "Unknown"}
-          </div>
-
+          <div className="text-2xl font-semibold">{plan?.plan_name}</div>
           <div className="mt-2 text-sm text-gray-500">
-            {plan?.expires_at
-              ? `Valid until ${plan.expires_at}`
-              : "No expiry"}
+            {plan?.expires_at ? `Valid until ${plan.expires_at}` : "No expiry"}
           </div>
 
-          <div className="mt-4 text-xs text-gray-400">
-            Plan upgrades unlock higher AI limits and advanced features.
-          </div>
-
-          <a
-            href="/buy-campaign"
-            className="mt-6 block w-full text-center rounded-md bg-blue-600 text-white py-2 text-sm font-medium hover:bg-blue-700 transition"
+          <button
+            onClick={startCheckout}
+            disabled={paying}
+            className="mt-6 w-full rounded-md bg-blue-600 text-white py-2 text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
           >
-            Upgrade / Buy Campaigns
-          </a>
+            {paying ? "Processing…" : "Upgrade / Buy Plan"}
+          </button>
         </div>
 
         {/* USAGE */}
-        <div className="bg-white border border-indigo-100 rounded-lg p-6 shadow-sm">
-          <h2 className="text-sm font-semibold text-gray-900 mb-4">
-            AI Usage
-          </h2>
+        <div className="bg-white border rounded-lg p-6 shadow-sm">
+          <h2 className="text-sm font-semibold mb-4">AI Usage</h2>
 
-          <div className="space-y-4">
-            <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span className="text-gray-600">
-                  AI-Active Campaigns
-                </span>
-                <span className="font-medium text-gray-900">
-                  {plan?.ai_active_campaigns ?? 0} /{" "}
-                  {plan?.ai_campaign_limit ?? 0}
-                </span>
-              </div>
-
-              <div className="h-2 rounded bg-gray-200 overflow-hidden">
-                <div
-                  className="h-full bg-indigo-500 rounded"
-                  style={{ width: `${usagePct * 100}%` }}
-                />
-              </div>
+          <div className="space-y-3">
+            <div className="flex justify-between text-sm">
+              <span>AI-Active Campaigns</span>
+              <span>
+                {plan?.ai_active_campaigns} / {plan?.ai_campaign_limit}
+              </span>
             </div>
 
-            <div className="text-xs text-gray-400">
-              Usage resets based on plan terms. No automatic overages.
+            <div className="h-2 bg-gray-200 rounded">
+              <div
+                className="h-full bg-indigo-500 rounded"
+                style={{ width: `${usagePct * 100}%` }}
+              />
             </div>
           </div>
         </div>
 
-        {/* BILLING INFO */}
-        <div className="bg-white border border-slate-200 rounded-lg p-6 shadow-sm">
-          <h2 className="text-sm font-semibold text-gray-900 mb-4">
-            Billing Policy
-          </h2>
-
-          <ul className="space-y-2 text-sm text-gray-600">
+        {/* POLICY */}
+        <div className="bg-white border rounded-lg p-6 shadow-sm">
+          <h2 className="text-sm font-semibold mb-4">Billing Policy</h2>
+          <ul className="text-sm text-gray-600 space-y-1">
             <li>• Explicit purchase only</li>
-            <li>• No automatic renewals</li>
-            <li>• Downloadable invoices</li>
+            <li>• No auto-renewals</li>
             <li>• Audit-safe records</li>
           </ul>
-
-          <div className="mt-4 text-xs text-gray-400">
-            All charges are user-approved and fully transparent.
-          </div>
         </div>
       </div>
 
-      {/* ===============================
-          INVOICES
-      =============================== */}
-      <div className="space-y-3">
-        <h2 className="text-lg font-medium">Invoices</h2>
+      {/* INVOICES */}
+      <div>
+        <h2 className="text-lg font-medium mb-2">Invoices</h2>
 
         {invoices.length === 0 && (
-          <div className="surface p-6 text-sm text-gray-600">
-            No invoices yet. Purchases will generate invoices automatically.
-          </div>
+          <div className="text-sm text-gray-500">No invoices yet.</div>
         )}
 
         {invoices.length > 0 && (
-          <div className="surface overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="border-b">
-                <tr>
-                  <th className="px-3 py-2 text-left">
-                    Invoice #
-                  </th>
-                  <th className="px-3 py-2">
-                    Period
-                  </th>
-                  <th className="px-3 py-2">
-                    Amount
-                  </th>
-                  <th className="px-3 py-2">
-                    Status
-                  </th>
-                  <th className="px-3 py-2">
-                    Date
-                  </th>
-                  <th className="px-3 py-2">
-                    Download
-                  </th>
+          <table className="w-full text-sm border">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="p-2 text-left">Invoice</th>
+                <th className="p-2">Amount</th>
+                <th className="p-2">Status</th>
+                <th className="p-2">Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoices.map((inv) => (
+                <tr key={inv.id} className="border-t">
+                  <td className="p-2">{inv.invoice_number}</td>
+                  <td className="p-2">
+                    {inv.currency} {inv.amount}
+                  </td>
+                  <td className="p-2">{inv.status}</td>
+                  <td className="p-2">{inv.created_at}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {invoices.map((inv) => (
-                  <tr
-                    key={inv.id}
-                    className="border-b last:border-0"
-                  >
-                    <td className="px-3 py-2 font-medium">
-                      {inv.invoice_number}
-                    </td>
-                    <td className="px-3 py-2">
-                      {inv.period_from} → {inv.period_to}
-                    </td>
-                    <td className="px-3 py-2">
-                      {inv.currency} {inv.amount.toFixed(2)}
-                    </td>
-                    <td className="px-3 py-2">
-                      <span
-                        className={`text-xs px-2 py-1 rounded ${
-                          inv.status === "paid"
-                            ? "bg-green-100 text-green-700"
-                            : inv.status === "pending"
-                            ? "bg-yellow-100 text-yellow-700"
-                            : "bg-red-100 text-red-700"
-                        }`}
-                      >
-                        {inv.status.toUpperCase()}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2">
-                      {inv.created_at}
-                    </td>
-                    <td className="px-3 py-2">
-                      {inv.download_url ? (
-                        <a
-                          href={inv.download_url}
-                          target="_blank"
-                          className="text-blue-600 hover:underline"
-                        >
-                          Download
-                        </a>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              ))}
+            </tbody>
+          </table>
         )}
-      </div>
-
-      {/* FOOTNOTE */}
-      <div className="text-xs text-gray-400">
-        Billing data is immutable and retained for compliance.
       </div>
     </div>
   );
