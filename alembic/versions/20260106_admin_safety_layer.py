@@ -14,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 # ALEMBIC IDENTIFIERS
 # =========================
 revision = "20260106_admin_safety_layer"
-down_revision = "<PUT_YOUR_LAST_REVISION_ID_HERE>"
+down_revision = "1d1c4e28cfe4"
 branch_labels = None
 depends_on = None
 
