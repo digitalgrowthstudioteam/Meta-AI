@@ -14,9 +14,8 @@ type Campaign = {
 };
 
 type AdAccount = {
-  id: string;
-  meta_account_id: string;
-  account_name: string;
+  id: string;          // ✅ UUID (DB truth)
+  name: string;        // ✅ backend now returns `name`
   is_selected: boolean;
 };
 
@@ -60,25 +59,22 @@ export default function CampaignsPage() {
       setMetaConnected(true);
 
       const selected = data?.find((a: AdAccount) => a.is_selected);
-      if (selected) setSelectedAdAccount(selected.meta_account_id);
+      if (selected) setSelectedAdAccount(selected.id);
     } catch {
       setMetaConnected(false);
     }
   };
 
   /* -----------------------------------
-   * SELECT AD ACCOUNT (SERVER TRUTH)
+   * SELECT AD ACCOUNT (UUID → SERVER)
    * ----------------------------------- */
-  const selectAdAccount = async (metaAccountId: string) => {
-    setSelectedAdAccount(metaAccountId);
+  const selectAdAccount = async (adAccountId: string) => {
+    setSelectedAdAccount(adAccountId);
 
-    await fetch(
-      `/api/meta/adaccounts/select?meta_ad_account_id=${metaAccountId}`,
-      {
-        method: "POST",
-        credentials: "include",
-      }
-    );
+    await fetch(`/api/meta/adaccounts/select?ad_account_id=${adAccountId}`, {
+      method: "POST",
+      credentials: "include",
+    });
 
     await loadCampaigns();
   };
@@ -100,7 +96,6 @@ export default function CampaignsPage() {
       const params = new URLSearchParams({
         page: String(page),
         page_size: String(pageSize),
-        ad_account_id: selectedAdAccount,
       });
 
       if (statusFilter) params.append("status", statusFilter);
@@ -235,8 +230,8 @@ export default function CampaignsPage() {
         >
           <option value="">Select Ad Account</option>
           {adAccounts.map((a) => (
-            <option key={a.id} value={a.meta_account_id}>
-              {a.account_name}
+            <option key={a.id} value={a.id}>
+              {a.name}
             </option>
           ))}
         </select>
