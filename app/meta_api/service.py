@@ -23,10 +23,6 @@ META_TOKEN_URL = "https://graph.facebook.com/v19.0/oauth/access_token"
 # 🔒 GLOBAL META SYNC KILL SWITCH
 # =====================================================
 def assert_meta_sync_enabled():
-    """
-    Hard kill switch for ALL Meta interactions.
-    Controlled by admin global setting.
-    """
     if not getattr(settings, "META_SYNC_ENABLED", True):
         raise EnforcementError(
             code="META_SYNC_DISABLED",
@@ -82,6 +78,7 @@ class MetaOAuthService:
             else None
         )
 
+        # deactivate previous
         await db.execute(
             update(MetaOAuthToken)
             .where(
@@ -102,14 +99,13 @@ class MetaOAuthService:
         db.add(token)
         await db.commit()
         await db.refresh(token)
-
         return token
 
 
 class MetaAdAccountService:
     """
     Read-only sync of Meta Ad Accounts.
-    HARDENED + KILL-SWITCHED
+    SINGLE-SELECT SAFE
     """
 
     @staticmethod
@@ -121,14 +117,12 @@ class MetaAdAccountService:
         assert_meta_sync_enabled()
 
         result = await db.execute(
-            select(MetaOAuthToken)
-            .where(
+            select(MetaOAuthToken).where(
                 MetaOAuthToken.user_id == user_id,
                 MetaOAuthToken.is_active.is_(True),
             )
         )
         token = result.scalar_one_or_none()
-
         if not token:
             raise RuntimeError("Meta account not connected")
 
@@ -141,21 +135,12 @@ class MetaAdAccountService:
                 },
             )
             response.raise_for_status()
-            data = response.json()
-
-        result = await db.execute(
-            select(UserMetaAdAccount)
-            .where(
-                UserMetaAdAccount.user_id == user_id,
-                UserMetaAdAccount.is_selected.is_(True),
-            )
-        )
-        has_selected = result.scalar_one_or_none() is not None
+            data = response.json().get("data", [])
 
         processed = 0
-        first_account_id = None
+        first_account_id: UUID | None = None
 
-        for acct in data.get("data", []):
+        for acct in data:
             meta_account_id = acct["id"]
             account_name = acct.get("name", "")
 
@@ -196,7 +181,14 @@ class MetaAdAccountService:
 
             processed += 1
 
-        if not has_selected and first_account_id:
+        # auto-select ONLY if none selected yet
+        result = await db.execute(
+            select(UserMetaAdAccount).where(
+                UserMetaAdAccount.user_id == user_id,
+                UserMetaAdAccount.is_selected.is_(True),
+            )
+        )
+        if not result.scalar_one_or_none() and first_account_id:
             await db.execute(
                 update(UserMetaAdAccount)
                 .where(UserMetaAdAccount.user_id == user_id)
@@ -218,7 +210,7 @@ class MetaAdAccountService:
 class MetaCampaignService:
     """
     Read-only Meta Campaign sync.
-    HARDENED + KILL-SWITCHED
+    STRICT: ONLY SELECTED AD ACCOUNT
     """
 
     @staticmethod
@@ -230,17 +222,16 @@ class MetaCampaignService:
         assert_meta_sync_enabled()
 
         result = await db.execute(
-            select(MetaOAuthToken)
-            .where(
+            select(MetaOAuthToken).where(
                 MetaOAuthToken.user_id == user_id,
                 MetaOAuthToken.is_active.is_(True),
             )
         )
         token = result.scalar_one_or_none()
-
         if not token:
             raise RuntimeError("Meta account not connected")
 
+        # 🚨 HARD RULE: exactly ONE selected ad account
         result = await db.execute(
             select(MetaAdAccount)
             .join(UserMetaAdAccount)
@@ -251,7 +242,6 @@ class MetaCampaignService:
             .limit(1)
         )
         ad_account = result.scalar_one_or_none()
-
         if not ad_account:
             return 0
 
@@ -291,6 +281,7 @@ class MetaCampaignService:
                         )
                     else:
                         campaign.name = c["name"]
+                        campaign.objective = c["objective"]
                         campaign.status = c["status"]
                         campaign.last_meta_sync_at = datetime.utcnow()
 
