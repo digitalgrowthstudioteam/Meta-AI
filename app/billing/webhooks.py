@@ -2,6 +2,7 @@ import json
 import hmac
 import hashlib
 from datetime import datetime, timedelta
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +11,7 @@ from sqlalchemy import select
 from app.core.db_session import get_db
 from app.core.config import settings
 from app.billing.payment_models import Payment
+from app.billing.invoice_models import Invoice
 from app.plans.subscription_models import Subscription
 from app.plans.models import Plan
 
@@ -27,7 +29,7 @@ async def razorpay_webhook(
 ):
     """
     Razorpay webhook handler.
-    FINAL authority for payment + activation.
+    FINAL authority for payment + activation + invoice.
     """
 
     body = await request.body()
@@ -84,6 +86,9 @@ async def razorpay_webhook(
     # -------------------------------------------------
     # ACTIVATE BUSINESS OBJECT
     # -------------------------------------------------
+    period_from = None
+    period_to = None
+
     if payment.payment_for == "subscription":
         plan = await db.scalar(
             select(Plan).where(Plan.id == payment.related_reference_id)
@@ -91,16 +96,16 @@ async def razorpay_webhook(
         if not plan:
             raise HTTPException(status_code=400, detail="Plan not found")
 
-        starts_at = datetime.utcnow()
-        ends_at = starts_at + timedelta(days=plan.validity_days)
+        period_from = datetime.utcnow()
+        period_to = period_from + timedelta(days=plan.validity_days)
 
         subscription = Subscription(
             user_id=payment.user_id,
             plan_id=plan.id,
             payment_id=payment.id,
             status="active",
-            starts_at=starts_at,
-            ends_at=ends_at,
+            starts_at=period_from,
+            ends_at=period_to,
             ai_campaign_limit_snapshot=plan.ai_campaign_limit,
             is_trial=False,
             created_by_admin=False,
@@ -109,7 +114,30 @@ async def razorpay_webhook(
 
         db.add(subscription)
 
-    # future: manual_campaign / addon hooks
+    # -------------------------------------------------
+    # CREATE INVOICE (IDEMPOTENT)
+    # -------------------------------------------------
+    existing_invoice = await db.scalar(
+        select(Invoice).where(Invoice.payment_id == payment.id)
+    )
+
+    if not existing_invoice:
+        invoice = Invoice(
+            user_id=payment.user_id,
+            payment_id=payment.id,
+            invoice_number=f"INV-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}",
+            invoice_date=datetime.utcnow(),
+            billing_name="Digital Growth Studio User",
+            billing_email="billing@digitalgrowthstudio.in",
+            subtotal=payment.amount,
+            tax_amount=0,
+            total_amount=payment.amount,
+            currency=payment.currency,
+            period_from=period_from,
+            period_to=period_to,
+            status="paid",
+        )
+        db.add(invoice)
 
     await db.commit()
     return {"status": "activated"}
