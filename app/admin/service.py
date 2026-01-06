@@ -3,7 +3,7 @@ from sqlalchemy import select, func
 from uuid import UUID
 from datetime import datetime, date
 
-from app.admin.models import AdminOverride
+from app.admin.models import AdminOverride, GlobalSettings
 from app.campaigns.models import Campaign, CampaignActionLog
 from app.users.models import User
 from app.plans.subscription_models import Subscription
@@ -49,8 +49,7 @@ class AdminOverrideService:
     async def list_overrides(
         db: AsyncSession,
     ) -> list[AdminOverride]:
-        stmt = select(AdminOverride)
-        result = await db.execute(stmt)
+        result = await db.execute(select(AdminOverride))
         return result.scalars().all()
 
     # =====================================================
@@ -65,25 +64,21 @@ class AdminOverrideService:
         reason: str,
     ) -> Campaign:
 
-        stmt = (
+        result = await db.execute(
             select(CampaignActionLog)
             .where(CampaignActionLog.id == action_log_id)
             .with_for_update()
         )
-        result = await db.execute(stmt)
         log = result.scalar_one_or_none()
-
         if not log:
             raise ValueError("Action log not found")
 
-        stmt = (
+        result = await db.execute(
             select(Campaign)
             .where(Campaign.id == log.campaign_id)
             .with_for_update()
         )
-        result = await db.execute(stmt)
         campaign = result.scalar_one_or_none()
-
         if not campaign:
             raise ValueError("Campaign not found")
 
@@ -143,20 +138,17 @@ class AdminOverrideService:
         reason: str,
     ) -> Campaign:
 
-        stmt = (
+        result = await db.execute(
             select(Campaign)
             .where(Campaign.id == campaign_id)
             .with_for_update()
         )
-        result = await db.execute(stmt)
         campaign = result.scalar_one_or_none()
-
         if not campaign:
             raise ValueError("Campaign not found")
 
         before_state = {
             "is_manual": campaign.is_manual,
-            "manual_status": getattr(campaign, "manual_status", None),
             "manual_valid_till": str(getattr(campaign, "manual_valid_till", None)),
         }
 
@@ -170,7 +162,6 @@ class AdminOverrideService:
 
         after_state = {
             "is_manual": campaign.is_manual,
-            "manual_status": campaign.manual_status,
             "manual_valid_till": str(campaign.manual_valid_till),
         }
 
@@ -197,62 +188,112 @@ class AdminOverrideService:
     async def get_dashboard_stats(
         db: AsyncSession,
     ) -> dict:
-        """
-        Read-only system health & counts for admin dashboard.
-        """
 
-        total_users = await db.scalar(
-            select(func.count(User.id))
+        total_users = await db.scalar(select(func.count(User.id)))
+        active_subs = await db.scalar(
+            select(func.count(Subscription.id)).where(Subscription.status == "active")
         )
-
-        active_subscriptions = await db.scalar(
-            select(func.count(Subscription.id)).where(
-                Subscription.status == "active"
-            )
+        expired_subs = await db.scalar(
+            select(func.count(Subscription.id)).where(Subscription.status == "expired")
         )
-
-        expired_subscriptions = await db.scalar(
-            select(func.count(Subscription.id)).where(
-                Subscription.status == "expired"
-            )
-        )
-
-        total_campaigns = await db.scalar(
-            select(func.count(Campaign.id))
-        )
-
+        total_campaigns = await db.scalar(select(func.count(Campaign.id)))
         ai_active_campaigns = await db.scalar(
-            select(func.count(Campaign.id)).where(
-                Campaign.ai_active.is_(True)
-            )
+            select(func.count(Campaign.id)).where(Campaign.ai_active.is_(True))
         )
-
         manual_campaigns = await db.scalar(
-            select(func.count(Campaign.id)).where(
-                Campaign.is_manual.is_(True)
-            )
+            select(func.count(Campaign.id)).where(Campaign.is_manual.is_(True))
         )
 
-        last_action = await db.execute(
+        last_log = await db.scalar(
             select(CampaignActionLog)
             .order_by(CampaignActionLog.created_at.desc())
             .limit(1)
         )
-        last_log = last_action.scalar_one_or_none()
 
         return {
-            "users": total_users,
-            "subscriptions": {
-                "active": active_subscriptions,
-                "expired": expired_subscriptions,
-            },
-            "campaigns": {
-                "total": total_campaigns,
-                "ai_active": ai_active_campaigns,
-                "manual": manual_campaigns,
-            },
-            "last_activity": last_log.created_at.isoformat()
-            if last_log
-            else None,
-            "system_status": "OK",
+            "users_total": total_users,
+            "subscriptions_active": active_subs,
+            "subscriptions_expired": expired_subs,
+            "campaigns_total": total_campaigns,
+            "campaigns_ai_active": ai_active_campaigns,
+            "campaigns_manual": manual_campaigns,
+            "last_cron_run": last_log.created_at.isoformat() if last_log else None,
+            "system_status": "ok",
         }
+
+    # =====================================================
+    # PHASE 14.4 — GLOBAL SETTINGS (SINGLETON)
+    # =====================================================
+    @staticmethod
+    async def get_global_settings(
+        db: AsyncSession,
+    ) -> GlobalSettings:
+        """
+        Fetch global settings.
+        Auto-creates singleton row if missing.
+        """
+
+        result = await db.execute(
+            select(GlobalSettings).limit(1)
+        )
+        settings = result.scalar_one_or_none()
+
+        if not settings:
+            settings = GlobalSettings()
+            db.add(settings)
+            await db.commit()
+            await db.refresh(settings)
+
+        return settings
+
+    @staticmethod
+    async def update_global_settings(
+        db: AsyncSession,
+        *,
+        admin_user_id: UUID,
+        updates: dict,
+        reason: str,
+    ) -> GlobalSettings:
+        """
+        Admin-only global settings update (audited).
+        """
+
+        settings = await AdminOverrideService.get_global_settings(db)
+
+        before_state = {
+            "site_name": settings.site_name,
+            "dashboard_title": settings.dashboard_title,
+            "logo_url": settings.logo_url,
+            "ai_globally_enabled": settings.ai_globally_enabled,
+            "meta_sync_enabled": settings.meta_sync_enabled,
+            "maintenance_mode": settings.maintenance_mode,
+        }
+
+        for field, value in updates.items():
+            if hasattr(settings, field):
+                setattr(settings, field, value)
+
+        after_state = {
+            "site_name": settings.site_name,
+            "dashboard_title": settings.dashboard_title,
+            "logo_url": settings.logo_url,
+            "ai_globally_enabled": settings.ai_globally_enabled,
+            "meta_sync_enabled": settings.meta_sync_enabled,
+            "maintenance_mode": settings.maintenance_mode,
+        }
+
+        db.add(
+            CampaignActionLog(
+                campaign_id=None,
+                user_id=admin_user_id,
+                actor_type="admin",
+                action_type="global_settings_update",
+                before_state=before_state,
+                after_state=after_state,
+                reason=reason,
+            )
+        )
+
+        await db.commit()
+        await db.refresh(settings)
+        return settings
