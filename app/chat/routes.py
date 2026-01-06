@@ -8,6 +8,7 @@ from app.auth.dependencies import require_user, require_admin
 from app.users.models import User
 from app.chat.service import ChatService
 from app.chat.models import ChatThread
+from app.admin.service import AdminOverrideService
 
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
@@ -132,7 +133,7 @@ async def list_all_threads(
 
 
 # =====================================================
-# ADMIN — SEND MESSAGE
+# ADMIN — SEND MESSAGE (AUDITED)
 # =====================================================
 @router.post("/admin/thread/{thread_id}/message")
 async def send_admin_message(
@@ -158,6 +159,14 @@ async def send_admin_message(
         sender=current_user,
         sender_type="admin",
         message=message,
+    )
+
+    # 🔒 AUDIT LOG
+    await AdminOverrideService.log_admin_chat_message(
+        db=db,
+        admin_user_id=current_user.id,
+        thread=thread,
+        message=msg,
     )
 
     return {
