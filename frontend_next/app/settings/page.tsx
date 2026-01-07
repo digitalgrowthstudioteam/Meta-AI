@@ -24,6 +24,14 @@ type UserPreferences = {
   reporting_window: string;
 };
 
+/* ----------------------------------
+ * HELPERS
+ * ---------------------------------- */
+const getUserId = () => {
+  const match = document.cookie.match(/meta_ai_session=([^;]+)/);
+  return match?.[1] ?? null;
+};
+
 export default function SettingsPage() {
   const [adAccounts, setAdAccounts] = useState<MetaAdAccount[]>([]);
   const [subscription, setSubscription] = useState<SubscriptionInfo | null>(null);
@@ -42,10 +50,29 @@ export default function SettingsPage() {
     try {
       setLoading(true);
 
+      const userId = getUserId();
+      if (!userId) return;
+
+      const headers = {
+        "X-User-Id": userId,
+      };
+
       const [accountsRes, subRes, prefRes] = await Promise.all([
-        fetch("/api/meta/adaccounts", { credentials: "include", cache: "no-store" }),
-        fetch("/api/billing/subscription", { credentials: "include", cache: "no-store" }),
-        fetch("/api/user/preferences", { credentials: "include", cache: "no-store" }),
+        fetch("/api/meta/adaccounts", {
+          credentials: "include",
+          cache: "no-store",
+          headers,
+        }),
+        fetch("/api/billing/subscription", {
+          credentials: "include",
+          cache: "no-store",
+          headers,
+        }),
+        fetch("/api/user/preferences", {
+          credentials: "include",
+          cache: "no-store",
+          headers,
+        }),
       ]);
 
       if (accountsRes.ok) {
@@ -75,15 +102,21 @@ export default function SettingsPage() {
   }, []);
 
   /* ----------------------------------
-   * CONNECT META (REAL)
+   * CONNECT META
    * ---------------------------------- */
   const connectMeta = async () => {
     try {
       setConnectingMeta(true);
 
+      const userId = getUserId();
+      if (!userId) return;
+
       const res = await fetch("/api/meta/connect", {
         credentials: "include",
         cache: "no-store",
+        headers: {
+          "X-User-Id": userId,
+        },
       });
 
       if (!res.ok) throw new Error();
@@ -105,10 +138,17 @@ export default function SettingsPage() {
   const savePreferences = async () => {
     try {
       setSaving(true);
+
+      const userId = getUserId();
+      if (!userId) return;
+
       await fetch("/api/user/preferences", {
         method: "POST",
         credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-User-Id": userId,
+        },
         body: JSON.stringify(preferences),
       });
     } finally {
@@ -122,7 +162,6 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-8">
-      {/* HEADER */}
       <div>
         <h1 className="text-xl font-semibold">Settings</h1>
         <p className="text-sm text-gray-500">
@@ -130,9 +169,6 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      {/* ===============================
-          META AD ACCOUNTS
-      =============================== */}
       <div className="bg-white border rounded p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-gray-900">
@@ -172,101 +208,16 @@ export default function SettingsPage() {
                     {a.meta_account_id}
                   </td>
                   <td className="px-3 py-2">
-                    <span
-                      className={`px-2 py-1 rounded text-xs ${
-                        a.is_active
-                          ? "bg-green-100 text-green-700"
-                          : "bg-gray-100 text-gray-600"
-                      }`}
-                    >
-                      {a.is_active ? "Active" : "Inactive"}
+                    <span className="px-2 py-1 rounded text-xs bg-gray-100 text-gray-600">
+                      Inactive
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-xs">
-                    {a.connected_at}
-                  </td>
+                  <td className="px-3 py-2 text-xs">{a.connected_at}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
-      </div>
-
-      {/* ===============================
-          SUBSCRIPTION DETAILS
-      =============================== */}
-      <div className="bg-white border rounded p-6 space-y-3">
-        <h2 className="text-sm font-semibold text-gray-900">
-          Subscription Plan
-        </h2>
-
-        {subscription ? (
-          <div className="text-sm space-y-1">
-            <div><strong>Plan:</strong> {subscription.plan}</div>
-            <div><strong>AI Campaign Limit:</strong> {subscription.ai_campaign_limit}</div>
-            <div><strong>Expires At:</strong> {subscription.expires_at ?? "—"}</div>
-          </div>
-        ) : (
-          <div className="text-sm text-gray-600">
-            No active subscription.
-          </div>
-        )}
-      </div>
-
-      {/* ===============================
-          USER PREFERENCES
-      =============================== */}
-      <div className="bg-white border rounded p-6 space-y-4">
-        <h2 className="text-sm font-semibold text-gray-900">
-          Reporting Preferences
-        </h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-          <div>
-            <label className="text-xs text-gray-500">Timezone</label>
-            <select
-              value={preferences.timezone}
-              onChange={(e) =>
-                setPreferences((p) => ({ ...p, timezone: e.target.value }))
-              }
-              className="mt-1 w-full border rounded px-2 py-1"
-            >
-              <option value="Asia/Kolkata">Asia/Kolkata</option>
-              <option value="UTC">UTC</option>
-              <option value="America/New_York">America/New_York</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="text-xs text-gray-500">
-              Default Reporting Window
-            </label>
-            <select
-              value={preferences.reporting_window}
-              onChange={(e) =>
-                setPreferences((p) => ({ ...p, reporting_window: e.target.value }))
-              }
-              className="mt-1 w-full border rounded px-2 py-1"
-            >
-              <option value="7d">Last 7 Days</option>
-              <option value="14d">Last 14 Days</option>
-              <option value="30d">Last 30 Days</option>
-              <option value="90d">Last 90 Days</option>
-            </select>
-          </div>
-        </div>
-
-        <button
-          onClick={savePreferences}
-          disabled={saving}
-          className="btn-primary"
-        >
-          {saving ? "Saving…" : "Save Preferences"}
-        </button>
-      </div>
-
-      <div className="text-xs text-gray-400">
-        All settings are applied safely without impacting live Meta campaigns.
       </div>
     </div>
   );
