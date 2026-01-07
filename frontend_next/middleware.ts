@@ -7,12 +7,17 @@ const PUBLIC_PATHS = ["/", "/login"];
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow Next.js internals & APIs
-  if (pathname.startsWith("/_next") || pathname.startsWith("/api")) {
+  // Allow Next.js internals, static files & APIs
+  if (
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/api") ||
+    pathname.startsWith("/favicon.ico")
+  ) {
     return NextResponse.next();
   }
 
-  const session = request.cookies.get("meta_ai_session");
+  // ✅ Correct way to read cookie in middleware
+  const session = request.cookies.get("meta_ai_session")?.value;
 
   // Not logged in → redirect to login
   if (!session) {
