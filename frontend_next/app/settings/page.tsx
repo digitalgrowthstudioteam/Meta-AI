@@ -132,7 +132,7 @@ export default function SettingsPage() {
   };
 
   /* ----------------------------------
-   * TOGGLE AD ACCOUNT (MULTI SELECT)
+   * TOGGLE AD ACCOUNT
    * ---------------------------------- */
   const toggleAdAccount = async (id: string) => {
     try {
@@ -151,7 +151,7 @@ export default function SettingsPage() {
       await loadAdAccounts();
       await loadSession();
     } catch {
-      alert("Failed to update ad account.");
+      alert("Failed to update ad account selection.");
     } finally {
       setTogglingId(null);
     }
@@ -211,7 +211,9 @@ export default function SettingsPage() {
             <thead className="border-b bg-gray-50">
               <tr>
                 <th className="px-3 py-2 text-left">Account</th>
-                <th className="px-3 py-2 text-center">Active</th>
+                <th className="px-3 py-2 text-center">
+                  Active
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -224,11 +226,12 @@ export default function SettingsPage() {
                     <button
                       onClick={() => toggleAdAccount(a.id)}
                       disabled={togglingId === a.id}
-                      className={`px-3 py-1 rounded text-xs font-medium ${
-                        a.is_selected
-                          ? "bg-green-100 text-green-800"
-                          : "bg-gray-100 text-gray-600"
-                      }`}
+                      className={`inline-flex items-center px-3 py-1 rounded text-xs font-medium transition
+                        ${
+                          a.is_selected
+                            ? "bg-green-100 text-green-800"
+                            : "bg-gray-100 text-gray-600"
+                        }`}
                     >
                       {a.is_selected ? "ON" : "OFF"}
                     </button>
