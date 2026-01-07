@@ -101,7 +101,7 @@ async def get_current_user(
 
 
 # -------------------------------------------------
-# 🌍 SESSION CONTEXT
+# 🌍 SESSION CONTEXT (MULTI-AD-ACCOUNT SAFE ✅)
 # -------------------------------------------------
 async def get_session_context(
     db: AsyncSession = Depends(get_db),
@@ -117,8 +117,13 @@ async def get_session_context(
             UserMetaAdAccount.user_id == user.id,
             UserMetaAdAccount.is_selected.is_(True),
         )
+        .order_by(MetaAdAccount.account_name)
     )
-    ad_account = result.scalar_one_or_none()
+
+    ad_accounts = result.scalars().all()
+
+    # Backward compatibility: pick first as active
+    active_ad_account = ad_accounts[0] if ad_accounts else None
 
     return {
         "user": {
@@ -127,13 +132,23 @@ async def get_session_context(
             "is_admin": user.email in ADMIN_EMAILS,
             "is_impersonated": getattr(user, "_is_impersonated", False),
         },
+        # ✅ NEW: full list (future-proof)
+        "ad_accounts": [
+            {
+                "id": str(acct.id),
+                "name": acct.account_name,
+                "meta_account_id": acct.meta_account_id,
+            }
+            for acct in ad_accounts
+        ],
+        # ✅ OLD: keep existing consumers working
         "ad_account": (
             {
-                "id": str(ad_account.id),
-                "name": ad_account.account_name,
-                "meta_account_id": ad_account.meta_account_id,
+                "id": str(active_ad_account.id),
+                "name": active_ad_account.account_name,
+                "meta_account_id": active_ad_account.meta_account_id,
             }
-            if ad_account
+            if active_ad_account
             else None
         ),
     }
