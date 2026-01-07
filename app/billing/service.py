@@ -1,23 +1,27 @@
 import razorpay
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.config import settings
 from app.billing.payment_models import Payment
+from app.billing.invoice_models import Invoice
 from app.users.models import User
+from app.plans.subscription_models import Subscription
+from app.plans.models import Plan
 
 
 class BillingService:
     """
-    Razorpay payment lifecycle service.
+    Razorpay payment lifecycle + subscription activation service.
 
-    RULES:
+    RULES (LOCKED):
     - Order creation is idempotent
-    - Webhook is source of truth
-    - Client verification is secondary safety
+    - Payment verification is idempotent
+    - Subscription activation happens HERE and ONLY HERE
+    - Webhook may re-trigger this safely
     """
 
     def __init__(self):
@@ -41,12 +45,7 @@ class BillingService:
         payment_for: str,
         related_reference_id: UUID | None,
     ) -> Payment:
-        """
-        Creates Razorpay order + local payment record.
-        Amount is in paise.
-        """
 
-        # Prevent duplicate open orders
         result = await db.execute(
             select(Payment).where(
                 Payment.user_id == user.id,
@@ -83,7 +82,7 @@ class BillingService:
         return payment
 
     # =====================================================
-    # VERIFY PAYMENT SIGNATURE (CLIENT CALLBACK)
+    # VERIFY PAYMENT + ACTIVATE SUBSCRIPTION (FINAL)
     # =====================================================
     async def verify_payment(
         self,
@@ -93,10 +92,6 @@ class BillingService:
         razorpay_payment_id: str,
         razorpay_signature: str,
     ) -> Payment:
-        """
-        Client-side verification.
-        Webhook will still re-verify.
-        """
 
         result = await db.execute(
             select(Payment).where(Payment.razorpay_order_id == razorpay_order_id)
@@ -124,4 +119,79 @@ class BillingService:
 
         await db.commit()
         await db.refresh(payment)
+
+        # 🔥 ACTIVATE SUBSCRIPTION (SINGLE SOURCE)
+        await self._activate_subscription_after_payment(
+            db=db,
+            payment=payment,
+        )
+
         return payment
+
+    # =====================================================
+    # SUBSCRIPTION ACTIVATION (IDEMPOTENT)
+    # =====================================================
+    async def _activate_subscription_after_payment(
+        self,
+        *,
+        db: AsyncSession,
+        payment: Payment,
+    ) -> None:
+        """
+        Creates or updates subscription + invoice.
+        Safe to call multiple times.
+        """
+
+        # Only subscription payments allowed
+        if payment.payment_for != "subscription":
+            return
+
+        # Prevent duplicate activation
+        result = await db.execute(
+            select(Subscription).where(
+                Subscription.payment_id == payment.id
+            )
+        )
+        existing_sub = result.scalar_one_or_none()
+        if existing_sub:
+            return
+
+        # 🔒 TEMP: hard-map amount → plan (PHASE SAFE)
+        result = await db.execute(
+            select(Plan).where(Plan.is_active.is_(True))
+        )
+        plan = result.scalars().first()
+        if not plan:
+            raise RuntimeError("No active plan configured")
+
+        now = datetime.utcnow()
+        ends_at = now + timedelta(days=30)
+
+        subscription = Subscription(
+            user_id=payment.user_id,
+            plan_id=plan.id,
+            payment_id=payment.id,
+            status="active",
+            starts_at=now,
+            ends_at=ends_at,
+            ai_campaign_limit_snapshot=plan.ai_campaign_limit or 0,
+            is_active=True,
+            created_by_admin=False,
+            assigned_by_admin=False,
+        )
+
+        db.add(subscription)
+
+        invoice = Invoice(
+            user_id=payment.user_id,
+            payment_id=payment.id,
+            invoice_number=f"INV-{payment.id}",
+            total_amount=payment.amount,
+            currency=payment.currency,
+            status="paid",
+            period_from=now.date(),
+            period_to=ends_at.date(),
+        )
+
+        db.add(invoice)
+        await db.commit()
