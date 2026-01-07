@@ -2,9 +2,9 @@
 Digital Growth Studio (Meta-AI)
 Main application entry point
 
-PHASE 1.7 — FULL FRONTEND CONTROL
+PHASE 1.8 — SINGLE CONTEXT SOURCE
 - FastAPI is API-only
-- NO frontend routes served by backend
+- ONE session context for all pages
 - Next.js owns ALL UI routes
 """
 
@@ -17,12 +17,17 @@ from fastapi.staticfiles import StaticFiles
 # =========================
 from app.auth.routes import router as auth_router
 from app.campaigns.routes import router as campaigns_router
-from app.admin.routes import router as admin_router
 from app.meta_api.routes import router as meta_router
 from app.meta_insights.routes import router as meta_insights_router
 from app.reports.routes import router as reports_router
 from app.dashboard.routes import router as dashboard_router
 from app.ai_engine.routes import router as ai_router
+
+# 🔒 ADMIN (IMPERSONATION)
+from backend.app.admin.impersonation_routes import router as admin_router
+
+# 🌍 SESSION CONTEXT
+from app.auth.session_routes import router as session_router
 
 
 # =========================
@@ -49,6 +54,7 @@ app.mount(
 # API ROUTERS — SINGLE SOURCE
 # =========================
 app.include_router(auth_router, prefix="/api")
+app.include_router(session_router, prefix="/api")   # 🔑 /api/session/context
 app.include_router(campaigns_router, prefix="/api")
 app.include_router(admin_router, prefix="/api")
 app.include_router(meta_router, prefix="/api")
