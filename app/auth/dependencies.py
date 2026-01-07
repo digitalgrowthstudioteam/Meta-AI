@@ -28,7 +28,7 @@ async def _get_global_settings(
 
 
 # -------------------------------------------------
-# 🔑 REAL USER RESOLUTION (HEADER-BASED)
+# 🔑 REAL USER RESOLUTION (STRICT — NO FALLBACK)
 # -------------------------------------------------
 async def _resolve_real_user(
     db: AsyncSession,
@@ -51,7 +51,7 @@ async def _resolve_real_user(
 
 
 # -------------------------------------------------
-# CORE USER RESOLVER (WITH IMPERSONATION)
+# CORE USER RESOLVER (WITH ADMIN IMPERSONATION)
 # -------------------------------------------------
 async def _get_current_user_internal(
     db: AsyncSession,
@@ -114,18 +114,12 @@ async def get_current_user(
 
 
 # -------------------------------------------------
-# 🌍 SINGLE SOURCE OF TRUTH — SESSION CONTEXT
+# 🌍 GLOBAL SESSION CONTEXT (SINGLE SOURCE OF TRUTH)
 # -------------------------------------------------
 async def get_session_context(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> dict:
-    """
-    GLOBAL CONTEXT:
-    - Current user
-    - Selected Meta ad account (ONE only)
-    """
-
     result = await db.execute(
         select(MetaAdAccount)
         .join(
