@@ -88,14 +88,16 @@ export default function AIActionsPage() {
   /* LOAD SESSION CONTEXT */
   /* ----------------------------- */
   const loadSession = async () => {
-    const res = await fetch("/session/context", {
+    const res = await fetch("/api/session/context", {
       credentials: "include",
       cache: "no-store",
     });
+
     if (!res.ok) {
       setSession(null);
       return;
     }
+
     const json = await res.json();
     setSession(json);
   };
@@ -118,7 +120,7 @@ export default function AIActionsPage() {
     if (aiFilter) params.append("ai_active", aiFilter);
     if (objectiveFilter) params.append("objective", objectiveFilter);
 
-    const res = await fetch(`/campaigns?${params}`, {
+    const res = await fetch(`/api/campaigns?${params}`, {
       credentials: "include",
       cache: "no-store",
     });
@@ -141,7 +143,7 @@ export default function AIActionsPage() {
       return;
     }
 
-    const res = await fetch("/ai/actions", {
+    const res = await fetch("/api/ai/actions", {
       credentials: "include",
       cache: "no-store",
     });
@@ -190,7 +192,7 @@ export default function AIActionsPage() {
   /* TOGGLE AI */
   /* ----------------------------- */
   const toggleAI = async (campaignId: string, enable: boolean) => {
-    await fetch(`/campaigns/${campaignId}/ai-toggle`, {
+    await fetch(`/api/campaigns/${campaignId}/ai-toggle`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -208,7 +210,7 @@ export default function AIActionsPage() {
     const key = `${action.campaign_id}_${action.action_type}_${action.summary}`;
     if (feedbackSent[key]) return;
 
-    await fetch("/ai/actions/feedback", {
+    await fetch("/api/ai/actions/feedback", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -324,7 +326,9 @@ export default function AIActionsPage() {
 
               {campaign && (
                 <button
-                  onClick={() => toggleAI(campaign.id, !campaign.ai_active)}
+                  onClick={() =>
+                    toggleAI(campaign.id, !campaign.ai_active)
+                  }
                   className={`px-3 py-1 rounded text-xs font-medium ${
                     campaign.ai_active
                       ? "bg-green-100 text-green-700"
