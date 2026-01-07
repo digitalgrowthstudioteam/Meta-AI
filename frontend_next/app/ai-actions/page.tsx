@@ -6,6 +6,20 @@ import { useEffect, useState } from "react";
 /* TYPES */
 /* ----------------------------- */
 
+type SessionContext = {
+  user: {
+    id: string;
+    email: string;
+    is_admin: boolean;
+    is_impersonated: boolean;
+  };
+  ad_account: {
+    id: string;
+    name: string;
+    meta_account_id: string;
+  } | null;
+};
+
 type CampaignAI = {
   id: string;
   name: string;
@@ -48,28 +62,20 @@ type AIActionSet = {
   actions: AIAction[];
 };
 
-type AdAccount = {
-  id: string;
-  name: string;
-  is_selected: boolean;
-};
-
 /* ----------------------------- */
 /* COMPONENT */
 /* ----------------------------- */
 
 export default function AIActionsPage() {
+  const [session, setSession] = useState<SessionContext | null>(null);
   const [campaigns, setCampaigns] = useState<CampaignAI[]>([]);
   const [aiActionSets, setAiActionSets] = useState<AIActionSet[]>([]);
-  const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
   const [feedbackSent, setFeedbackSent] = useState<Record<string, boolean>>({});
 
   /* FILTERS */
-  const [selectedAdAccount, setSelectedAdAccount] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [aiFilter, setAiFilter] = useState("");
   const [objectiveFilter, setObjectiveFilter] = useState("");
@@ -79,78 +85,100 @@ export default function AIActionsPage() {
   const [pageSize, setPageSize] = useState(10);
 
   /* ----------------------------- */
-  /* LOAD AD ACCOUNTS */
+  /* LOAD SESSION CONTEXT */
   /* ----------------------------- */
-  const loadAdAccounts = async () => {
-    try {
-      const res = await fetch("/api/meta/adaccounts", {
-        credentials: "include",
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      setAdAccounts(data ?? []);
-      const selected = data?.find((a: AdAccount) => a.is_selected);
-      if (selected) setSelectedAdAccount(selected.id);
-    } catch {}
+  const loadSession = async () => {
+    const res = await fetch("/session/context", {
+      credentials: "include",
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      setSession(null);
+      return;
+    }
+    const json = await res.json();
+    setSession(json);
   };
 
   /* ----------------------------- */
-  /* LOAD CAMPAIGNS */
+  /* LOAD CAMPAIGNS (STRICT CONTEXT) */
   /* ----------------------------- */
   const loadCampaigns = async () => {
+    if (!session?.ad_account) {
+      setCampaigns([]);
+      return;
+    }
+
     const params = new URLSearchParams({
       page: String(page),
       page_size: String(pageSize),
     });
 
-    if (selectedAdAccount) params.append("ad_account_id", selectedAdAccount);
     if (statusFilter) params.append("status", statusFilter);
     if (aiFilter) params.append("ai_active", aiFilter);
     if (objectiveFilter) params.append("objective", objectiveFilter);
 
-    const res = await fetch(`/api/campaigns?${params}`, {
+    const res = await fetch(`/campaigns?${params}`, {
       credentials: "include",
+      cache: "no-store",
     });
 
-    if (res.status === 409) {
+    if (!res.ok) {
       setCampaigns([]);
-      setMetaConnected(false);
       return;
     }
 
     const data = await res.json();
     setCampaigns(Array.isArray(data) ? data : []);
-    setMetaConnected(true);
   };
 
   /* ----------------------------- */
-  /* LOAD AI ACTIONS */
+  /* LOAD AI ACTIONS (STRICT CONTEXT) */
   /* ----------------------------- */
   const loadAIActions = async () => {
-    const res = await fetch("/api/ai/actions", {
-      credentials: "include",
-    });
-    if (res.ok) {
-      const data = await res.json();
-      setAiActionSets(Array.isArray(data) ? data : []);
+    if (!session?.ad_account) {
+      setAiActionSets([]);
+      return;
     }
+
+    const res = await fetch("/ai/actions", {
+      credentials: "include",
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      setAiActionSets([]);
+      return;
+    }
+
+    const data = await res.json();
+    setAiActionSets(Array.isArray(data) ? data : []);
   };
 
   useEffect(() => {
     (async () => {
       try {
         setLoading(true);
-        await loadAdAccounts();
-        await loadCampaigns();
-        await loadAIActions();
+        await loadSession();
       } catch {
-        setError("Unable to load AI actions.");
+        setError("Unable to load session.");
       } finally {
         setLoading(false);
       }
     })();
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        await loadCampaigns();
+        await loadAIActions();
+      } catch {
+        setError("Unable to load AI actions.");
+      }
+    })();
   }, [
-    selectedAdAccount,
+    session?.ad_account?.id,
     statusFilter,
     aiFilter,
     objectiveFilter,
@@ -162,7 +190,7 @@ export default function AIActionsPage() {
   /* TOGGLE AI */
   /* ----------------------------- */
   const toggleAI = async (campaignId: string, enable: boolean) => {
-    await fetch(`/api/campaigns/${campaignId}/ai-toggle`, {
+    await fetch(`/campaigns/${campaignId}/ai-toggle`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -180,7 +208,7 @@ export default function AIActionsPage() {
     const key = `${action.campaign_id}_${action.action_type}_${action.summary}`;
     if (feedbackSent[key]) return;
 
-    await fetch("/api/ai/actions/feedback", {
+    await fetch("/ai/actions/feedback", {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
@@ -203,12 +231,12 @@ export default function AIActionsPage() {
   if (loading) return <div>Loading AI actions…</div>;
   if (error) return <div className="text-red-600">{error}</div>;
 
-  if (metaConnected === false) {
+  if (!session?.ad_account) {
     return (
       <div className="surface p-6">
-        <h2 className="font-medium mb-1">Meta account not connected</h2>
+        <h2 className="font-medium mb-1">No ad account selected</h2>
         <p className="text-sm text-gray-600">
-          Connect your Meta Ads account to enable AI insights.
+          Connect Meta Ads and select an ad account.
         </p>
       </div>
     );
@@ -223,25 +251,12 @@ export default function AIActionsPage() {
       <div>
         <h1 className="text-xl font-semibold">AI Actions</h1>
         <p className="text-sm text-gray-500">
-          Transparent AI recommendations with full reasoning
+          Active account: <strong>{session.ad_account.name}</strong>
         </p>
       </div>
 
       {/* FILTER BAR */}
-      <div className="surface p-4 grid grid-cols-2 lg:grid-cols-5 gap-3 text-sm">
-        <select
-          value={selectedAdAccount}
-          onChange={(e) => setSelectedAdAccount(e.target.value)}
-          className="border rounded px-2 py-1"
-        >
-          <option value="">All Ad Accounts</option>
-          {adAccounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-          ))}
-        </select>
-
+      <div className="surface p-4 grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
