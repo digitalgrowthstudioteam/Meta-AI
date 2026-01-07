@@ -9,7 +9,10 @@ from app.auth.dependencies import require_admin
 from app.users.models import User
 from app.campaigns.models import CampaignActionLog
 
-router = APIRouter(prefix="/admin", tags=["Admin Impersonation"])
+router = APIRouter(
+    prefix="/admin",
+    tags=["Admin Impersonation"],
+)
 
 
 @router.post("/impersonate")
@@ -23,12 +26,12 @@ async def impersonate_user(
     ADMIN-ONLY (READ-ONLY):
     - Switch request context to another user
     - No mutations
-    - Audited
+    - Fully audited
     """
 
-    # ---------------------------------------
+    # --------------------------------------------------
     # Validate target user
-    # ---------------------------------------
+    # --------------------------------------------------
     result = await db.execute(
         select(User).where(User.id == user_id)
     )
@@ -40,9 +43,9 @@ async def impersonate_user(
             detail="Target user not found",
         )
 
-    # ---------------------------------------
-    # Audit log (SYSTEM SAFETY)
-    # ---------------------------------------
+    # --------------------------------------------------
+    # Audit log (MANDATORY)
+    # --------------------------------------------------
     db.add(
         CampaignActionLog(
             campaign_id=None,
@@ -58,13 +61,15 @@ async def impersonate_user(
                 "impersonated_email": target_user.email,
             },
             reason="Admin impersonation (read-only)",
+            created_at=datetime.utcnow(),
         )
     )
+
     await db.commit()
 
-    # ---------------------------------------
-    # RESPONSE (frontend stores session-only)
-    # ---------------------------------------
+    # --------------------------------------------------
+    # RESPONSE (frontend stores in sessionStorage)
+    # --------------------------------------------------
     return {
         "status": "impersonation_started",
         "user": {
