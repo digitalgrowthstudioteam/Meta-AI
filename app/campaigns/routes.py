@@ -17,7 +17,7 @@ router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
 
 
 # =========================================================
-# LIST CAMPAIGNS — STRICT AD ACCOUNT SELECTION (LOCKED)
+# LIST CAMPAIGNS — MULTI AD ACCOUNT SAFE (FINAL)
 # =========================================================
 @router.get(
     "",
@@ -49,26 +49,25 @@ async def list_campaigns(
             detail="Meta account not connected",
         )
 
-    # 2️⃣ Get SINGLE selected ad account (SOURCE OF TRUTH)
-    selected_account = (
+    # 2️⃣ Get ALL selected ad accounts
+    selected_accounts = (
         await db.execute(
-            select(UserMetaAdAccount)
+            select(UserMetaAdAccount.meta_ad_account_id)
             .where(
                 UserMetaAdAccount.user_id == current_user.id,
                 UserMetaAdAccount.is_selected.is_(True),
             )
-            .limit(1)
         )
-    ).scalar_one_or_none()
+    ).scalars().all()
 
-    if not selected_account:
-        return []  # frontend will show “Select Ad Account”
+    if not selected_accounts:
+        return []
 
-    # 3️⃣ Fetch campaigns ONLY for selected ad account
+    # 3️⃣ Fetch campaigns for ALL selected ad accounts
     campaigns = await CampaignService.list_campaigns_with_visibility(
         db=db,
         user_id=current_user.id,
-        ad_account_id=selected_account.meta_ad_account_id,
+        ad_account_ids=selected_accounts,
     )
 
     response: list[CampaignResponse] = []
@@ -94,7 +93,7 @@ async def list_campaigns(
 
 
 # =========================================================
-# SYNC CAMPAIGNS FROM META (SELECTED ACCOUNT ONLY)
+# SYNC CAMPAIGNS FROM META (ALL SELECTED ACCOUNTS)
 # =========================================================
 @router.post(
     "/sync",
