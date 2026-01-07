@@ -39,7 +39,7 @@ export default function DashboardPage() {
   // LOAD SESSION CONTEXT
   // -----------------------------
   const loadSession = async () => {
-    const res = await fetch("/session/context", {
+    const res = await fetch("/api/session/context", {
       credentials: "include",
       cache: "no-store",
     });
@@ -62,7 +62,7 @@ export default function DashboardPage() {
       return;
     }
 
-    const res = await fetch("/dashboard/summary", {
+    const res = await fetch("/api/dashboard/summary", {
       credentials: "include",
       cache: "no-store",
     });
@@ -92,7 +92,7 @@ export default function DashboardPage() {
   // CONNECT META
   // -----------------------------
   const connectMeta = async () => {
-    const res = await fetch("/meta/connect", {
+    const res = await fetch("/api/meta/connect", {
       credentials: "include",
       cache: "no-store",
     });
@@ -112,7 +112,7 @@ export default function DashboardPage() {
     setErrorMsg(null);
 
     try {
-      const res = await fetch("/campaigns/sync", {
+      const res = await fetch("/api/campaigns/sync", {
         method: "POST",
         credentials: "include",
         cache: "no-store",
