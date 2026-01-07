@@ -40,19 +40,16 @@ class Settings:
     # =================================================
     # GLOBAL SYSTEM KILL SWITCHES (ADMIN POWER)
     # =================================================
-    # 🔒 MASTER AI SWITCH
     AI_GLOBALLY_ENABLED: bool = os.getenv(
         "AI_GLOBALLY_ENABLED",
         "true",
     ).lower() == "true"
 
-    # 🔒 META SYNC / OAUTH SWITCH
     META_SYNC_ENABLED: bool = os.getenv(
         "META_SYNC_ENABLED",
         "true",
     ).lower() == "true"
 
-    # 🔒 ADMIN ↔ USER CHAT SYSTEM
     ADMIN_CHAT_ENABLED: bool = os.getenv(
         "ADMIN_CHAT_ENABLED",
         "true",
@@ -85,3 +82,22 @@ class Settings:
 
 
 settings = Settings()
+
+# =================================================
+# 🔁 BACKWARD-COMPAT SMTP ENV MAPPING (SAFE)
+# =================================================
+# Supports legacy LEADGEN_* variables without VPS changes
+# ❌ Does NOT override explicitly set SMTP_* values
+
+if not settings.SMTP_USER and os.getenv("LEADGEN_SMTP_EMAIL"):
+    settings.SMTP_USER = os.getenv("LEADGEN_SMTP_EMAIL")
+    settings.SMTP_FROM_EMAIL = os.getenv("LEADGEN_SMTP_EMAIL")
+
+if not settings.SMTP_PASSWORD and os.getenv("LEADGEN_SMTP_PASSWORD"):
+    settings.SMTP_PASSWORD = os.getenv("LEADGEN_SMTP_PASSWORD")
+
+if not settings.SMTP_HOST:
+    settings.SMTP_HOST = "smtp.gmail.com"
+
+if not settings.SMTP_PORT:
+    settings.SMTP_PORT = 587
