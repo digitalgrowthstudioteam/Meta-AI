@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 /**
  * SINGLE SOURCE OF TRUTH
@@ -28,6 +29,8 @@ type DashboardSummary = {
 };
 
 export default function DashboardPage() {
+  const router = useRouter();
+
   const [session, setSession] = useState<SessionContext | null>(null);
   const [data, setData] = useState<DashboardSummary | null>(null);
 
@@ -50,6 +53,13 @@ export default function DashboardPage() {
     }
 
     const json = await res.json();
+
+    // 🔒 ADMIN → FORCE REDIRECT
+    if (json?.user?.is_admin) {
+      router.replace("/admin/dashboard");
+      return;
+    }
+
     setSession(json);
   };
 
@@ -150,7 +160,6 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      {/* HEADER */}
       <div>
         <h1 className="text-xl font-semibold">Dashboard</h1>
         <p className="text-sm text-gray-500">
@@ -160,7 +169,6 @@ export default function DashboardPage() {
 
       {errorMsg && <div className="text-sm text-red-600">{errorMsg}</div>}
 
-      {/* KPI GRID */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <KpiCard
           label="Total Campaigns"
