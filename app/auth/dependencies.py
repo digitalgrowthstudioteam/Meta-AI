@@ -27,18 +27,35 @@ async def _get_global_settings(
 
 
 # -------------------------------------------------
-# BASE USER RESOLUTION (DEV MODE)
+# 🔑 REAL USER RESOLUTION (NO DEV MODE)
 # -------------------------------------------------
-async def _resolve_real_user(db: AsyncSession) -> User:
+async def _resolve_real_user(
+    db: AsyncSession,
+    x_user_id: str | None,
+) -> User:
+    """
+    TEMP AUTH MODE (SAFE):
+    - User must be explicitly resolved
+    - No global fallback
+    """
+
+    if not x_user_id:
+        raise HTTPException(
+            status_code=401,
+            detail="Missing user identity",
+        )
+
     result = await db.execute(
-        select(User).order_by(User.created_at.asc()).limit(1)
+        select(User).where(
+            (User.id == x_user_id) | (User.email == x_user_id)
+        )
     )
     user = result.scalar_one_or_none()
 
     if not user:
         raise HTTPException(
-            status_code=500,
-            detail="No user found in database",
+            status_code=401,
+            detail="Invalid user",
         )
 
     return user
@@ -49,9 +66,10 @@ async def _resolve_real_user(db: AsyncSession) -> User:
 # -------------------------------------------------
 async def _get_current_user_internal(
     db: AsyncSession,
+    x_user_id: str | None,
     x_impersonate_user: str | None,
 ) -> User:
-    real_user = await _resolve_real_user(db)
+    real_user = await _resolve_real_user(db, x_user_id)
 
     # 🔒 MAINTENANCE MODE
     settings = await _get_global_settings(db)
@@ -92,14 +110,16 @@ async def _get_current_user_internal(
 
 
 # -------------------------------------------------
-# 🔑 PUBLIC DEPENDENCIES (NO CIRCULAR IMPORTS)
+# 🔑 PUBLIC DEPENDENCIES
 # -------------------------------------------------
 async def get_current_user(
     db: AsyncSession = Depends(get_db),
+    x_user_id: str | None = Header(default=None),
     x_impersonate_user: str | None = Header(default=None),
 ) -> User:
     return await _get_current_user_internal(
         db=db,
+        x_user_id=x_user_id,
         x_impersonate_user=x_impersonate_user,
     )
 
