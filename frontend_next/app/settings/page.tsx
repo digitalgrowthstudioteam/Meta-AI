@@ -42,6 +42,7 @@ export default function SettingsPage() {
 
   const [loading, setLoading] = useState(true);
   const [connectingMeta, setConnectingMeta] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   /* ----------------------------------
    * LOAD SESSION CONTEXT
@@ -57,8 +58,7 @@ export default function SettingsPage() {
       return;
     }
 
-    const json = await res.json();
-    setSession(json);
+    setSession(await res.json());
   };
 
   /* ----------------------------------
@@ -93,8 +93,7 @@ export default function SettingsPage() {
       return;
     }
 
-    const json = await res.json();
-    setSubscription(json);
+    setSubscription(await res.json());
   };
 
   useEffect(() => {
@@ -129,6 +128,32 @@ export default function SettingsPage() {
       alert("Failed to initiate Meta connection.");
     } finally {
       setConnectingMeta(false);
+    }
+  };
+
+  /* ----------------------------------
+   * TOGGLE AD ACCOUNT (MULTI SELECT)
+   * ---------------------------------- */
+  const toggleAdAccount = async (id: string) => {
+    try {
+      setTogglingId(id);
+
+      const res = await fetch(
+        `/api/meta/adaccounts/${id}/toggle`,
+        {
+          method: "POST",
+          credentials: "include",
+        }
+      );
+
+      if (!res.ok) throw new Error();
+
+      await loadAdAccounts();
+      await loadSession();
+    } catch {
+      alert("Failed to update ad account.");
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -186,7 +211,7 @@ export default function SettingsPage() {
             <thead className="border-b bg-gray-50">
               <tr>
                 <th className="px-3 py-2 text-left">Account</th>
-                <th className="px-3 py-2 text-center">Selected</th>
+                <th className="px-3 py-2 text-center">Active</th>
               </tr>
             </thead>
             <tbody>
@@ -196,7 +221,17 @@ export default function SettingsPage() {
                     {a.name}
                   </td>
                   <td className="px-3 py-2 text-center">
-                    {a.is_selected ? "✅ Active" : "—"}
+                    <button
+                      onClick={() => toggleAdAccount(a.id)}
+                      disabled={togglingId === a.id}
+                      className={`px-3 py-1 rounded text-xs font-medium ${
+                        a.is_selected
+                          ? "bg-green-100 text-green-800"
+                          : "bg-gray-100 text-gray-600"
+                      }`}
+                    >
+                      {a.is_selected ? "ON" : "OFF"}
+                    </button>
                   </td>
                 </tr>
               ))}
