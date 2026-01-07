@@ -4,12 +4,6 @@ import type { NextRequest } from "next/server";
 // Publicly accessible pages
 const PUBLIC_PATHS = ["/", "/login"];
 
-// 🔒 Admin emails (comma-separated in env)
-const ADMIN_EMAILS = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || "")
-  .split(",")
-  .map(e => e.trim().toLowerCase())
-  .filter(Boolean);
-
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -20,7 +14,7 @@ export function middleware(request: NextRequest) {
 
   const session = request.cookies.get("meta_ai_session");
 
-  // Not logged in → login
+  // Not logged in → redirect to login
   if (!session) {
     if (PUBLIC_PATHS.includes(pathname)) {
       return NextResponse.next();
@@ -32,28 +26,14 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  const userIdentifier = session.value.toLowerCase();
-  const isAdmin = ADMIN_EMAILS.includes(userIdentifier);
+  /**
+   * 🔒 IMPORTANT
+   * Do NOT detect admin here.
+   * meta_ai_session is a session token, not email.
+   * Admin routing is handled after /api/session/context.
+   */
 
-  // ✅ ADMIN: force landing to admin dashboard
-  if (isAdmin && (pathname === "/" || pathname === "/dashboard")) {
-    const adminUrl = request.nextUrl.clone();
-    adminUrl.pathname = "/admin/dashboard";
-    return NextResponse.redirect(adminUrl);
-  }
-
-  // ❌ Non-admin trying admin
-  if (!isAdmin && pathname.startsWith("/admin")) {
-    const userUrl = request.nextUrl.clone();
-    userUrl.pathname = "/dashboard";
-    return NextResponse.redirect(userUrl);
-  }
-
-  // Forward identity to backend
-  const response = NextResponse.next();
-  response.headers.set("X-User-Id", session.value);
-
-  return response;
+  return NextResponse.next();
 }
 
 export const config = {
