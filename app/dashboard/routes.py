@@ -1,16 +1,12 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from uuid import UUID
 
 from app.core.db_session import get_db
 from app.auth.dependencies import get_session_context
-from app.users.models import User
 
-from app.meta_api.models import (
-    MetaOAuthToken,
-    UserMetaAdAccount,
-    MetaAdAccount,
-)
+from app.meta_api.models import MetaOAuthToken, UserMetaAdAccount
 from app.campaigns.models import Campaign
 
 
@@ -30,7 +26,7 @@ async def dashboard_summary(
     STRICT — SESSION CONTEXT ONLY
     """
 
-    user_id = session["user"]["id"]
+    user_id = UUID(session["user"]["id"])
     ad_account = session["ad_account"]
 
     # --------------------------------------------------
@@ -63,23 +59,23 @@ async def dashboard_summary(
     ai_active = 0
 
     if ad_account:
-        # total campaigns
+        ad_account_id = UUID(ad_account["id"])
+
         result = await db.execute(
             select(func.count())
             .select_from(Campaign)
             .where(
-                Campaign.ad_account_id == ad_account["id"],
+                Campaign.ad_account_id == ad_account_id,
                 Campaign.is_archived.is_(False),
             )
         )
         total_campaigns = result.scalar() or 0
 
-        # ai-active campaigns
         result = await db.execute(
             select(func.count())
             .select_from(Campaign)
             .where(
-                Campaign.ad_account_id == ad_account["id"],
+                Campaign.ad_account_id == ad_account_id,
                 Campaign.is_archived.is_(False),
                 Campaign.ai_active.is_(True),
             )
