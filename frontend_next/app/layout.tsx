@@ -5,9 +5,18 @@ import { ReactNode, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 
-type ImpersonationState = {
-  active: boolean;
-  userEmail: string | null;
+type SessionContext = {
+  user: {
+    id: string;
+    email: string;
+    is_admin: boolean;
+    is_impersonated: boolean;
+  };
+  ad_account: {
+    id: string;
+    name: string;
+    meta_account_id: string;
+  } | null;
 };
 
 export default function RootLayout({
@@ -17,28 +26,31 @@ export default function RootLayout({
 }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  const [impersonation, setImpersonation] = useState<ImpersonationState>({
-    active: false,
-    userEmail: null,
-  });
+  const [session, setSession] = useState<SessionContext | null>(null);
 
   // --------------------------------------------------
-  // LOAD IMPERSONATION STATE (CLIENT ONLY)
+  // LOAD GLOBAL SESSION CONTEXT (ON EVERY NAV)
   // --------------------------------------------------
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (pathname === "/" || pathname === "/login") return;
 
-    const flag = sessionStorage.getItem("impersonate_active");
-    const email = sessionStorage.getItem("impersonate_email");
-
-    if (flag === "true" && email) {
-      setImpersonation({
-        active: true,
-        userEmail: email,
-      });
-    }
-  }, []);
+    (async () => {
+      try {
+        const res = await fetch("/session/context", {
+          credentials: "include",
+          cache: "no-store",
+        });
+        if (!res.ok) {
+          setSession(null);
+          return;
+        }
+        const json = await res.json();
+        setSession(json);
+      } catch {
+        setSession(null);
+      }
+    })();
+  }, [pathname]);
 
   const exitImpersonation = () => {
     sessionStorage.removeItem("impersonate_active");
@@ -48,7 +60,7 @@ export default function RootLayout({
   };
 
   // --------------------------------------------------
-  // PUBLIC PAGES — NO DASHBOARD LAYOUT
+  // PUBLIC PAGES
   // --------------------------------------------------
   if (pathname === "/" || pathname === "/login") {
     return (
@@ -114,29 +126,11 @@ export default function RootLayout({
               </NavLink>
 
               <SectionLabel label="Insights" />
-              <NavLink
-                href="/audience-insights"
-                current={pathname === "/audience-insights"}
-              >
-                Audience Insights
-              </NavLink>
-              <NavLink
-                href="/industry-benchmarks"
-                current={pathname === "/industry-benchmarks"}
-              >
-                Industry Benchmarks
-              </NavLink>
               <NavLink href="/reports" current={pathname === "/reports"}>
                 Reports
               </NavLink>
 
               <SectionLabel label="Billing & Settings" />
-              <NavLink
-                href="/buy-campaign"
-                current={pathname === "/buy-campaign"}
-              >
-                Buy Campaign
-              </NavLink>
               <NavLink href="/billing" current={pathname === "/billing"}>
                 Billing
               </NavLink>
@@ -153,13 +147,11 @@ export default function RootLayout({
           {/* MAIN */}
           <div className="flex flex-col flex-1 min-w-0">
             {/* IMPERSONATION BANNER */}
-            {impersonation.active && (
+            {session?.user.is_impersonated && (
               <div className="bg-yellow-100 border-b border-yellow-300 px-4 py-2 flex items-center justify-between text-sm">
                 <div className="text-yellow-900">
                   🔒 Viewing as{" "}
-                  <span className="font-medium">
-                    {impersonation.userEmail}
-                  </span>
+                  <span className="font-medium">{session.user.email}</span>
                 </div>
                 <button
                   onClick={exitImpersonation}
@@ -167,6 +159,14 @@ export default function RootLayout({
                 >
                   Exit Impersonation
                 </button>
+              </div>
+            )}
+
+            {/* ACTIVE AD ACCOUNT BANNER */}
+            {session?.ad_account && (
+              <div className="bg-white border-b px-4 py-2 text-xs text-gray-600">
+                Active Ad Account:{" "}
+                <strong>{session.ad_account.name}</strong>
               </div>
             )}
 
