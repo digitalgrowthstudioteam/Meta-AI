@@ -121,12 +121,12 @@ async def list_meta_ad_accounts(
 
 
 # =========================================================
-# TOGGLE META AD ACCOUNT (MULTI-SELECT FIXED)
+# TOGGLE META AD ACCOUNT (MULTI-SELECT ✅ FIXED)
 # =========================================================
 @router.post("/adaccounts/{ad_account_id}/toggle")
 async def toggle_meta_ad_account(
     *,
-    ad_account_id: uuid.UUID,
+    ad_account_id: int,  # ✅ FIX: MUST BE int (DB PK), NOT UUID
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_user),
 ):
@@ -141,7 +141,6 @@ async def toggle_meta_ad_account(
     if not link:
         raise HTTPException(status_code=404, detail="Ad account not found")
 
-    # Toggle state
     new_state = not link.is_selected
 
     await db.execute(
@@ -163,7 +162,7 @@ async def toggle_meta_ad_account(
 
     return {
         "status": "toggled",
-        "ad_account_id": str(ad_account_id),
+        "ad_account_id": ad_account_id,
         "is_selected": new_state,
     }
 
@@ -174,7 +173,7 @@ async def toggle_meta_ad_account(
 @router.post("/adaccounts/select")
 async def select_meta_ad_account(
     *,
-    ad_account_id: uuid.UUID = Query(...),
+    ad_account_id: int = Query(...),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_user),
 ):
@@ -205,5 +204,5 @@ async def select_meta_ad_account(
 
     return {
         "status": "selected",
-        "ad_account_id": str(ad_account_id),
+        "ad_account_id": ad_account_id,
     }
