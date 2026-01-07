@@ -7,6 +7,7 @@ from sqlalchemy import (
     ForeignKey,
     Date,
     Integer,
+    Index,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
@@ -137,4 +138,18 @@ class Subscription(Base):
     plan = relationship(
         Plan,
         lazy="selectin",
+    )
+
+    # =====================================================
+    # 🔒 DB-LEVEL SAFETY (CRITICAL)
+    # =====================================================
+    __table_args__ = (
+        Index(
+            "uq_active_subscription_per_user",
+            "user_id",
+            unique=True,
+            postgresql_where=(
+                (status.in_(["trial", "active"]))
+            ),
+        ),
     )
