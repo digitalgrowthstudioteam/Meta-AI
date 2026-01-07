@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from uuid import UUID
 from datetime import datetime, date
@@ -22,15 +22,18 @@ class CampaignService:
     """
 
     # =====================================================
-    # LIST CAMPAIGNS — STRICT SELECTED AD ACCOUNT (LOCKED)
+    # LIST CAMPAIGNS — MULTI AD ACCOUNT SAFE (FINAL)
     # =====================================================
     @staticmethod
     async def list_campaigns_with_visibility(
         db: AsyncSession,
         *,
         user_id: UUID,
-        ad_account_id: UUID,
+        ad_account_ids: list[UUID],
     ) -> list[Campaign]:
+        if not ad_account_ids:
+            return []
+
         stmt = (
             select(Campaign)
             .options(selectinload(Campaign.category_map))
@@ -42,7 +45,7 @@ class CampaignService:
             .where(
                 UserMetaAdAccount.user_id == user_id,
                 UserMetaAdAccount.is_selected.is_(True),
-                Campaign.ad_account_id == ad_account_id,
+                Campaign.ad_account_id.in_(ad_account_ids),
                 Campaign.is_archived.is_(False),
             )
         )
@@ -51,7 +54,7 @@ class CampaignService:
         return result.scalars().all()
 
     # =====================================================
-    # SYNC CAMPAIGNS FROM META (SELECTED ACCOUNT ONLY)
+    # SYNC CAMPAIGNS FROM META (ALL SELECTED ACCOUNTS)
     # =====================================================
     @staticmethod
     async def sync_from_meta(
@@ -73,51 +76,52 @@ class CampaignService:
         )
 
         result = await db.execute(stmt)
-        ad_account = result.scalar_one_or_none()
+        ad_accounts = result.scalars().all()
 
-        if not ad_account:
-            logger.warning("No selected ad account for user=%s", user_id)
-            return []
-
-        try:
-            meta_campaigns = await MetaCampaignClient.fetch_campaigns(
-                ad_account=ad_account,
-            )
-        except Exception as e:
-            logger.error(
-                "Meta sync failed for ad_account=%s : %s",
-                ad_account.meta_account_id,
-                str(e),
-            )
+        if not ad_accounts:
+            logger.warning("No selected ad accounts for user=%s", user_id)
             return []
 
         synced: list[Campaign] = []
 
-        for meta in meta_campaigns:
-            stmt = select(Campaign).where(
-                Campaign.meta_campaign_id == meta["id"],
-                Campaign.ad_account_id == ad_account.id,
-            )
-            result = await db.execute(stmt)
-            campaign = result.scalar_one_or_none()
-
-            if campaign:
-                campaign.name = meta["name"]
-                campaign.objective = meta["objective"]
-                campaign.status = meta["status"]
-                campaign.last_meta_sync_at = datetime.utcnow()
-            else:
-                campaign = Campaign(
-                    meta_campaign_id=meta["id"],
-                    ad_account_id=ad_account.id,
-                    name=meta["name"],
-                    objective=meta["objective"],
-                    status=meta["status"],
-                    last_meta_sync_at=datetime.utcnow(),
+        for ad_account in ad_accounts:
+            try:
+                meta_campaigns = await MetaCampaignClient.fetch_campaigns(
+                    ad_account=ad_account,
                 )
-                db.add(campaign)
+            except Exception as e:
+                logger.error(
+                    "Meta sync failed for ad_account=%s : %s",
+                    ad_account.meta_account_id,
+                    str(e),
+                )
+                continue
 
-            synced.append(campaign)
+            for meta in meta_campaigns:
+                stmt = select(Campaign).where(
+                    Campaign.meta_campaign_id == meta["id"],
+                    Campaign.ad_account_id == ad_account.id,
+                )
+                result = await db.execute(stmt)
+                campaign = result.scalar_one_or_none()
+
+                if campaign:
+                    campaign.name = meta["name"]
+                    campaign.objective = meta["objective"]
+                    campaign.status = meta["status"]
+                    campaign.last_meta_sync_at = datetime.utcnow()
+                else:
+                    campaign = Campaign(
+                        meta_campaign_id=meta["id"],
+                        ad_account_id=ad_account.id,
+                        name=meta["name"],
+                        objective=meta["objective"],
+                        status=meta["status"],
+                        last_meta_sync_at=datetime.utcnow(),
+                    )
+                    db.add(campaign)
+
+                synced.append(campaign)
 
         await db.commit()
         return synced
@@ -166,7 +170,7 @@ class CampaignService:
             )
 
     # =====================================================
-    # AI TOGGLE — STRICT AD ACCOUNT SCOPE
+    # AI TOGGLE — MULTI AD ACCOUNT SAFE
     # =====================================================
     @staticmethod
     async def toggle_ai(
