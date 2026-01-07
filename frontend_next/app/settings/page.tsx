@@ -20,7 +20,7 @@ type SessionContext = {
 };
 
 type MetaAdAccount = {
-  id: string;
+  id: number; // ✅ FIX: must be number (DB PK)
   name: string;
   is_selected: boolean;
 };
@@ -42,7 +42,7 @@ export default function SettingsPage() {
 
   const [loading, setLoading] = useState(true);
   const [connectingMeta, setConnectingMeta] = useState(false);
-  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<number | null>(null);
 
   /* ----------------------------------
    * LOAD SESSION CONTEXT
@@ -134,7 +134,7 @@ export default function SettingsPage() {
   /* ----------------------------------
    * TOGGLE AD ACCOUNT
    * ---------------------------------- */
-  const toggleAdAccount = async (id: string) => {
+  const toggleAdAccount = async (id: number) => {
     try {
       setTogglingId(id);
 
