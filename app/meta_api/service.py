@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from uuid import UUID
+from typing import List
 
 import httpx
 from sqlalchemy import select, update
@@ -105,7 +106,7 @@ class MetaOAuthService:
 class MetaAdAccountService:
     """
     Read-only sync of Meta Ad Accounts.
-    USER-ISOLATED + SINGLE SELECT SAFE
+    USER-ISOLATED + MULTI-SELECT SAFE
     """
 
     @staticmethod
@@ -138,13 +139,12 @@ class MetaAdAccountService:
             data = response.json().get("data", [])
 
         processed = 0
-        first_account_id: UUID | None = None
 
         for acct in data:
             meta_account_id = acct["id"]
             account_name = acct.get("name", "")
 
-            # GLOBAL MetaAdAccount (shared metadata only)
+            # GLOBAL MetaAdAccount
             result = await db.execute(
                 select(MetaAdAccount).where(
                     MetaAdAccount.meta_account_id == meta_account_id
@@ -161,10 +161,7 @@ class MetaAdAccountService:
                 db.add(meta_account)
                 await db.flush()
 
-            if first_account_id is None:
-                first_account_id = meta_account.id
-
-            # USER BINDING (STRICT)
+            # USER BINDING
             result = await db.execute(
                 select(UserMetaAdAccount).where(
                     UserMetaAdAccount.user_id == user_id,
@@ -183,36 +180,41 @@ class MetaAdAccountService:
 
             processed += 1
 
-        # auto-select ONLY if user has none selected
-        result = await db.execute(
-            select(UserMetaAdAccount).where(
-                UserMetaAdAccount.user_id == user_id,
-                UserMetaAdAccount.is_selected.is_(True),
-            )
-        )
-        if not result.scalar_one_or_none() and first_account_id:
-            await db.execute(
-                update(UserMetaAdAccount)
-                .where(UserMetaAdAccount.user_id == user_id)
-                .values(is_selected=False)
-            )
-            await db.execute(
-                update(UserMetaAdAccount)
-                .where(
-                    UserMetaAdAccount.user_id == user_id,
-                    UserMetaAdAccount.meta_ad_account_id == first_account_id,
-                )
-                .values(is_selected=True)
-            )
-
         await db.commit()
         return processed
+
+    @staticmethod
+    async def toggle_user_ad_account(
+        *,
+        db: AsyncSession,
+        user_id: UUID,
+        ad_account_id: UUID,
+        is_selected: bool,
+    ) -> None:
+        """
+        Enable / disable a single ad account for a user.
+        MULTI-SELECT allowed.
+        """
+
+        result = await db.execute(
+            update(UserMetaAdAccount)
+            .where(
+                UserMetaAdAccount.user_id == user_id,
+                UserMetaAdAccount.meta_ad_account_id == ad_account_id,
+            )
+            .values(is_selected=is_selected)
+        )
+
+        if result.rowcount == 0:
+            raise RuntimeError("Ad account not found for user")
+
+        await db.commit()
 
 
 class MetaCampaignService:
     """
     Read-only Meta Campaign sync.
-    STRICT: USER + SELECTED AD ACCOUNT ONLY
+    STRICT: USER + ALL SELECTED AD ACCOUNTS
     """
 
     @staticmethod
@@ -233,7 +235,7 @@ class MetaCampaignService:
         if not token:
             raise RuntimeError("Meta account not connected")
 
-        # EXACTLY one selected ad account
+        # ALL selected ad accounts
         result = await db.execute(
             select(MetaAdAccount)
             .join(UserMetaAdAccount)
@@ -241,53 +243,53 @@ class MetaCampaignService:
                 UserMetaAdAccount.user_id == user_id,
                 UserMetaAdAccount.is_selected.is_(True),
             )
-            .limit(1)
         )
-        ad_account = result.scalar_one_or_none()
-        if not ad_account:
+        ad_accounts: List[MetaAdAccount] = result.scalars().all()
+        if not ad_accounts:
             return 0
 
         total = 0
 
         try:
             async with httpx.AsyncClient(timeout=20) as client:
-                response = await client.get(
-                    f"{META_GRAPH_BASE}/{ad_account.meta_account_id}/campaigns",
-                    params={
-                        "access_token": token.access_token,
-                        "fields": "id,name,objective,status",
-                    },
-                )
-                response.raise_for_status()
-
-                for c in response.json().get("data", []):
-                    result = await db.execute(
-                        select(Campaign).where(
-                            Campaign.meta_campaign_id == c["id"],
-                            Campaign.ad_account_id == ad_account.id,
-                        )
+                for ad_account in ad_accounts:
+                    response = await client.get(
+                        f"{META_GRAPH_BASE}/{ad_account.meta_account_id}/campaigns",
+                        params={
+                            "access_token": token.access_token,
+                            "fields": "id,name,objective,status",
+                        },
                     )
-                    campaign = result.scalar_one_or_none()
+                    response.raise_for_status()
 
-                    if not campaign:
-                        db.add(
-                            Campaign(
-                                meta_campaign_id=c["id"],
-                                ad_account_id=ad_account.id,
-                                name=c["name"],
-                                objective=c["objective"],
-                                status=c["status"],
-                                ai_active=False,
-                                created_at=datetime.utcnow(),
+                    for c in response.json().get("data", []):
+                        result = await db.execute(
+                            select(Campaign).where(
+                                Campaign.meta_campaign_id == c["id"],
+                                Campaign.ad_account_id == ad_account.id,
                             )
                         )
-                    else:
-                        campaign.name = c["name"]
-                        campaign.objective = c["objective"]
-                        campaign.status = c["status"]
-                        campaign.last_meta_sync_at = datetime.utcnow()
+                        campaign = result.scalar_one_or_none()
 
-                    total += 1
+                        if not campaign:
+                            db.add(
+                                Campaign(
+                                    meta_campaign_id=c["id"],
+                                    ad_account_id=ad_account.id,
+                                    name=c["name"],
+                                    objective=c["objective"],
+                                    status=c["status"],
+                                    ai_active=False,
+                                    created_at=datetime.utcnow(),
+                                )
+                            )
+                        else:
+                            campaign.name = c["name"]
+                            campaign.objective = c["objective"]
+                            campaign.status = c["status"]
+                            campaign.last_meta_sync_at = datetime.utcnow()
+
+                        total += 1
 
             await db.commit()
             return total
