@@ -27,6 +27,11 @@ async def create_razorpay_order(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
+    """
+    Creates Razorpay order.
+    Idempotent.
+    """
+
     service = BillingService()
 
     try:
@@ -40,7 +45,10 @@ async def create_razorpay_order(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception:
-        raise HTTPException(status_code=500, detail="Unable to create payment order")
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to create payment order",
+        )
 
     return {
         "payment_id": str(payment.id),
@@ -63,6 +71,14 @@ async def verify_razorpay_payment(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
+    """
+    Verifies Razorpay payment.
+
+    IMPORTANT:
+    - Subscription activation happens INSIDE BillingService
+    - Route is logic-free
+    """
+
     service = BillingService()
 
     try:
@@ -75,7 +91,10 @@ async def verify_razorpay_payment(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception:
-        raise HTTPException(status_code=500, detail="Payment verification failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Payment verification failed",
+        )
 
     return {
         "status": payment.status,
@@ -141,6 +160,8 @@ async def download_invoice(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'attachment; filename="{invoice.invoice_number}.pdf"'
+            "Content-Disposition": (
+                f'attachment; filename="{invoice.invoice_number}.pdf"'
+            )
         },
     )
