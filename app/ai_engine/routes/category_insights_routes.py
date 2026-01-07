@@ -14,31 +14,22 @@ from app.ai_engine.models.ai_action_feedback import AIActionFeedback
 
 
 router = APIRouter(
-    prefix="/api/ai",
+    prefix="/ai",
     tags=["AI Category & Feedback"],
 )
 
 
 # =====================================================
-# CATEGORY INSIGHTS (READ-ONLY)
+# CATEGORY INSIGHTS (READ-ONLY — GLOBAL SAFE)
 # =====================================================
 @router.get("/category-insights")
 async def get_category_insights(
     *,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_user),
-    category: str = Query(..., description="Business category"),
-    window: str = Query("90d", description="30d | 90d | lifetime"),
+    category: str = Query(...),
+    window: str = Query("90d"),
 ):
-    """
-    Global category-level performance insights.
-
-    SAFE:
-    - Aggregated
-    - Anonymized
-    - Read-only
-    """
-
     stmt = (
         select(MLCategoryBreakdownStat)
         .where(
@@ -46,8 +37,8 @@ async def get_category_insights(
             MLCategoryBreakdownStat.window_type == window,
         )
         .order_by(
-            MLCategoryBreakdownStat.avg_roas.desc().nullslast(),
             MLCategoryBreakdownStat.confidence_score.desc(),
+            MLCategoryBreakdownStat.sample_size.desc(),
         )
     )
 
@@ -76,7 +67,7 @@ async def get_category_insights(
 
 
 # =====================================================
-# AI ACTION FEEDBACK (WRITE-ONLY)
+# AI ACTION FEEDBACK (STRICT USER + CAMPAIGN SCOPE)
 # =====================================================
 @router.post("/actions/feedback")
 async def submit_ai_feedback(
@@ -89,28 +80,23 @@ async def submit_ai_feedback(
     is_helpful: bool,
     confidence_at_time: float,
 ):
-    """
-    Store user feedback for an AI suggestion.
-
-    - Write-only
-    - Append-only
-    - Used as learning signal
-    """
-
     # -------------------------------------------------
-    # Validate campaign ownership
+    # Validate campaign belongs to user
     # -------------------------------------------------
     result = await db.execute(
-        select(Campaign).where(Campaign.id == campaign_id)
+        select(Campaign).where(
+            Campaign.id == campaign_id,
+            Campaign.owner_user_id == user.id,
+        )
     )
     campaign = result.scalar_one_or_none()
 
     if not campaign:
-        raise HTTPException(status_code=404, detail="Campaign not found")
+        raise HTTPException(
+            status_code=404,
+            detail="Campaign not found or access denied",
+        )
 
-    # -------------------------------------------------
-    # Persist feedback
-    # -------------------------------------------------
     db.add(
         AIActionFeedback(
             user_id=user.id,
@@ -123,5 +109,4 @@ async def submit_ai_feedback(
     )
 
     await db.commit()
-
     return {"status": "ok"}
