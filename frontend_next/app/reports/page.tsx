@@ -13,6 +13,20 @@ import {
 /* ----------------------------------
  * TYPES
  * ---------------------------------- */
+type SessionContext = {
+  user: {
+    id: string;
+    email: string;
+    is_admin: boolean;
+    is_impersonated: boolean;
+  };
+  ad_account: {
+    id: string;
+    name: string;
+    meta_account_id: string;
+  } | null;
+};
+
 type ReportSummary = {
   date: string;
   spend: number;
@@ -29,69 +43,58 @@ type Campaign = {
   name: string;
 };
 
-type AdAccount = {
-  id: string;
-  name: string;
-  is_selected: boolean;
-};
-
 /* ----------------------------------
  * PAGE
  * ---------------------------------- */
 export default function ReportsPage() {
+  const [session, setSession] = useState<SessionContext | null>(null);
+
   /* Filters */
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [objective, setObjective] = useState("");
   const [campaignId, setCampaignId] = useState("");
-  const [selectedAdAccount, setSelectedAdAccount] = useState("");
 
-  const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [data, setData] = useState<ReportSummary[]>([]);
 
-  const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   /* ----------------------------------
-   * LOAD AD ACCOUNTS
+   * LOAD SESSION CONTEXT
    * ---------------------------------- */
-  const loadAdAccounts = async () => {
-    try {
-      const res = await fetch("/api/meta/adaccounts", {
-        credentials: "include",
-        cache: "no-store",
-      });
-
-      if (!res.ok) throw new Error();
-
-      const json = await res.json();
-      setAdAccounts(json ?? []);
-      setMetaConnected(true);
-
-      const selected = json?.find((a: AdAccount) => a.is_selected);
-      if (selected) setSelectedAdAccount(selected.id);
-    } catch {
-      setMetaConnected(false);
+  const loadSession = async () => {
+    const res = await fetch("/session/context", {
+      credentials: "include",
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      setSession(null);
+      return;
     }
+    const json = await res.json();
+    setSession(json);
   };
 
   /* ----------------------------------
-   * LOAD CAMPAIGNS
+   * LOAD CAMPAIGNS (STRICT CONTEXT)
    * ---------------------------------- */
   const loadCampaigns = async () => {
-    if (!selectedAdAccount) {
+    if (!session?.ad_account) {
       setCampaigns([]);
       return;
     }
 
-    const res = await fetch(
-      `/api/campaigns?ad_account_id=${selectedAdAccount}`,
-      { credentials: "include", cache: "no-store" }
-    );
+    const res = await fetch("/campaigns", {
+      credentials: "include",
+      cache: "no-store",
+    });
 
-    if (!res.ok) return;
+    if (!res.ok) {
+      setCampaigns([]);
+      return;
+    }
 
     const json = await res.json();
     setCampaigns(Array.isArray(json) ? json : []);
@@ -101,7 +104,7 @@ export default function ReportsPage() {
    * LOAD REPORT
    * ---------------------------------- */
   const loadReport = async () => {
-    if (!fromDate || !toDate || !selectedAdAccount) return;
+    if (!fromDate || !toDate || !session?.ad_account) return;
 
     try {
       setLoading(true);
@@ -110,15 +113,17 @@ export default function ReportsPage() {
       const params = new URLSearchParams({
         from: fromDate,
         to: toDate,
-        ad_account_id: selectedAdAccount,
       });
 
       if (campaignId) params.append("campaign_id", campaignId);
       if (objective) params.append("objective", objective);
 
       const res = await fetch(
-        `/api/reports/performance?${params.toString()}`,
-        { credentials: "include", cache: "no-store" }
+        `/reports/performance?${params.toString()}`,
+        {
+          credentials: "include",
+          cache: "no-store",
+        }
       );
 
       if (!res.ok) throw new Error("Unable to load reports.");
@@ -134,12 +139,12 @@ export default function ReportsPage() {
   };
 
   useEffect(() => {
-    loadAdAccounts();
+    loadSession();
   }, []);
 
   useEffect(() => {
     loadCampaigns();
-  }, [selectedAdAccount]);
+  }, [session?.ad_account?.id]);
 
   /* ----------------------------------
    * DERIVED METRICS
@@ -160,12 +165,12 @@ export default function ReportsPage() {
   /* ----------------------------------
    * STATES
    * ---------------------------------- */
-  if (metaConnected === false) {
+  if (!session?.ad_account) {
     return (
       <div className="surface p-6">
-        <h2 className="font-medium mb-1">Meta account not connected</h2>
+        <h2 className="font-medium mb-1">No ad account selected</h2>
         <p className="text-sm text-gray-600">
-          Connect Meta Ads to generate performance reports.
+          Connect Meta Ads and select an ad account.
         </p>
       </div>
     );
@@ -176,29 +181,15 @@ export default function ReportsPage() {
    * ---------------------------------- */
   return (
     <div className="space-y-8">
-      {/* HEADER */}
       <div>
         <h1 className="text-xl font-semibold">Reports</h1>
         <p className="text-sm text-gray-500">
-          Performance summaries and trends (read-only)
+          Active account: <strong>{session.ad_account.name}</strong>
         </p>
       </div>
 
       {/* FILTER BAR */}
-      <div className="surface p-4 grid grid-cols-2 lg:grid-cols-7 gap-3 text-sm">
-        <select
-          value={selectedAdAccount}
-          onChange={(e) => setSelectedAdAccount(e.target.value)}
-          className="border rounded px-2 py-1"
-        >
-          <option value="">Select Ad Account</option>
-          {adAccounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-          ))}
-        </select>
-
+      <div className="surface p-4 grid grid-cols-2 lg:grid-cols-6 gap-3 text-sm">
         <input
           type="date"
           value={fromDate}
@@ -238,100 +229,94 @@ export default function ReportsPage() {
 
         <button
           onClick={loadReport}
-          disabled={!fromDate || !toDate || !selectedAdAccount || loading}
+          disabled={!fromDate || !toDate || loading}
           className="btn-primary col-span-2"
         >
           {loading ? "Loading…" : "Generate Report"}
         </button>
       </div>
 
-      {/* ERROR */}
       {error && (
         <div className="text-sm text-red-600 font-medium">
           {error}
         </div>
       )}
 
-      {/* SUMMARY */}
       {data.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="surface p-4">
-            <div className="text-xs text-gray-500">Total Spend</div>
-            <div className="text-lg font-semibold">
-              ₹{totals.spend.toFixed(2)}
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="surface p-4">
+              <div className="text-xs text-gray-500">Total Spend</div>
+              <div className="text-lg font-semibold">
+                ₹{totals.spend.toFixed(2)}
+              </div>
+            </div>
+
+            <div className="surface p-4">
+              <div className="text-xs text-gray-500">
+                Total Conversions
+              </div>
+              <div className="text-lg font-semibold">
+                {totals.conversions}
+              </div>
+            </div>
+
+            <div className="surface p-4">
+              <div className="text-xs text-gray-500">Avg ROAS</div>
+              <div className="text-lg font-semibold">
+                {avgRoas ? avgRoas.toFixed(2) : "—"}
+              </div>
             </div>
           </div>
 
           <div className="surface p-4">
-            <div className="text-xs text-gray-500">
-              Total Conversions
-            </div>
-            <div className="text-lg font-semibold">
-              {totals.conversions}
+            <h2 className="font-medium mb-3">Performance Over Time</h2>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={data}>
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip />
+                  <Line dataKey="spend" name="Spend" />
+                  <Line dataKey="revenue" name="Revenue" />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
           </div>
 
-          <div className="surface p-4">
-            <div className="text-xs text-gray-500">Avg ROAS</div>
-            <div className="text-lg font-semibold">
-              {avgRoas ? avgRoas.toFixed(2) : "—"}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TREND CHART */}
-      {data.length > 0 && (
-        <div className="surface p-4">
-          <h2 className="font-medium mb-3">Performance Over Time</h2>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data}>
-                <XAxis dataKey="date" />
-                <YAxis />
-                <Tooltip />
-                <Line dataKey="spend" name="Spend" />
-                <Line dataKey="revenue" name="Revenue" />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
-
-      {/* TABLE */}
-      {data.length > 0 && (
-        <div className="surface overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="border-b">
-              <tr>
-                <th className="px-3 py-2">Date</th>
-                <th className="px-3 py-2">Spend</th>
-                <th className="px-3 py-2">Conversions</th>
-                <th className="px-3 py-2">Revenue</th>
-                <th className="px-3 py-2">ROAS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((r, i) => (
-                <tr key={i} className="border-b last:border-0">
-                  <td className="px-3 py-2">{r.date}</td>
-                  <td className="px-3 py-2">
-                    ₹{r.spend.toFixed(2)}
-                  </td>
-                  <td className="px-3 py-2">
-                    {r.conversions}
-                  </td>
-                  <td className="px-3 py-2">
-                    ₹{r.revenue.toFixed(2)}
-                  </td>
-                  <td className="px-3 py-2">
-                    {r.roas ? r.roas.toFixed(2) : "—"}
-                  </td>
+          <div className="surface overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="border-b">
+                <tr>
+                  <th className="px-3 py-2">Date</th>
+                  <th className="px-3 py-2">Spend</th>
+                  <th className="px-3 py-2">Conversions</th>
+                  <th className="px-3 py-2">Revenue</th>
+                  <th className="px-3 py-2">ROAS</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {data.map((r, i) => (
+                  <tr key={i} className="border-b last:border-0">
+                    <td className="px-3 py-2">{r.date}</td>
+                    <td className="px-3 py-2">
+                      ₹{r.spend.toFixed(2)}
+                    </td>
+                    <td className="px-3 py-2">
+                      {r.conversions}
+                    </td>
+                    <td className="px-3 py-2">
+                      ₹{r.revenue.toFixed(2)}
+                    </td>
+                    <td className="px-3 py-2">
+                      {r.roas ? r.roas.toFixed(2) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       <div className="text-xs text-gray-400">
