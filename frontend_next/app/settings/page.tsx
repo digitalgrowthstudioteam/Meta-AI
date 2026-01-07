@@ -53,22 +53,20 @@ export default function SettingsPage() {
       const userId = getUserId();
       if (!userId) return;
 
-      const headers = {
-        "X-User-Id": userId,
-      };
+      const headers = { "X-User-Id": userId };
 
       const [accountsRes, subRes, prefRes] = await Promise.all([
-        fetch("/api/meta/adaccounts", {
+        fetch("/meta/adaccounts", {
           credentials: "include",
           cache: "no-store",
           headers,
         }),
-        fetch("/api/billing/subscription", {
+        fetch("/billing/subscription", {
           credentials: "include",
           cache: "no-store",
           headers,
         }),
-        fetch("/api/user/preferences", {
+        fetch("/user/preferences", {
           credentials: "include",
           cache: "no-store",
           headers,
@@ -76,13 +74,11 @@ export default function SettingsPage() {
       ]);
 
       if (accountsRes.ok) {
-        const json = await accountsRes.json();
-        setAdAccounts(Array.isArray(json) ? json : []);
+        setAdAccounts(await accountsRes.json());
       }
 
       if (subRes.ok) {
-        const json = await subRes.json();
-        setSubscription(json ?? null);
+        setSubscription(await subRes.json());
       }
 
       if (prefRes.ok) {
@@ -111,12 +107,10 @@ export default function SettingsPage() {
       const userId = getUserId();
       if (!userId) return;
 
-      const res = await fetch("/api/meta/connect", {
+      const res = await fetch("/meta/connect", {
         credentials: "include",
         cache: "no-store",
-        headers: {
-          "X-User-Id": userId,
-        },
+        headers: { "X-User-Id": userId },
       });
 
       if (!res.ok) throw new Error();
@@ -142,7 +136,7 @@ export default function SettingsPage() {
       const userId = getUserId();
       if (!userId) return;
 
-      await fetch("/api/user/preferences", {
+      await fetch("/user/preferences", {
         method: "POST",
         credentials: "include",
         headers: {
