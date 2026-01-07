@@ -79,7 +79,6 @@ class MetaOAuthService:
             else None
         )
 
-        # deactivate previous
         await db.execute(
             update(MetaOAuthToken)
             .where(
@@ -144,7 +143,6 @@ class MetaAdAccountService:
             meta_account_id = acct["id"]
             account_name = acct.get("name", "")
 
-            # GLOBAL MetaAdAccount
             result = await db.execute(
                 select(MetaAdAccount).where(
                     MetaAdAccount.meta_account_id == meta_account_id
@@ -161,7 +159,6 @@ class MetaAdAccountService:
                 db.add(meta_account)
                 await db.flush()
 
-            # USER BINDING
             result = await db.execute(
                 select(UserMetaAdAccount).where(
                     UserMetaAdAccount.user_id == user_id,
@@ -182,33 +179,6 @@ class MetaAdAccountService:
 
         await db.commit()
         return processed
-
-    @staticmethod
-    async def toggle_user_ad_account(
-        *,
-        db: AsyncSession,
-        user_id: UUID,
-        ad_account_id: UUID,
-        is_selected: bool,
-    ) -> None:
-        """
-        Enable / disable a single ad account for a user.
-        MULTI-SELECT allowed.
-        """
-
-        result = await db.execute(
-            update(UserMetaAdAccount)
-            .where(
-                UserMetaAdAccount.user_id == user_id,
-                UserMetaAdAccount.meta_ad_account_id == ad_account_id,
-            )
-            .values(is_selected=is_selected)
-        )
-
-        if result.rowcount == 0:
-            raise RuntimeError("Ad account not found for user")
-
-        await db.commit()
 
 
 class MetaCampaignService:
@@ -235,7 +205,6 @@ class MetaCampaignService:
         if not token:
             raise RuntimeError("Meta account not connected")
 
-        # ALL selected ad accounts
         result = await db.execute(
             select(MetaAdAccount)
             .join(UserMetaAdAccount)
