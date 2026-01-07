@@ -1,5 +1,6 @@
 from typing import List, Dict
 from datetime import datetime
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -19,11 +20,9 @@ from app.ai_engine.rules.category_strategy_rules import CategoryStrategyRule
 from app.ai_engine.campaign_ai_readiness_service import (
     CampaignAIReadinessService,
 )
-
 from app.ai_engine.services.campaign_vs_benchmark_service import (
     CampaignVsBenchmarkService,
 )
-
 from app.ai_engine.services.user_trust_service import UserTrustService
 
 
@@ -31,20 +30,20 @@ from app.ai_engine.services.user_trust_service import UserTrustService
 # PHASE 21 — CONFIDENCE BANDS (LOCKED)
 # =====================================================
 CONFIDENCE_BANDS = {
-    "LOW": 0.60,       # Below this → suppressed
-    "MEDIUM": 0.75,    # Visible but flagged
-    "HIGH": 0.90,      # Strong recommendation
+    "LOW": 0.60,
+    "MEDIUM": 0.75,
+    "HIGH": 0.90,
 }
 
 
 class AIDecisionRunner:
     """
-    FINAL — Phase 21 Decision Runner (CONFIDENCE-GATED)
+    FINAL — Phase 21 Decision Runner (SESSION-SCOPED)
 
+    - STRICT selected ad account
+    - No user-wide leakage
     - No DB writes
     - No Meta mutation
-    - Hard confidence thresholds
-    - Trust-adjusted + explainable
     """
 
     def __init__(self) -> None:
@@ -57,28 +56,36 @@ class AIDecisionRunner:
             CategoryStrategyRule(),
         ]
 
-    async def run_for_user(
+    # -------------------------------------------------
+    # 🔒 PRIMARY ENTRY — SELECTED AD ACCOUNT ONLY
+    # -------------------------------------------------
+    async def run_for_ad_account(
         self,
         *,
         db: AsyncSession,
-        user_id,
+        ad_account_id: UUID,
     ) -> List[AIActionSet]:
 
-        # -------------------------------------------------
-        # USER TRUST (ONCE PER REQUEST)
-        # -------------------------------------------------
-        user_trust_score, trust_reason = await UserTrustService.get_user_trust_score(
-            db=db,
-            user_id=user_id,
-        )
-
         stmt = select(Campaign).where(
+            Campaign.ad_account_id == ad_account_id,
             Campaign.ai_active.is_(True),
             Campaign.is_archived.is_(False),
         )
 
         result = await db.execute(stmt)
         campaigns: List[Campaign] = result.scalars().all()
+
+        if not campaigns:
+            return []
+
+        # -------------------------------------------------
+        # USER TRUST (DERIVED FROM CAMPAIGN OWNER)
+        # -------------------------------------------------
+        user_id = campaigns[0].owner_user_id
+        user_trust_score, trust_reason = await UserTrustService.get_user_trust_score(
+            db=db,
+            user_id=user_id,
+        )
 
         ai_service = CampaignAIReadinessService(db)
         benchmark_service = CampaignVsBenchmarkService(db)
@@ -87,9 +94,9 @@ class AIDecisionRunner:
         now = datetime.utcnow()
 
         for campaign in campaigns:
-            # -------------------------------------------------
+            # ---------------------------------------------
             # HARD EXECUTION LOCKS
-            # -------------------------------------------------
+            # ---------------------------------------------
             if campaign.ai_execution_locked:
                 continue
 
@@ -99,9 +106,9 @@ class AIDecisionRunner:
             if campaign.ai_execution_window_end and now > campaign.ai_execution_window_end:
                 continue
 
-            # -------------------------------------------------
+            # ---------------------------------------------
             # AI CONTEXT
-            # -------------------------------------------------
+            # ---------------------------------------------
             ai_context: Dict = await ai_service.get_campaign_ai_score(
                 campaign_id=str(campaign.id),
                 short_window="7d",
@@ -125,9 +132,6 @@ class AIDecisionRunner:
                 )
 
                 for action in rule_actions:
-                    # -----------------------------------------
-                    # APPLY USER TRUST
-                    # -----------------------------------------
                     base_score = action.confidence.score
                     adjusted_score = round(
                         min(
@@ -137,21 +141,12 @@ class AIDecisionRunner:
                         2,
                     )
 
-                    # -----------------------------------------
-                    # CONFIDENCE BAND ASSIGNMENT
-                    # -----------------------------------------
                     if adjusted_score >= CONFIDENCE_BANDS["HIGH"]:
                         band = "HIGH"
                     elif adjusted_score >= CONFIDENCE_BANDS["MEDIUM"]:
                         band = "MEDIUM"
                     else:
-                        band = "LOW"
-
-                    # -----------------------------------------
-                    # HARD THRESHOLD ENFORCEMENT
-                    # -----------------------------------------
-                    if band == "LOW":
-                        continue  # suppressed completely
+                        continue  # 🔕 suppress LOW confidence
 
                     action.confidence.score = adjusted_score
                     action.confidence.band = band
