@@ -13,10 +13,18 @@ type Campaign = {
   ai_active?: boolean;
 };
 
-type AdAccount = {
-  id: string;          // ✅ UUID (SERVER TRUTH)
-  name: string;
-  is_selected: boolean;
+type SessionContext = {
+  user: {
+    id: string;
+    email: string;
+    is_admin: boolean;
+    is_impersonated: boolean;
+  };
+  ad_account: {
+    id: string;
+    name: string;
+    meta_account_id: string;
+  } | null;
 };
 
 /* -----------------------------------
@@ -24,10 +32,8 @@ type AdAccount = {
  * ----------------------------------- */
 export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
-  const [selectedAdAccount, setSelectedAdAccount] = useState<string>("");
+  const [session, setSession] = useState<SessionContext | null>(null);
 
-  const [metaConnected, setMetaConnected] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -43,47 +49,28 @@ export default function CampaignsPage() {
   const [pageSize, setPageSize] = useState(10);
 
   /* -----------------------------------
-   * LOAD AD ACCOUNTS
+   * LOAD SESSION CONTEXT (SINGLE SOURCE)
    * ----------------------------------- */
-  const loadAdAccounts = async () => {
-    try {
-      const res = await fetch("/api/meta/adaccounts", {
-        credentials: "include",
-        cache: "no-store",
-      });
-
-      if (!res.ok) throw new Error();
-
-      const data: AdAccount[] = await res.json();
-      setAdAccounts(data);
-      setMetaConnected(true);
-
-      const selected = data.find((a) => a.is_selected);
-      if (selected) setSelectedAdAccount(selected.id);
-    } catch {
-      setMetaConnected(false);
-    }
-  };
-
-  /* -----------------------------------
-   * SELECT AD ACCOUNT (UUID ONLY)
-   * ----------------------------------- */
-  const selectAdAccount = async (adAccountId: string) => {
-    setSelectedAdAccount(adAccountId);
-
-    await fetch(`/api/meta/adaccounts/select?ad_account_id=${adAccountId}`, {
-      method: "POST",
+  const loadSession = async () => {
+    const res = await fetch("/session/context", {
       credentials: "include",
+      cache: "no-store",
     });
 
-    await loadCampaigns();
+    if (!res.ok) {
+      setSession(null);
+      return;
+    }
+
+    const data = await res.json();
+    setSession(data);
   };
 
   /* -----------------------------------
-   * LOAD CAMPAIGNS
+   * LOAD CAMPAIGNS (STRICT CONTEXT)
    * ----------------------------------- */
   const loadCampaigns = async () => {
-    if (!selectedAdAccount) {
+    if (!session?.ad_account) {
       setCampaigns([]);
       setLoading(false);
       return;
@@ -102,7 +89,7 @@ export default function CampaignsPage() {
       if (aiFilter) params.append("ai_active", aiFilter);
       if (objectiveFilter) params.append("objective", objectiveFilter);
 
-      const res = await fetch(`/api/campaigns?${params}`, {
+      const res = await fetch(`/campaigns?${params}`, {
         credentials: "include",
         cache: "no-store",
       });
@@ -118,14 +105,17 @@ export default function CampaignsPage() {
     }
   };
 
+  /* -----------------------------------
+   * EFFECTS
+   * ----------------------------------- */
   useEffect(() => {
-    loadAdAccounts();
+    loadSession();
   }, []);
 
   useEffect(() => {
     loadCampaigns();
   }, [
-    selectedAdAccount,
+    session?.ad_account?.id,
     statusFilter,
     aiFilter,
     objectiveFilter,
@@ -137,7 +127,7 @@ export default function CampaignsPage() {
    * META CONNECT
    * ----------------------------------- */
   const connectMeta = async () => {
-    const res = await fetch("/api/meta/connect", {
+    const res = await fetch("/meta/connect", {
       credentials: "include",
     });
     const data = await res.json();
@@ -149,7 +139,7 @@ export default function CampaignsPage() {
    * ----------------------------------- */
   const syncCampaigns = async () => {
     setSyncing(true);
-    await fetch("/api/campaigns/sync", {
+    await fetch("/campaigns/sync", {
       method: "POST",
       credentials: "include",
     });
@@ -173,7 +163,7 @@ export default function CampaignsPage() {
     );
 
     try {
-      const res = await fetch(`/api/campaigns/${campaign.id}/ai-toggle`, {
+      const res = await fetch(`/campaigns/${campaign.id}/ai-toggle`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -198,12 +188,12 @@ export default function CampaignsPage() {
   /* -----------------------------------
    * RENDER
    * ----------------------------------- */
-  if (metaConnected === false) {
+  if (!session?.ad_account) {
     return (
       <div className="space-y-4 max-w-xl">
         <h1 className="text-xl font-semibold">Campaigns</h1>
         <p className="text-sm text-gray-600">
-          Connect Meta Ads to view campaigns.
+          Connect Meta Ads and select an ad account.
         </p>
         <button onClick={connectMeta} className="btn-primary">
           Connect Meta Ads
@@ -217,25 +207,12 @@ export default function CampaignsPage() {
       <div>
         <h1 className="text-xl font-semibold">Campaigns</h1>
         <p className="text-sm text-gray-500">
-          One Meta ad account active at a time
+          Active account: <strong>{session.ad_account.name}</strong>
         </p>
       </div>
 
       {/* FILTER BAR */}
-      <div className="surface p-4 grid grid-cols-2 lg:grid-cols-5 gap-3 text-sm">
-        <select
-          value={selectedAdAccount}
-          onChange={(e) => selectAdAccount(e.target.value)}
-          className="border rounded px-2 py-1"
-        >
-          <option value="">Select Ad Account</option>
-          {adAccounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-          ))}
-        </select>
-
+      <div className="surface p-4 grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
@@ -268,7 +245,7 @@ export default function CampaignsPage() {
 
         <button
           onClick={syncCampaigns}
-          disabled={syncing || !selectedAdAccount}
+          disabled={syncing}
           className="btn-secondary"
         >
           {syncing ? "Syncing…" : "Sync"}
@@ -278,7 +255,7 @@ export default function CampaignsPage() {
       {loading && <div>Loading campaigns…</div>}
       {error && <div className="text-red-600">{error}</div>}
 
-      {!loading && campaigns.length === 0 && selectedAdAccount && (
+      {!loading && campaigns.length === 0 && (
         <div className="empty-state">
           <p className="empty-state-title mb-2">No campaigns found</p>
         </div>
