@@ -5,6 +5,9 @@ import { ReactNode, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 
+/* ----------------------------------
+ * TYPES
+ * ---------------------------------- */
 type SessionContext = {
   user: {
     id: string;
@@ -19,6 +22,9 @@ type SessionContext = {
   } | null;
 };
 
+/* ----------------------------------
+ * ROOT LAYOUT
+ * ---------------------------------- */
 export default function RootLayout({
   children,
 }: {
@@ -27,45 +33,61 @@ export default function RootLayout({
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [session, setSession] = useState<SessionContext | null>(null);
+  const [sessionLoaded, setSessionLoaded] = useState(false);
 
   // --------------------------------------------------
-  // LOAD GLOBAL SESSION CONTEXT (ON EVERY NAV)
+  // LOAD SESSION CONTEXT (ONCE)
   // --------------------------------------------------
   useEffect(() => {
-    if (pathname === "/" || pathname === "/login") return;
+    if (pathname === "/" || pathname === "/login") {
+      setSessionLoaded(true);
+      return;
+    }
 
     (async () => {
       try {
-        const res = await fetch("/session/context", {
+        const res = await fetch("/api/session/context", {
           credentials: "include",
           cache: "no-store",
         });
+
         if (!res.ok) {
           setSession(null);
-          return;
+        } else {
+          setSession(await res.json());
         }
-        const json = await res.json();
-        setSession(json);
       } catch {
         setSession(null);
+      } finally {
+        setSessionLoaded(true);
       }
     })();
-  }, [pathname]);
+  }, []);
 
   const exitImpersonation = () => {
-    sessionStorage.removeItem("impersonate_active");
-    sessionStorage.removeItem("impersonate_user_id");
-    sessionStorage.removeItem("impersonate_email");
+    sessionStorage.clear();
     window.location.reload();
   };
 
   // --------------------------------------------------
-  // PUBLIC PAGES
+  // PUBLIC PAGES (NO APP CHROME)
   // --------------------------------------------------
   if (pathname === "/" || pathname === "/login") {
     return (
       <html lang="en">
         <body className="bg-slate-50 text-gray-900">{children}</body>
+      </html>
+    );
+  }
+
+  if (!sessionLoaded) {
+    return (
+      <html lang="en">
+        <body className="bg-amber-50 text-gray-900">
+          <div className="p-6 text-sm text-gray-500">
+            Loading application…
+          </div>
+        </body>
       </html>
     );
   }
@@ -151,7 +173,9 @@ export default function RootLayout({
               <div className="bg-yellow-100 border-b border-yellow-300 px-4 py-2 flex items-center justify-between text-sm">
                 <div className="text-yellow-900">
                   🔒 Viewing as{" "}
-                  <span className="font-medium">{session.user.email}</span>
+                  <span className="font-medium">
+                    {session.user.email}
+                  </span>
                 </div>
                 <button
                   onClick={exitImpersonation}
@@ -162,7 +186,7 @@ export default function RootLayout({
               </div>
             )}
 
-            {/* ACTIVE AD ACCOUNT BANNER */}
+            {/* ACTIVE AD ACCOUNT */}
             {session?.ad_account && (
               <div className="bg-white border-b px-4 py-2 text-xs text-gray-600">
                 Active Ad Account:{" "}
@@ -192,10 +216,9 @@ export default function RootLayout({
   );
 }
 
-/* -------------------------------------------------- */
-/* COMPONENTS */
-/* -------------------------------------------------- */
-
+/* ----------------------------------
+ * COMPONENTS
+ * ---------------------------------- */
 function SectionLabel({ label }: { label: string }) {
   return (
     <div className="px-2 pt-4 pb-1 text-xs font-medium text-gray-400 uppercase tracking-wide">
