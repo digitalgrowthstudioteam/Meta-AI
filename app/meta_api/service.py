@@ -105,7 +105,7 @@ class MetaOAuthService:
 class MetaAdAccountService:
     """
     Read-only sync of Meta Ad Accounts.
-    SINGLE-SELECT SAFE
+    USER-ISOLATED + SINGLE SELECT SAFE
     """
 
     @staticmethod
@@ -144,6 +144,7 @@ class MetaAdAccountService:
             meta_account_id = acct["id"]
             account_name = acct.get("name", "")
 
+            # GLOBAL MetaAdAccount (shared metadata only)
             result = await db.execute(
                 select(MetaAdAccount).where(
                     MetaAdAccount.meta_account_id == meta_account_id
@@ -163,6 +164,7 @@ class MetaAdAccountService:
             if first_account_id is None:
                 first_account_id = meta_account.id
 
+            # USER BINDING (STRICT)
             result = await db.execute(
                 select(UserMetaAdAccount).where(
                     UserMetaAdAccount.user_id == user_id,
@@ -181,7 +183,7 @@ class MetaAdAccountService:
 
             processed += 1
 
-        # auto-select ONLY if none selected yet
+        # auto-select ONLY if user has none selected
         result = await db.execute(
             select(UserMetaAdAccount).where(
                 UserMetaAdAccount.user_id == user_id,
@@ -210,7 +212,7 @@ class MetaAdAccountService:
 class MetaCampaignService:
     """
     Read-only Meta Campaign sync.
-    STRICT: ONLY SELECTED AD ACCOUNT
+    STRICT: USER + SELECTED AD ACCOUNT ONLY
     """
 
     @staticmethod
@@ -231,7 +233,7 @@ class MetaCampaignService:
         if not token:
             raise RuntimeError("Meta account not connected")
 
-        # 🚨 HARD RULE: exactly ONE selected ad account
+        # EXACTLY one selected ad account
         result = await db.execute(
             select(MetaAdAccount)
             .join(UserMetaAdAccount)
