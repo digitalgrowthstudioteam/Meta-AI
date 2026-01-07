@@ -46,13 +46,13 @@ export default function CampaignsPage() {
 
   /* Pagination */
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize] = useState(10);
 
   /* -----------------------------------
    * LOAD SESSION CONTEXT (SINGLE SOURCE)
    * ----------------------------------- */
   const loadSession = async () => {
-    const res = await fetch("/session/context", {
+    const res = await fetch("/api/session/context", {
       credentials: "include",
       cache: "no-store",
     });
@@ -89,7 +89,7 @@ export default function CampaignsPage() {
       if (aiFilter) params.append("ai_active", aiFilter);
       if (objectiveFilter) params.append("objective", objectiveFilter);
 
-      const res = await fetch(`/campaigns?${params}`, {
+      const res = await fetch(`/api/campaigns?${params}`, {
         credentials: "include",
         cache: "no-store",
       });
@@ -120,16 +120,17 @@ export default function CampaignsPage() {
     aiFilter,
     objectiveFilter,
     page,
-    pageSize,
   ]);
 
   /* -----------------------------------
    * META CONNECT
    * ----------------------------------- */
   const connectMeta = async () => {
-    const res = await fetch("/meta/connect", {
+    const res = await fetch("/api/meta/connect", {
       credentials: "include",
+      cache: "no-store",
     });
+
     const data = await res.json();
     if (data?.redirect_url) window.location.href = data.redirect_url;
   };
@@ -139,9 +140,10 @@ export default function CampaignsPage() {
    * ----------------------------------- */
   const syncCampaigns = async () => {
     setSyncing(true);
-    await fetch("/campaigns/sync", {
+    await fetch("/api/campaigns/sync", {
       method: "POST",
       credentials: "include",
+      cache: "no-store",
     });
     await loadCampaigns();
     setSyncing(false);
@@ -163,12 +165,15 @@ export default function CampaignsPage() {
     );
 
     try {
-      const res = await fetch(`/campaigns/${campaign.id}/ai-toggle`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enable: nextValue }),
-      });
+      const res = await fetch(
+        `/api/campaigns/${campaign.id}/ai-toggle`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enable: nextValue }),
+        }
+      );
 
       if (!res.ok) throw new Error();
     } catch {
