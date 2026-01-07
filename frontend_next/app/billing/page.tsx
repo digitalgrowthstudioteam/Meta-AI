@@ -5,6 +5,20 @@ import { useEffect, useState } from "react";
 /* ----------------------------------
  * TYPES
  * ---------------------------------- */
+type SessionContext = {
+  user: {
+    id: string;
+    email: string;
+    is_admin: boolean;
+    is_impersonated: boolean;
+  };
+  ad_account: {
+    id: string;
+    name: string;
+    meta_account_id: string;
+  } | null;
+};
+
 type PlanInfo = {
   plan_name: string;
   plan_code: string;
@@ -19,8 +33,6 @@ type Invoice = {
   amount: number;
   currency: string;
   status: "paid" | "pending" | "failed";
-  period_from: string | null;
-  period_to: string | null;
   created_at: string;
   download_url?: string | null;
 };
@@ -29,18 +41,37 @@ type Invoice = {
  * PAGE
  * ---------------------------------- */
 export default function BillingPage() {
+  const [session, setSession] = useState<SessionContext | null>(null);
   const [plan, setPlan] = useState<PlanInfo | null>(null);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
+
+  /* ----------------------------------
+   * LOAD SESSION CONTEXT
+   * ---------------------------------- */
+  const loadSession = async () => {
+    const res = await fetch("/api/session/context", {
+      credentials: "include",
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      setSession(null);
+      return;
+    }
+
+    const json = await res.json();
+    setSession(json);
+  };
 
   /* ----------------------------------
    * LOAD BILLING DATA
    * ---------------------------------- */
   const loadBilling = async () => {
     try {
-      setLoading(true);
       setError(null);
 
       const [planRes, invoiceRes] = await Promise.all([
@@ -55,13 +86,16 @@ export default function BillingPage() {
       setInvoices(await invoiceRes.json());
     } catch (err: any) {
       setError(err.message || "Unexpected billing error.");
-    } finally {
-      setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadBilling();
+    (async () => {
+      setLoading(true);
+      await loadSession();
+      await loadBilling();
+      setLoading(false);
+    })();
   }, []);
 
   /* ----------------------------------
@@ -111,22 +145,30 @@ export default function BillingPage() {
   /* ----------------------------------
    * STATES
    * ---------------------------------- */
-  if (loading) return <div className="text-sm">Loading billing information…</div>;
-  if (error) return <div className="text-red-600 text-sm">{error}</div>;
+  if (loading) {
+    return <div className="text-sm">Loading billing information…</div>;
+  }
+
+  if (!session) {
+    return (
+      <div className="text-sm text-red-600">
+        Unable to load session.
+      </div>
+    );
+  }
+
+  if (error) {
+    return <div className="text-red-600 text-sm">{error}</div>;
+  }
 
   const usagePct =
     plan && plan.ai_campaign_limit > 0
       ? Math.min(plan.ai_active_campaigns / plan.ai_campaign_limit, 1)
       : 0;
 
-  /* ----------------------------------
-   * HELPERS
-   * ---------------------------------- */
   const statusBadge = (status: Invoice["status"]) => {
-    if (status === "paid")
-      return "bg-green-100 text-green-700";
-    if (status === "pending")
-      return "bg-yellow-100 text-yellow-700";
+    if (status === "paid") return "bg-green-100 text-green-700";
+    if (status === "pending") return "bg-yellow-100 text-yellow-700";
     return "bg-red-100 text-red-700";
   };
 
@@ -135,18 +177,16 @@ export default function BillingPage() {
    * ---------------------------------- */
   return (
     <div className="space-y-8">
-      {/* HEADER */}
       <div>
         <h1 className="text-xl font-semibold text-gray-900">Billing & Plan</h1>
         <p className="text-sm text-gray-500">
-          Subscription details, usage limits, and invoices
+          Subscription details and invoices
         </p>
       </div>
 
-      {/* TOP GRID */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* CURRENT PLAN */}
-        <div className="bg-white border rounded-lg p-6 shadow-sm">
+        <div className="bg-white border rounded-lg p-6">
           <div className="flex justify-between mb-4">
             <h2 className="text-sm font-semibold">Current Plan</h2>
             <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
@@ -154,9 +194,13 @@ export default function BillingPage() {
             </span>
           </div>
 
-          <div className="text-2xl font-semibold">{plan?.plan_name}</div>
+          <div className="text-2xl font-semibold">
+            {plan?.plan_name}
+          </div>
           <div className="mt-2 text-sm text-gray-500">
-            {plan?.expires_at ? `Valid until ${plan.expires_at}` : "No expiry"}
+            {plan?.expires_at
+              ? `Valid until ${plan.expires_at}`
+              : "No expiry"}
           </div>
 
           <button
@@ -169,14 +213,15 @@ export default function BillingPage() {
         </div>
 
         {/* USAGE */}
-        <div className="bg-white border rounded-lg p-6 shadow-sm">
+        <div className="bg-white border rounded-lg p-6">
           <h2 className="text-sm font-semibold mb-4">AI Usage</h2>
 
           <div className="space-y-3">
             <div className="flex justify-between text-sm">
               <span>AI-Active Campaigns</span>
               <span>
-                {plan?.ai_active_campaigns} / {plan?.ai_campaign_limit}
+                {plan?.ai_active_campaigns} /{" "}
+                {plan?.ai_campaign_limit}
               </span>
             </div>
 
@@ -190,7 +235,7 @@ export default function BillingPage() {
         </div>
 
         {/* POLICY */}
-        <div className="bg-white border rounded-lg p-6 shadow-sm">
+        <div className="bg-white border rounded-lg p-6">
           <h2 className="text-sm font-semibold mb-4">Billing Policy</h2>
           <ul className="text-sm text-gray-600 space-y-1">
             <li>• Explicit purchase only</li>
@@ -206,7 +251,7 @@ export default function BillingPage() {
 
         {invoices.length === 0 && (
           <div className="text-sm text-gray-500 bg-white border rounded p-4">
-            No invoices yet. Completed purchases will appear here.
+            No invoices yet.
           </div>
         )}
 
