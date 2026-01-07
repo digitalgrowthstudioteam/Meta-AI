@@ -3,12 +3,12 @@ import type { NextRequest } from "next/server";
 
 /**
  * SINGLE SOURCE OF TRUTH — SESSION CONTEXT
- * This endpoint is used by ALL pages
+ * Used by ALL authenticated pages
  */
 export async function GET(req: NextRequest) {
-  const cookie = req.cookies.get("meta_ai_session");
+  const sessionCookie = req.cookies.get("meta_ai_session")?.value;
 
-  if (!cookie) {
+  if (!sessionCookie) {
     return NextResponse.json(
       { error: "Not authenticated" },
       { status: 401 }
@@ -19,7 +19,8 @@ export async function GET(req: NextRequest) {
     `${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/session-context`,
     {
       headers: {
-        "X-User-Id": cookie.value,
+        // ✅ Forward session token properly
+        Authorization: `Bearer ${sessionCookie}`,
       },
       cache: "no-store",
     }
