@@ -27,7 +27,15 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  return NextResponse.next();
+  /**
+   * 🔒 CRITICAL:
+   * Forward user identity to backend
+   * meta_ai_session = user_id OR user_email
+   */
+  const response = NextResponse.next();
+  response.headers.set("X-User-Id", session.value);
+
+  return response;
 }
 
 export const config = {
