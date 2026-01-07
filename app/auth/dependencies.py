@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, Header
+from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -6,6 +6,7 @@ from app.core.db_session import get_db
 from app.users.models import User
 from app.admin.models import GlobalSettings
 from app.meta_api.models import MetaAdAccount, UserMetaAdAccount
+from app.auth.sessions import get_active_session
 
 
 # =================================================
@@ -28,50 +29,47 @@ async def _get_global_settings(
 
 
 # -------------------------------------------------
-# 🔑 REAL USER RESOLUTION (STRICT — NO FALLBACK)
+# 🔐 COOKIE-BASED USER RESOLUTION (FINAL)
 # -------------------------------------------------
-async def _resolve_real_user(
+async def _resolve_user_from_session(
+    request: Request,
     db: AsyncSession,
-    x_user_id: str | None,
 ) -> User:
-    if not x_user_id:
-        raise HTTPException(status_code=401, detail="Missing user identity")
+    session_token = request.cookies.get("meta_ai_session")
 
-    result = await db.execute(
-        select(User).where(
-            (User.id == x_user_id) | (User.email == x_user_id)
-        )
-    )
-    user = result.scalar_one_or_none()
+    if not session_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
 
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid user")
+    session = await get_active_session(db, session_token=session_token)
 
-    return user
+    if not session:
+        raise HTTPException(status_code=401, detail="Session expired")
+
+    return session.user
 
 
 # -------------------------------------------------
 # CORE USER RESOLVER (WITH ADMIN IMPERSONATION)
 # -------------------------------------------------
-async def _get_current_user_internal(
-    db: AsyncSession,
-    x_user_id: str | None,
-    x_impersonate_user: str | None,
+async def get_current_user(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
 ) -> User:
-    real_user = await _resolve_real_user(db, x_user_id)
+    user = await _resolve_user_from_session(request, db)
 
     # 🔒 MAINTENANCE MODE
     settings = await _get_global_settings(db)
     if settings and settings.maintenance_mode:
-        if real_user.email not in ADMIN_EMAILS:
+        if user.email not in ADMIN_EMAILS:
             raise HTTPException(
                 status_code=503,
                 detail="System under maintenance",
             )
 
-    # 🔑 ADMIN IMPERSONATION
-    if x_impersonate_user:
-        if real_user.email not in ADMIN_EMAILS:
+    # 🔑 ADMIN IMPERSONATION (HEADER-BASED, OPTIONAL)
+    impersonate_user = request.headers.get("X-Impersonate-User")
+    if impersonate_user:
+        if user.email not in ADMIN_EMAILS:
             raise HTTPException(
                 status_code=403,
                 detail="Impersonation not allowed",
@@ -79,8 +77,8 @@ async def _get_current_user_internal(
 
         result = await db.execute(
             select(User).where(
-                (User.id == x_impersonate_user)
-                | (User.email == x_impersonate_user)
+                (User.id == impersonate_user)
+                | (User.email == impersonate_user)
             )
         )
         target_user = result.scalar_one_or_none()
@@ -92,25 +90,10 @@ async def _get_current_user_internal(
             )
 
         target_user._is_impersonated = True
-        target_user._impersonated_by = real_user.email
+        target_user._impersonated_by = user.email
         return target_user
 
-    return real_user
-
-
-# -------------------------------------------------
-# 🔐 PUBLIC DEPENDENCY: CURRENT USER
-# -------------------------------------------------
-async def get_current_user(
-    db: AsyncSession = Depends(get_db),
-    x_user_id: str | None = Header(default=None),
-    x_impersonate_user: str | None = Header(default=None),
-) -> User:
-    return await _get_current_user_internal(
-        db=db,
-        x_user_id=x_user_id,
-        x_impersonate_user=x_impersonate_user,
-    )
+    return user
 
 
 # -------------------------------------------------
