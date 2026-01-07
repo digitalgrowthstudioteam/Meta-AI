@@ -7,7 +7,7 @@ const nextConfig = {
     return [
       {
         source: "/api/:path*",
-        destination: `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/:path*`,
+        destination: "https://meta-ai.digitalgrowthstudio.in/api/:path*",
       },
     ];
   },
