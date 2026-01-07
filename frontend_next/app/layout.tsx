@@ -156,6 +156,15 @@ export default function RootLayout({
               <NavLink href="/billing" current={pathname === "/billing"}>
                 Billing
               </NavLink>
+
+              {/* ✅ ADDED: BUY CAMPAIGN */}
+              <NavLink
+                href="/buy-campaign"
+                current={pathname === "/buy-campaign"}
+              >
+                Buy Campaign
+              </NavLink>
+
               <NavLink href="/settings" current={pathname === "/settings"}>
                 Settings
               </NavLink>
