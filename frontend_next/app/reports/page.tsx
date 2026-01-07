@@ -65,14 +65,16 @@ export default function ReportsPage() {
    * LOAD SESSION CONTEXT
    * ---------------------------------- */
   const loadSession = async () => {
-    const res = await fetch("/session/context", {
+    const res = await fetch("/api/session/context", {
       credentials: "include",
       cache: "no-store",
     });
+
     if (!res.ok) {
       setSession(null);
       return;
     }
+
     const json = await res.json();
     setSession(json);
   };
@@ -86,7 +88,7 @@ export default function ReportsPage() {
       return;
     }
 
-    const res = await fetch("/campaigns", {
+    const res = await fetch("/api/campaigns", {
       credentials: "include",
       cache: "no-store",
     });
@@ -119,7 +121,7 @@ export default function ReportsPage() {
       if (objective) params.append("objective", objective);
 
       const res = await fetch(
-        `/reports/performance?${params.toString()}`,
+        `/api/reports/performance?${params.toString()}`,
         {
           credentials: "include",
           cache: "no-store",
