@@ -33,15 +33,24 @@ export default function AdminDashboardPage() {
   const [impersonating, setImpersonating] = useState(false);
 
   // ---------------------------------------
-  // LOAD DASHBOARD + USER LIST
+  // LOAD DASHBOARD + USER LIST (ADMIN ONLY)
   // ---------------------------------------
   useEffect(() => {
     const load = async () => {
       try {
-        const [statsRes, usersRes] = await Promise.all([
-          fetch("/api/admin/dashboard", { credentials: "include" }),
-          fetch("/api/admin/users", { credentials: "include" }),
-        ]);
+        const statsRes = await fetch("/api/admin/dashboard", {
+          credentials: "include",
+        });
+
+        // 🔒 HARD GUARD — NOT ADMIN
+        if (statsRes.status === 403) {
+          router.replace("/dashboard");
+          return;
+        }
+
+        const usersRes = await fetch("/api/admin/users", {
+          credentials: "include",
+        });
 
         setStats(await statsRes.json());
         setUsers(await usersRes.json());
@@ -49,8 +58,9 @@ export default function AdminDashboardPage() {
         setLoading(false);
       }
     };
+
     load();
-  }, []);
+  }, [router]);
 
   // ---------------------------------------
   // IMPERSONATE USER
@@ -58,15 +68,8 @@ export default function AdminDashboardPage() {
   const impersonate = () => {
     if (!selectedUser) return;
 
-    // Store impersonation target (session-scoped)
-    sessionStorage.setItem(
-      "impersonate_user",
-      selectedUser
-    );
-
+    sessionStorage.setItem("impersonate_user", selectedUser);
     setImpersonating(true);
-
-    // Redirect to normal dashboard
     router.push("/dashboard");
   };
 
@@ -88,7 +91,6 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="space-y-8">
-      {/* HEADER */}
       <div>
         <h1 className="text-lg font-semibold text-gray-900">
           Admin Dashboard
@@ -98,7 +100,6 @@ export default function AdminDashboardPage() {
         </p>
       </div>
 
-      {/* IMPERSONATION PANEL */}
       <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
         <div className="text-sm font-medium text-amber-900">
           View as User (Read-only)
@@ -132,7 +133,6 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* STATUS */}
       <div className="flex items-center gap-2">
         <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-700">
           System OK
@@ -145,7 +145,6 @@ export default function AdminDashboardPage() {
         )}
       </div>
 
-      {/* METRICS GRID */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Metric label="Total Users" value={stats.users} />
         <Metric
@@ -176,10 +175,6 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
-
-/* ---------------------------------- */
-/* COMPONENTS */
-/* ---------------------------------- */
 
 function Metric({
   label,
