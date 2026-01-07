@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from uuid import UUID
 from datetime import date
 
@@ -45,7 +46,7 @@ def require_admin(user: User):
 
 
 # =========================
-# PHASE 14.2 — ADMIN DASHBOARD
+# ADMIN DASHBOARD
 # =========================
 @router.get("/dashboard")
 async def get_admin_dashboard(
@@ -57,16 +58,39 @@ async def get_admin_dashboard(
 
 
 # =========================
-# PHASE 14.4.3 — GLOBAL SETTINGS
+# ADMIN USERS (REQUIRED)
+# =========================
+@router.get("/users")
+async def list_users(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+
+    result = await db.execute(
+        select(User).order_by(User.created_at.desc())
+    )
+    users = result.scalars().all()
+
+    return [
+        {
+            "id": str(u.id),
+            "email": u.email,
+            "role": u.role,
+            "created_at": u.created_at.isoformat(),
+        }
+        for u in users
+    ]
+
+
+# =========================
+# GLOBAL SETTINGS
 # =========================
 @router.get("/settings")
 async def get_global_settings(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
-    """
-    Read global system settings (admin-only).
-    """
     require_admin(current_user)
     settings = await AdminOverrideService.get_global_settings(db=db)
 
@@ -88,9 +112,6 @@ async def update_global_settings(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
-    """
-    Update global system settings (admin-only, audited).
-    """
     require_admin(current_user)
 
     settings = await AdminOverrideService.update_global_settings(
@@ -144,7 +165,7 @@ async def list_overrides(
 
 
 # =========================
-# PHASE 10.4 — ADMIN ROLLBACK
+# ADMIN ROLLBACK
 # =========================
 @router.post("/campaigns/{action_log_id}/rollback")
 async def rollback_campaign_action(
@@ -168,41 +189,7 @@ async def rollback_campaign_action(
 
 
 # =========================
-# PHASE 11.4 — MANUAL CAMPAIGN PURCHASE / RENEWAL
-# =========================
-@router.post("/campaigns/{campaign_id}/manual-grant")
-async def grant_or_renew_manual_campaign(
-    campaign_id: UUID,
-    valid_from: date,
-    valid_till: date,
-    price_paid: float,
-    plan_label: str,
-    reason: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_user),
-):
-    require_admin(current_user)
-
-    campaign = await AdminOverrideService.grant_or_renew_manual_campaign(
-        db=db,
-        campaign_id=campaign_id,
-        admin_user_id=current_user.id,
-        valid_from=valid_from,
-        valid_till=valid_till,
-        price_paid=price_paid,
-        plan_label=plan_label,
-        reason=reason,
-    )
-
-    return {
-        "status": "manual_campaign_active",
-        "campaign_id": str(campaign.id),
-        "valid_till": str(campaign.manual_valid_till),
-    }
-
-
-# =========================
-# PHASE 12.3 — SUBSCRIPTION EXPIRY CRON TRIGGER
+# SUBSCRIPTION EXPIRY CRON
 # =========================
 @router.post("/cron/subscription-expiry")
 async def run_subscription_expiry_cron(
@@ -217,9 +204,9 @@ async def run_subscription_expiry_cron(
     }
 
 
-# =====================================================
-# PHASE 13 — READ-ONLY ADMIN AUDIT APIs
-# =====================================================
+# =========================
+# AUDIT APIs (READ-ONLY)
+# =========================
 @router.get("/audit/actions")
 async def list_campaign_action_logs(
     *,
