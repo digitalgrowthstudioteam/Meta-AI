@@ -1,7 +1,7 @@
 "use client";
 
-import { ReactNode } from "react";
-import { usePathname } from "next/navigation";
+import { ReactNode, useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 
 export default function AdminLayout({
   children,
@@ -9,6 +9,14 @@ export default function AdminLayout({
   children: ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
+
+  // 🔒 Force /admin → /admin/dashboard
+  useEffect(() => {
+    if (pathname === "/admin") {
+      router.replace("/admin/dashboard");
+    }
+  }, [pathname, router]);
 
   return (
     <div className="space-y-6">
