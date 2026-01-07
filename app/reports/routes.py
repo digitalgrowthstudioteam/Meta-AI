@@ -1,11 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
+from uuid import UUID
 
 from app.core.db_session import get_db
-from app.auth.dependencies import get_current_user
-from app.users.models import User
-from app.meta_api.models import UserMetaAdAccount
+from app.auth.dependencies import get_session_context
 from app.campaigns.models import Campaign
 
 
@@ -13,25 +12,16 @@ router = APIRouter(prefix="/reports", tags=["Reports"])
 
 
 # ---------------------------------------------------------
-# REPORTS OVERVIEW — USER + SELECTED AD ACCOUNT ONLY
+# REPORTS OVERVIEW — STRICT SESSION CONTEXT
 # ---------------------------------------------------------
 @router.get("/overview")
 async def reports_overview(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    session: dict = Depends(get_session_context),
 ):
-    selected_account = (
-        await db.execute(
-            select(UserMetaAdAccount)
-            .where(
-                UserMetaAdAccount.user_id == current_user.id,
-                UserMetaAdAccount.is_selected.is_(True),
-            )
-            .limit(1)
-        )
-    ).scalar_one_or_none()
+    ad_account = session["ad_account"]
 
-    if not selected_account:
+    if not ad_account:
         return {
             "status": "ok",
             "data": {
@@ -42,10 +32,12 @@ async def reports_overview(
             },
         }
 
+    ad_account_id = UUID(ad_account["id"])
+
     result = await db.execute(
         select(Campaign)
         .where(
-            Campaign.ad_account_id == selected_account.meta_ad_account_id,
+            Campaign.ad_account_id == ad_account_id,
             Campaign.is_archived.is_(False),
         )
     )
@@ -69,31 +61,24 @@ async def reports_overview(
 
 
 # ---------------------------------------------------------
-# CAMPAIGN REPORTS — STRICT ACCOUNT SCOPE
+# CAMPAIGN REPORTS — STRICT SESSION CONTEXT
 # ---------------------------------------------------------
 @router.get("/campaigns")
 async def reports_campaigns(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    session: dict = Depends(get_session_context),
 ):
-    selected_account = (
-        await db.execute(
-            select(UserMetaAdAccount)
-            .where(
-                UserMetaAdAccount.user_id == current_user.id,
-                UserMetaAdAccount.is_selected.is_(True),
-            )
-            .limit(1)
-        )
-    ).scalar_one_or_none()
+    ad_account = session["ad_account"]
 
-    if not selected_account:
+    if not ad_account:
         return {"status": "ok", "campaigns": []}
+
+    ad_account_id = UUID(ad_account["id"])
 
     result = await db.execute(
         select(Campaign)
         .where(
-            Campaign.ad_account_id == selected_account.meta_ad_account_id,
+            Campaign.ad_account_id == ad_account_id,
             Campaign.is_archived.is_(False),
         )
     )
@@ -102,7 +87,7 @@ async def reports_campaigns(
         "status": "ok",
         "campaigns": [
             {
-                "id": c.id,
+                "id": str(c.id),
                 "name": c.name,
                 "status": c.status,
                 "objective": c.objective,
@@ -118,7 +103,7 @@ async def reports_campaigns(
 # ---------------------------------------------------------
 @router.get("/performance")
 async def reports_performance(
-    current_user: User = Depends(get_current_user),
+    session: dict = Depends(get_session_context),
 ):
     return {
         "status": "ok",
