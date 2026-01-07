@@ -5,6 +5,7 @@ from sqlalchemy import select
 from app.core.db_session import get_db
 from app.users.models import User
 from app.admin.models import GlobalSettings
+from app.meta_api.models import MetaAdAccount, UserMetaAdAccount
 
 
 # =================================================
@@ -27,23 +28,14 @@ async def _get_global_settings(
 
 
 # -------------------------------------------------
-# 🔑 REAL USER RESOLUTION (NO DEV MODE)
+# 🔑 REAL USER RESOLUTION (HEADER-BASED)
 # -------------------------------------------------
 async def _resolve_real_user(
     db: AsyncSession,
     x_user_id: str | None,
 ) -> User:
-    """
-    TEMP AUTH MODE (SAFE):
-    - User must be explicitly resolved
-    - No global fallback
-    """
-
     if not x_user_id:
-        raise HTTPException(
-            status_code=401,
-            detail="Missing user identity",
-        )
+        raise HTTPException(status_code=401, detail="Missing user identity")
 
     result = await db.execute(
         select(User).where(
@@ -53,16 +45,13 @@ async def _resolve_real_user(
     user = result.scalar_one_or_none()
 
     if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid user",
-        )
+        raise HTTPException(status_code=401, detail="Invalid user")
 
     return user
 
 
 # -------------------------------------------------
-# CORE USER RESOLVER (INTERNAL ONLY)
+# CORE USER RESOLVER (WITH IMPERSONATION)
 # -------------------------------------------------
 async def _get_current_user_internal(
     db: AsyncSession,
@@ -110,7 +99,7 @@ async def _get_current_user_internal(
 
 
 # -------------------------------------------------
-# 🔑 PUBLIC DEPENDENCIES
+# 🔐 PUBLIC DEPENDENCY: CURRENT USER
 # -------------------------------------------------
 async def get_current_user(
     db: AsyncSession = Depends(get_db),
@@ -124,6 +113,54 @@ async def get_current_user(
     )
 
 
+# -------------------------------------------------
+# 🌍 SINGLE SOURCE OF TRUTH — SESSION CONTEXT
+# -------------------------------------------------
+async def get_session_context(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """
+    GLOBAL CONTEXT:
+    - Current user
+    - Selected Meta ad account (ONE only)
+    """
+
+    result = await db.execute(
+        select(MetaAdAccount)
+        .join(
+            UserMetaAdAccount,
+            UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
+        )
+        .where(
+            UserMetaAdAccount.user_id == user.id,
+            UserMetaAdAccount.is_selected.is_(True),
+        )
+    )
+    ad_account = result.scalar_one_or_none()
+
+    return {
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "is_admin": user.email in ADMIN_EMAILS,
+            "is_impersonated": getattr(user, "_is_impersonated", False),
+        },
+        "ad_account": (
+            {
+                "id": str(ad_account.id),
+                "name": ad_account.account_name,
+                "meta_account_id": ad_account.meta_account_id,
+            }
+            if ad_account
+            else None
+        ),
+    }
+
+
+# -------------------------------------------------
+# 🔒 ROLE GUARDS
+# -------------------------------------------------
 async def require_user(
     user: User = Depends(get_current_user),
 ) -> User:
@@ -153,6 +190,6 @@ async def forbid_impersonated_writes(
 
 
 # -------------------------------------------------
-# 🔁 BACKWARD-COMPAT (DO NOT REMOVE)
+# 🔁 BACKWARD COMPAT (DO NOT REMOVE)
 # -------------------------------------------------
 require_admin_user = require_admin
