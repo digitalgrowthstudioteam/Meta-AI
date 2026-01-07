@@ -1,6 +1,5 @@
 import uuid
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
@@ -18,7 +17,11 @@ from app.meta_api.service import (
     MetaCampaignService,
 )
 from app.meta_api.schemas import MetaConnectResponse
-from app.meta_api.models import MetaOAuthState, MetaAdAccount, UserMetaAdAccount
+from app.meta_api.models import (
+    MetaOAuthState,
+    MetaAdAccount,
+    UserMetaAdAccount,
+)
 
 router = APIRouter(prefix="/meta", tags=["Meta"])
 
@@ -85,7 +88,7 @@ async def meta_oauth_callback(
 
 
 # =========================================================
-# LIST META AD ACCOUNTS (MULTI-SELECT READY)
+# LIST META AD ACCOUNTS (MULTI-SELECT)
 # =========================================================
 @router.get("/adaccounts")
 async def list_meta_ad_accounts(
@@ -109,16 +112,16 @@ async def list_meta_ad_accounts(
 
     return [
         {
-            "id": r.id,
-            "name": r.account_name,
-            "is_selected": r.is_selected,
+            "id": row.id,
+            "name": row.account_name,
+            "is_selected": row.is_selected,
         }
-        for r in result.all()
+        for row in result.all()
     ]
 
 
 # =========================================================
-# TOGGLE META AD ACCOUNT (MULTI SELECT)
+# TOGGLE META AD ACCOUNT (MULTI-SELECT FIXED)
 # =========================================================
 @router.post("/adaccounts/{ad_account_id}/toggle")
 async def toggle_meta_ad_account(
@@ -138,11 +141,21 @@ async def toggle_meta_ad_account(
     if not link:
         raise HTTPException(status_code=404, detail="Ad account not found")
 
-    # 🔁 Toggle selection
-    link.is_selected = not link.is_selected
+    # Toggle state
+    new_state = not link.is_selected
+
+    await db.execute(
+        update(UserMetaAdAccount)
+        .where(
+            UserMetaAdAccount.user_id == user.id,
+            UserMetaAdAccount.meta_ad_account_id == ad_account_id,
+        )
+        .values(is_selected=new_state)
+    )
+
     await db.commit()
 
-    # 🔄 Sync campaigns for ALL active ad accounts
+    # Sync campaigns for ALL selected ad accounts
     await MetaCampaignService.sync_campaigns_for_user(
         db=db,
         user_id=user.id,
@@ -151,12 +164,12 @@ async def toggle_meta_ad_account(
     return {
         "status": "toggled",
         "ad_account_id": str(ad_account_id),
-        "is_selected": link.is_selected,
+        "is_selected": new_state,
     }
 
 
 # =========================================================
-# LEGACY: SINGLE SELECT (DEPRECATED, KEEP FOR SAFETY)
+# LEGACY: SINGLE SELECT (DEPRECATED – KEEP)
 # =========================================================
 @router.post("/adaccounts/select")
 async def select_meta_ad_account(
