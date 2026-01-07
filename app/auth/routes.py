@@ -4,34 +4,32 @@ Auth Routes
 - /auth/verify
 - /auth/logout
 - /auth/me
+- /session/context   ✅ SINGLE SOURCE OF TRUTH
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Form, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Form, Query, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db_session import get_db
 from app.auth.service import request_magic_login, verify_magic_login
-from app.auth.dependencies import require_user
+from app.auth.dependencies import (
+    require_user,
+    get_session_context,
+)
 from app.users.models import User
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(tags=["auth"])
 
 
 # =========================================================
-# REQUEST MAGIC LINK (FIXED)
+# REQUEST MAGIC LINK
 # =========================================================
-@router.post("/login")
+@router.post("/auth/login")
 async def login_request(
     email: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Returns:
-    - 204 → email sent
-    - 429 → rate limited / blocked
-    - 500 → email failed
-    """
     sent = await request_magic_login(db, email=email)
 
     if not sent:
@@ -40,13 +38,13 @@ async def login_request(
             detail="Failed to send login link",
         )
 
-    return None  # FastAPI will default to 200, frontend already handles success
+    return None
 
 
 # =========================================================
 # VERIFY MAGIC LINK (SET COOKIE + REDIRECT)
 # =========================================================
-@router.get("/verify")
+@router.get("/auth/verify")
 async def verify_login(
     token: str = Query(...),
     next: str = Query("/dashboard"),
@@ -81,12 +79,12 @@ async def verify_login(
 # =========================================================
 # AUTH SESSION CHECK
 # =========================================================
-@router.get("/me")
+@router.get("/auth/me")
 async def auth_me(
     user: User = Depends(require_user),
 ):
     return {
-        "id": user.id,
+        "id": str(user.id),
         "email": user.email,
         "role": user.role,
     }
@@ -95,7 +93,7 @@ async def auth_me(
 # =========================================================
 # LOGOUT
 # =========================================================
-@router.post("/logout")
+@router.post("/auth/logout")
 async def logout(
     _: User = Depends(require_user),
 ):
@@ -110,3 +108,23 @@ async def logout(
     )
 
     return response
+
+
+# =========================================================
+# 🌍 GLOBAL SESSION CONTEXT (SINGLE ENDPOINT)
+# =========================================================
+@router.get("/session/context")
+async def session_context(
+    context: dict = Depends(get_session_context),
+):
+    """
+    SINGLE SOURCE OF TRUTH FOR FRONTEND
+    Used by:
+    - layout.tsx
+    - dashboard
+    - campaigns
+    - ai-actions
+    - reports
+    - settings
+    """
+    return context
