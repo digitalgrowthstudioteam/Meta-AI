@@ -85,7 +85,7 @@ async def meta_oauth_callback(
 
 
 # =========================================================
-# LIST META AD ACCOUNTS (USER-SCOPED — FINAL)
+# LIST META AD ACCOUNTS (MULTI-SELECT READY)
 # =========================================================
 @router.get("/adaccounts")
 async def list_meta_ad_accounts(
@@ -118,7 +118,45 @@ async def list_meta_ad_accounts(
 
 
 # =========================================================
-# SELECT ONE META AD ACCOUNT (STRICT — USER ONLY)
+# TOGGLE META AD ACCOUNT (MULTI SELECT)
+# =========================================================
+@router.post("/adaccounts/{ad_account_id}/toggle")
+async def toggle_meta_ad_account(
+    *,
+    ad_account_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_user),
+):
+    result = await db.execute(
+        select(UserMetaAdAccount).where(
+            UserMetaAdAccount.user_id == user.id,
+            UserMetaAdAccount.meta_ad_account_id == ad_account_id,
+        )
+    )
+    link = result.scalar_one_or_none()
+
+    if not link:
+        raise HTTPException(status_code=404, detail="Ad account not found")
+
+    # 🔁 Toggle selection
+    link.is_selected = not link.is_selected
+    await db.commit()
+
+    # 🔄 Sync campaigns for ALL active ad accounts
+    await MetaCampaignService.sync_campaigns_for_user(
+        db=db,
+        user_id=user.id,
+    )
+
+    return {
+        "status": "toggled",
+        "ad_account_id": str(ad_account_id),
+        "is_selected": link.is_selected,
+    }
+
+
+# =========================================================
+# LEGACY: SINGLE SELECT (DEPRECATED, KEEP FOR SAFETY)
 # =========================================================
 @router.post("/adaccounts/select")
 async def select_meta_ad_account(
@@ -127,14 +165,12 @@ async def select_meta_ad_account(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_user),
 ):
-    # 1️⃣ deselect all user accounts
     await db.execute(
         update(UserMetaAdAccount)
         .where(UserMetaAdAccount.user_id == user.id)
         .values(is_selected=False)
     )
 
-    # 2️⃣ select exactly one (must belong to user)
     result = await db.execute(
         update(UserMetaAdAccount)
         .where(
@@ -149,7 +185,6 @@ async def select_meta_ad_account(
 
     await db.commit()
 
-    # 3️⃣ sync campaigns ONLY for this user
     await MetaCampaignService.sync_campaigns_for_user(
         db=db,
         user_id=user.id,
