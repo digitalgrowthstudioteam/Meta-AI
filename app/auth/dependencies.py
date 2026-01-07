@@ -29,7 +29,7 @@ async def _get_global_settings(
 
 
 # -------------------------------------------------
-# 🔐 COOKIE-BASED USER RESOLUTION (FINAL)
+# 🔐 COOKIE-BASED USER RESOLUTION
 # -------------------------------------------------
 async def _resolve_user_from_session(
     request: Request,
@@ -45,11 +45,17 @@ async def _resolve_user_from_session(
     if not session:
         raise HTTPException(status_code=401, detail="Session expired")
 
-    return session.user
+    user = session.user
+
+    # 🔑 HARD ADMIN ROLE ASSIGNMENT (SOURCE OF TRUTH)
+    if user.email in ADMIN_EMAILS:
+        user.role = "admin"
+
+    return user
 
 
 # -------------------------------------------------
-# CORE USER RESOLVER (WITH ADMIN IMPERSONATION)
+# CORE USER RESOLVER (WITH IMPERSONATION)
 # -------------------------------------------------
 async def get_current_user(
     request: Request,
@@ -57,7 +63,6 @@ async def get_current_user(
 ) -> User:
     user = await _resolve_user_from_session(request, db)
 
-    # 🔒 MAINTENANCE MODE
     settings = await _get_global_settings(db)
     if settings and settings.maintenance_mode:
         if user.email not in ADMIN_EMAILS:
@@ -66,7 +71,6 @@ async def get_current_user(
                 detail="System under maintenance",
             )
 
-    # 🔑 ADMIN IMPERSONATION (HEADER-BASED, OPTIONAL)
     impersonate_user = request.headers.get("X-Impersonate-User")
     if impersonate_user:
         if user.email not in ADMIN_EMAILS:
@@ -97,7 +101,7 @@ async def get_current_user(
 
 
 # -------------------------------------------------
-# 🌍 GLOBAL SESSION CONTEXT (SINGLE SOURCE OF TRUTH)
+# 🌍 SESSION CONTEXT
 # -------------------------------------------------
 async def get_session_context(
     db: AsyncSession = Depends(get_db),
@@ -136,7 +140,7 @@ async def get_session_context(
 
 
 # -------------------------------------------------
-# 🔒 ROLE GUARDS
+# 🔒 GUARDS
 # -------------------------------------------------
 async def require_user(
     user: User = Depends(get_current_user),
@@ -166,7 +170,5 @@ async def forbid_impersonated_writes(
     return user
 
 
-# -------------------------------------------------
-# 🔁 BACKWARD COMPAT (DO NOT REMOVE)
-# -------------------------------------------------
+# BACKWARD COMPAT
 require_admin_user = require_admin
