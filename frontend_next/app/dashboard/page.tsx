@@ -3,85 +3,96 @@
 import { useEffect, useState } from "react";
 
 /**
- * FINAL Dashboard Contract (LOCKED)
+ * SINGLE SOURCE OF TRUTH
  */
-type DashboardSummary = {
-  meta_connected?: boolean;
-  ad_accounts?: number;
+type SessionContext = {
+  user: {
+    id: string;
+    email: string;
+    is_admin: boolean;
+    is_impersonated: boolean;
+  };
+  ad_account: {
+    id: string;
+    name: string;
+    meta_account_id: string;
+  } | null;
+};
 
-  campaigns?: {
-    total?: number;
-    ai_active?: number;
-    ai_limit?: number;
+type DashboardSummary = {
+  campaigns: {
+    total: number;
+    ai_active: number;
+    ai_limit: number;
   };
 };
 
-type AdAccount = {
-  id: string;
-  name: string;
-  meta_account_id: string;
-  is_selected: boolean;
-};
-
 export default function DashboardPage() {
+  const [session, setSession] = useState<SessionContext | null>(null);
   const [data, setData] = useState<DashboardSummary | null>(null);
-  const [adAccountsList, setAdAccountsList] = useState<AdAccount[]>([]);
-  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // -----------------------------
-  // LOAD SUMMARY
+  // LOAD SESSION CONTEXT
   // -----------------------------
-  const loadSummary = async () => {
-    try {
-      const res = await fetch("/api/dashboard/summary", {
-        credentials: "include",
-        cache: "no-store",
-      });
-      if (!res.ok) throw new Error();
-      const json = await res.json();
-      setData(json ?? {});
-    } catch {
-      setData({});
+  const loadSession = async () => {
+    const res = await fetch("/session/context", {
+      credentials: "include",
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      setSession(null);
+      return;
     }
+
+    const json = await res.json();
+    setSession(json);
   };
 
   // -----------------------------
-  // LOAD AD ACCOUNTS
+  // LOAD DASHBOARD SUMMARY
   // -----------------------------
-  const loadAdAccounts = async () => {
-    try {
-      const res = await fetch("/api/meta/adaccounts", {
-        credentials: "include",
-        cache: "no-store",
-      });
-      if (!res.ok) return;
+  const loadSummary = async () => {
+    if (!session?.ad_account) {
+      setData(null);
+      return;
+    }
 
-      const json = await res.json();
-      setAdAccountsList(json ?? []);
+    const res = await fetch("/dashboard/summary", {
+      credentials: "include",
+      cache: "no-store",
+    });
 
-      const selected = json?.find((a: AdAccount) => a.is_selected);
-      if (selected) setSelectedAccountId(selected.id);
-    } catch {}
+    if (!res.ok) {
+      setData(null);
+      return;
+    }
+
+    const json = await res.json();
+    setData(json);
   };
 
   useEffect(() => {
     (async () => {
       setLoading(true);
-      await loadSummary();
-      await loadAdAccounts();
+      await loadSession();
       setLoading(false);
     })();
   }, []);
 
+  useEffect(() => {
+    loadSummary();
+  }, [session?.ad_account?.id]);
+
   // -----------------------------
-  // CONNECT META (REAL)
+  // CONNECT META
   // -----------------------------
   const connectMeta = async () => {
-    const res = await fetch("/api/meta/connect", {
+    const res = await fetch("/meta/connect", {
       credentials: "include",
       cache: "no-store",
     });
@@ -94,24 +105,22 @@ export default function DashboardPage() {
   };
 
   // -----------------------------
-  // SYNC AD ACCOUNTS
+  // SYNC CAMPAIGNS
   // -----------------------------
-  const syncAdAccounts = async () => {
+  const syncCampaigns = async () => {
     setSyncing(true);
     setErrorMsg(null);
 
     try {
-      const res = await fetch("/api/meta/adaccounts/sync", {
+      const res = await fetch("/campaigns/sync", {
         method: "POST",
         credentials: "include",
         cache: "no-store",
       });
       if (!res.ok) throw new Error();
-
-      await loadAdAccounts();
       await loadSummary();
     } catch {
-      setErrorMsg("Failed to sync ad accounts");
+      setErrorMsg("Failed to sync campaigns");
     } finally {
       setSyncing(false);
     }
@@ -121,10 +130,23 @@ export default function DashboardPage() {
     return <div className="text-sm text-gray-500">Loading dashboard…</div>;
   }
 
-  const metaConnected = Boolean(data?.meta_connected);
-  const totalCampaigns = data?.campaigns?.total ?? 0;
-  const aiActive = data?.campaigns?.ai_active ?? 0;
-  const aiLimit = data?.campaigns?.ai_limit ?? 0;
+  if (!session?.ad_account) {
+    return (
+      <div className="space-y-4 max-w-xl">
+        <h1 className="text-xl font-semibold">Dashboard</h1>
+        <p className="text-sm text-gray-600">
+          Connect Meta Ads and select an ad account.
+        </p>
+        <button onClick={connectMeta} className="btn-primary">
+          Connect Meta Ads
+        </button>
+      </div>
+    );
+  }
+
+  const totalCampaigns = data?.campaigns.total ?? 0;
+  const aiActive = data?.campaigns.ai_active ?? 0;
+  const aiLimit = data?.campaigns.ai_limit ?? 0;
 
   return (
     <div className="space-y-8">
@@ -132,62 +154,40 @@ export default function DashboardPage() {
       <div>
         <h1 className="text-xl font-semibold">Dashboard</h1>
         <p className="text-sm text-gray-500">
-          Overview of your Meta Ads and AI activity
+          Active account: <strong>{session.ad_account.name}</strong>
         </p>
       </div>
 
-      {/* META CONNECTION BLOCK */}
-      {!metaConnected ? (
-        <div className="bg-white border rounded-lg p-6 max-w-xl">
-          <h2 className="font-medium mb-2">
-            Connect your Meta Ads account
-          </h2>
-          <p className="text-sm text-gray-600 mb-4">
-            Required to fetch ad accounts, campaigns, and AI insights.
-            Read-only. Safe.
-          </p>
-          <button onClick={connectMeta} className="btn-primary">
-            Connect Meta Ads Account
-          </button>
-        </div>
-      ) : (
-        <div className="bg-white border rounded-lg p-6 max-w-xl">
-          <h2 className="font-medium mb-2">Sync Ad Accounts</h2>
-          <p className="text-sm text-gray-600 mb-4">
-            Fetch ad accounts to load campaigns.
-          </p>
-          <button
-            onClick={syncAdAccounts}
-            disabled={syncing}
-            className="btn-primary disabled:opacity-60"
-          >
-            {syncing ? "Syncing…" : "Sync Ad Accounts"}
-          </button>
-        </div>
-      )}
-
       {errorMsg && <div className="text-sm text-red-600">{errorMsg}</div>}
 
-      {/* KPI GRID (ONLY IF META CONNECTED) */}
-      {metaConnected && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <KpiCard
-            label="Total Campaigns"
-            value={totalCampaigns}
-            hint="Selected ad account"
-          />
-          <KpiCard
-            label="AI-Active Campaigns"
-            value={`${aiActive} / ${aiLimit}`}
-            hint="Current plan limit"
-          />
-          <KpiCard
-            label="Account Status"
-            value="Connected"
-            hint="Meta Ads"
-          />
-        </div>
-      )}
+      {/* KPI GRID */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <KpiCard
+          label="Total Campaigns"
+          value={totalCampaigns}
+          hint="Selected ad account"
+        />
+        <KpiCard
+          label="AI-Active Campaigns"
+          value={`${aiActive} / ${aiLimit}`}
+          hint="Plan limit"
+        />
+        <KpiCard
+          label="Account Status"
+          value="Connected"
+          hint="Meta Ads"
+        />
+      </div>
+
+      <div>
+        <button
+          onClick={syncCampaigns}
+          disabled={syncing}
+          className="btn-secondary disabled:opacity-60"
+        >
+          {syncing ? "Syncing…" : "Sync Campaigns"}
+        </button>
+      </div>
     </div>
   );
 }
