@@ -6,9 +6,6 @@ import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 
-/* ----------------------------------
- * TYPES
- * ---------------------------------- */
 type SessionContext = {
   user: {
     id: string;
@@ -31,33 +28,37 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<SessionContext | null>(null);
   const [sessionLoaded, setSessionLoaded] = useState(false);
 
-  // ----------------------------------
-  // LOAD SESSION CONTEXT
-  // ----------------------------------
   useEffect(() => {
-    if (pathname === "/" || pathname === "/login") {
-      setSessionLoaded(true);
-      return;
-    }
+    const load = async () => {
+      // Public pages skip loading
+      if (pathname === "/" || pathname === "/login") {
+        setSessionLoaded(true);
+        return;
+      }
 
-    (async () => {
       try {
         const res = await fetch("/api/session/context", {
           credentials: "include",
           cache: "no-store",
         });
 
-        if (!res.ok) {
-          setSession(null);
+        if (res.ok) {
+          const json = await res.json();
+          setSession(json);
+
+          // 🔑 Store for admin sidebar usage
+          sessionStorage.setItem("session_context", JSON.stringify(json));
         } else {
-          setSession(await res.json());
+          setSession(null);
         }
-      } catch {
+      } catch (_) {
         setSession(null);
       } finally {
         setSessionLoaded(true);
       }
-    })();
+    };
+
+    load();
   }, [pathname]);
 
   const exitImpersonation = () => {
@@ -65,9 +66,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     window.location.reload();
   };
 
-  // ----------------------------------
-  // PUBLIC PAGES
-  // ----------------------------------
+  // Public pages
   if (pathname === "/" || pathname === "/login") {
     return (
       <html lang="en">
@@ -88,14 +87,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  // ----------------------------------
-  // 🔒 ADMIN LAYOUT (ISOLATED)
-  // ----------------------------------
+  // ADMIN LAYOUT
   if (isAdminRoute) {
     return (
       <html lang="en">
         <body className="bg-slate-50 text-gray-900">
-          {/* Toast optional for admin too */}
           <Toaster position="bottom-right" />
           <main className="p-6 max-w-7xl mx-auto">{children}</main>
         </body>
@@ -103,13 +99,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  // ----------------------------------
-  // USER APP LAYOUT
-  // ----------------------------------
+  // USER LAYOUT
   return (
     <html lang="en">
       <body className="bg-amber-50 text-gray-900">
-        {/* 🔥 GLOBAL TOASTER FOR USER UI */}
         <Toaster position="bottom-right" />
 
         <div className="flex h-screen w-screen overflow-hidden">
@@ -212,7 +205,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   );
 }
 
-/* ---------------------------------- */
 function SectionLabel({ label }: { label: string }) {
   return (
     <div className="px-2 pt-4 pb-1 text-xs font-medium text-gray-400 uppercase tracking-wide">
