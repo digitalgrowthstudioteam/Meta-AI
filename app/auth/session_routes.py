@@ -33,22 +33,43 @@ async def session_context(
 ):
     """
     GLOBAL SESSION CONTEXT
+    Returns:
     - Authenticated user
-    - Exactly ONE selected Meta ad account
+    - List of ALL linked Meta ad accounts
+    - Exactly ONE active (selected) Meta ad account if exists
     """
 
+    # Fetch all linked ad accounts for this user
     result = await db.execute(
-        select(MetaAdAccount)
+        select(
+            MetaAdAccount.id,
+            MetaAdAccount.account_name,
+            MetaAdAccount.meta_account_id,
+            UserMetaAdAccount.is_selected,
+        )
         .join(
             UserMetaAdAccount,
             UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
         )
-        .where(
-            UserMetaAdAccount.user_id == user.id,
-            UserMetaAdAccount.is_selected.is_(True),
-        )
+        .where(UserMetaAdAccount.user_id == user.id)
+        .order_by(MetaAdAccount.account_name)
     )
-    ad_account = result.scalar_one_or_none()
+
+    rows = result.all()
+
+    # Transform rows → list
+    ad_accounts = [
+        {
+            "id": str(r.id),
+            "name": r.account_name,
+            "meta_account_id": r.meta_account_id,
+            "is_selected": r.is_selected,
+        }
+        for r in rows
+    ]
+
+    # Identify active ad account (if any)
+    active = next((a for a in ad_accounts if a["is_selected"]), None)
 
     return {
         "user": {
@@ -57,13 +78,18 @@ async def session_context(
             "is_admin": user.role == "admin",
             "is_impersonated": getattr(user, "_is_impersonated", False),
         },
+        # New fields for FE multi-account support
+        "ad_accounts": ad_accounts,
+        "active_ad_account_id": active["id"] if active else None,
+
+        # Backward compatibility field for old UI (optional)
         "ad_account": (
             {
-                "id": str(ad_account.id),
-                "name": ad_account.account_name,
-                "meta_account_id": ad_account.meta_account_id,
+                "id": active["id"],
+                "name": active["name"],
+                "meta_account_id": active["meta_account_id"],
             }
-            if ad_account
+            if active
             else None
         ),
     }
