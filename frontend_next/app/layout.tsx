@@ -23,11 +23,12 @@ type SessionContext = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
-  // ⛔️ NEW: if admin route, do not wrap with user UI
+  // ADMIN LAYOUT WRAP
   if (pathname.startsWith("/admin")) {
     return (
       <html lang="en">
         <body className="bg-slate-50 text-gray-900">
+          <Toaster position="bottom-right" />
           {children}
         </body>
       </html>
