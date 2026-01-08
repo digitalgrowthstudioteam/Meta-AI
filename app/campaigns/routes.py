@@ -1,10 +1,12 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlalchemy import select
 
-from app.campaigns.models import Campaign  # <-- ADD THIS
+from app.campaigns.models import Campaign
+from app.meta_api.models import MetaAdAccount, UserMetaAdAccount, MetaOAuthToken
 
 from app.core.db_session import get_db
 from app.auth.dependencies import get_current_user
@@ -12,13 +14,13 @@ from app.users.models import User
 from app.campaigns.service import CampaignService
 from app.campaigns.schemas import CampaignResponse, ToggleAIRequest
 from app.plans.enforcement import EnforcementError
-from app.meta_api.models import MetaOAuthToken, UserMetaAdAccount
+
 
 router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
 
 
 # =========================================================
-# LIST CAMPAIGNS — COOKIE MODE (NO DB is_selected)
+# LIST CAMPAIGNS — COOKIE MODE (NO is_selected required)
 # =========================================================
 @router.get(
     "",
@@ -26,14 +28,14 @@ router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
     status_code=status.HTTP_200_OK,
 )
 async def list_campaigns(
-    account_id: UUID | None = None,   # ⬅ NEW
+    account_id: UUID | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(get_current_user),
 ):
     if current_user is None:
         return []
 
-    # 1️⃣ Ensure Meta is connected
+    # Ensure Meta is connected
     token = (
         await db.execute(
             select(MetaOAuthToken)
@@ -51,7 +53,7 @@ async def list_campaigns(
             detail="Meta account not connected",
         )
 
-    # 2️⃣ If frontend sent account_id → filter by that
+    # Specific account filter (cookie-based UI)
     if account_id:
         stmt = (
             select(Campaign)
@@ -67,9 +69,8 @@ async def list_campaigns(
                 Campaign.is_archived.is_(False),
             )
         )
-
     else:
-        # 3️⃣ Otherwise fallback: load all linked accounts (old behavior)
+        # Fallback: all user's accounts
         stmt = (
             select(Campaign)
             .options(selectinload(Campaign.category_map))
@@ -109,7 +110,7 @@ async def list_campaigns(
 
 
 # =========================================================
-# SYNC CAMPAIGNS FROM META (USING COOKIE)
+# SYNC CAMPAIGNS — COOKIE TARGETED
 # =========================================================
 @router.post(
     "/sync",
@@ -128,7 +129,7 @@ async def sync_campaigns_from_meta(
     return await CampaignService.sync_from_meta(
         db=db,
         user_id=current_user.id,
-        ad_account_ids=[cookie_active_id],  # ensure correct account
+        ad_account_ids=[cookie_active_id],
     )
 
 
