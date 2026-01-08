@@ -22,7 +22,7 @@ class CampaignService:
     """
 
     # =====================================================
-    # LIST CAMPAIGNS — MULTI AD ACCOUNT SAFE (FINAL)
+    # LIST CAMPAIGNS — COOKIE MODE (NO DB is_selected)
     # =====================================================
     @staticmethod
     async def list_campaigns_with_visibility(
@@ -44,7 +44,6 @@ class CampaignService:
             )
             .where(
                 UserMetaAdAccount.user_id == user_id,
-                UserMetaAdAccount.is_selected.is_(True),
                 Campaign.ad_account_id.in_(ad_account_ids),
                 Campaign.is_archived.is_(False),
             )
@@ -54,15 +53,22 @@ class CampaignService:
         return result.scalars().all()
 
     # =====================================================
-    # SYNC CAMPAIGNS FROM META (ALL SELECTED ACCOUNTS)
+    # SYNC CAMPAIGNS FROM META — COOKIE MODE
     # =====================================================
     @staticmethod
     async def sync_from_meta(
         db: AsyncSession,
+        *,
         user_id: UUID,
+        ad_account_ids: list[UUID],
     ) -> list[Campaign]:
 
-        stmt = (
+        if not ad_account_ids:
+            logger.warning("sync_from_meta: no accounts provided for user=%s", user_id)
+            return []
+
+        # fetch only owned ad_accounts
+        result = await db.execute(
             select(MetaAdAccount)
             .join(
                 UserMetaAdAccount,
@@ -70,16 +76,14 @@ class CampaignService:
             )
             .where(
                 UserMetaAdAccount.user_id == user_id,
-                UserMetaAdAccount.is_selected.is_(True),
+                MetaAdAccount.id.in_(ad_account_ids),
                 MetaAdAccount.is_active.is_(True),
             )
         )
-
-        result = await db.execute(stmt)
         ad_accounts = result.scalars().all()
 
         if not ad_accounts:
-            logger.warning("No selected ad accounts for user=%s", user_id)
+            logger.warning("No owned ad accounts found for user=%s", user_id)
             return []
 
         synced: list[Campaign] = []
@@ -170,7 +174,7 @@ class CampaignService:
             )
 
     # =====================================================
-    # AI TOGGLE — MULTI AD ACCOUNT SAFE
+    # AI TOGGLE — COOKIE MODE (NO is_selected)
     # =====================================================
     @staticmethod
     async def toggle_ai(
@@ -181,6 +185,7 @@ class CampaignService:
         enable: bool,
     ) -> Campaign:
 
+        # Ensure user owns the campaign
         stmt = (
             select(Campaign)
             .join(MetaAdAccount, Campaign.ad_account_id == MetaAdAccount.id)
@@ -191,7 +196,6 @@ class CampaignService:
             .where(
                 Campaign.id == campaign_id,
                 UserMetaAdAccount.user_id == user_id,
-                UserMetaAdAccount.is_selected.is_(True),
             )
             .with_for_update()
         )
@@ -200,7 +204,7 @@ class CampaignService:
         campaign = result.scalar_one_or_none()
 
         if not campaign:
-            raise ValueError("Campaign not found")
+            raise ValueError("Campaign not found or not owned by user")
 
         # 🔒 Enforce manual validity
         await CampaignService.enforce_manual_campaign_validity(
