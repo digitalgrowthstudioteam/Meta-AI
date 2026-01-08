@@ -137,3 +137,4 @@ async def set_active_ad_account(
 
     # Return updated context
     return await session_context(db=db, user=user)
+
