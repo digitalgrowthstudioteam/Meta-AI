@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
@@ -112,7 +113,7 @@ async def list_meta_ad_accounts(
 
     return [
         {
-            "id": row.id,
+            "id": str(row.id),
             "name": row.account_name,
             "is_selected": row.is_selected,
         }
@@ -121,12 +122,12 @@ async def list_meta_ad_accounts(
 
 
 # =========================================================
-# TOGGLE META AD ACCOUNT (MULTI-SELECT ✅ FIXED)
+# TOGGLE META AD ACCOUNT (MULTI-SELECT)
 # =========================================================
 @router.post("/adaccounts/{ad_account_id}/toggle")
 async def toggle_meta_ad_account(
     *,
-    ad_account_id: int,  # ✅ FIX: MUST BE int (DB PK), NOT UUID
+    ad_account_id: UUID,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_user),
 ):
@@ -154,7 +155,6 @@ async def toggle_meta_ad_account(
 
     await db.commit()
 
-    # Sync campaigns for ALL selected ad accounts
     await MetaCampaignService.sync_campaigns_for_user(
         db=db,
         user_id=user.id,
@@ -162,7 +162,7 @@ async def toggle_meta_ad_account(
 
     return {
         "status": "toggled",
-        "ad_account_id": ad_account_id,
+        "ad_account_id": str(ad_account_id),
         "is_selected": new_state,
     }
 
@@ -173,7 +173,7 @@ async def toggle_meta_ad_account(
 @router.post("/adaccounts/select")
 async def select_meta_ad_account(
     *,
-    ad_account_id: int = Query(...),
+    ad_account_id: UUID = Query(...),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(require_user),
 ):
@@ -204,5 +204,5 @@ async def select_meta_ad_account(
 
     return {
         "status": "selected",
-        "ad_account_id": ad_account_id,
+        "ad_account_id": str(ad_account_id),
     }
