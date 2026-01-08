@@ -1,6 +1,7 @@
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from uuid import UUID
 
 from app.core.db_session import get_db
 from app.users.models import User
@@ -47,7 +48,7 @@ async def _resolve_user_from_session(
 
     user = session.user
 
-    # 🔑 HARD ADMIN ROLE ASSIGNMENT (SOURCE OF TRUTH)
+    # 🔑 HARD ADMIN ROLE ASSIGNMENT
     if user.email in ADMIN_EMAILS:
         user.role = "admin"
 
@@ -71,6 +72,7 @@ async def get_current_user(
                 detail="System under maintenance",
             )
 
+    # 🔁 Admin → Impersonation
     impersonate_user = request.headers.get("X-Impersonate-User")
     if impersonate_user:
         if user.email not in ADMIN_EMAILS:
@@ -79,12 +81,15 @@ async def get_current_user(
                 detail="Impersonation not allowed",
             )
 
-        result = await db.execute(
-            select(User).where(
-                (User.id == impersonate_user)
-                | (User.email == impersonate_user)
-            )
+        # Allow email OR UUID
+        target_query = select(User).where(
+            (User.email == impersonate_user)
+            |
+            # UUID check fallback
+            (User.id == _safe_uuid_cast(impersonate_user))
         )
+
+        result = await db.execute(target_query)
         target_user = result.scalar_one_or_none()
 
         if not target_user:
@@ -101,7 +106,7 @@ async def get_current_user(
 
 
 # -------------------------------------------------
-# 🌍 SESSION CONTEXT (MULTI-AD-ACCOUNT SAFE ✅)
+# 🌍 SESSION CONTEXT
 # -------------------------------------------------
 async def get_session_context(
     db: AsyncSession = Depends(get_db),
@@ -121,8 +126,6 @@ async def get_session_context(
     )
 
     ad_accounts = result.scalars().all()
-
-    # Backward compatibility: pick first as active
     active_ad_account = ad_accounts[0] if ad_accounts else None
 
     return {
@@ -132,7 +135,6 @@ async def get_session_context(
             "is_admin": user.email in ADMIN_EMAILS,
             "is_impersonated": getattr(user, "_is_impersonated", False),
         },
-        # ✅ NEW: full list (future-proof)
         "ad_accounts": [
             {
                 "id": str(acct.id),
@@ -141,7 +143,6 @@ async def get_session_context(
             }
             for acct in ad_accounts
         ],
-        # ✅ OLD: keep existing consumers working
         "ad_account": (
             {
                 "id": str(active_ad_account.id),
@@ -152,6 +153,16 @@ async def get_session_context(
             else None
         ),
     }
+
+
+# -------------------------------------------------
+# SAFE UUID CAST
+# -------------------------------------------------
+def _safe_uuid_cast(value: str) -> UUID | None:
+    try:
+        return UUID(value)
+    except Exception:
+        return None
 
 
 # -------------------------------------------------
@@ -185,5 +196,4 @@ async def forbid_impersonated_writes(
     return user
 
 
-# BACKWARD COMPAT
 require_admin_user = require_admin
