@@ -42,7 +42,7 @@ function getCookie(name: string): string | null {
 
 function setCookie(name: string, value: string) {
   if (typeof document === "undefined") return;
-  document.cookie = `${name}=${value}; path=/; max-age=31536000`; // 1 year
+  document.cookie = `${name}=${value}; path=/; max-age=31536000`;
 }
 
 /* -----------------------------------
@@ -52,7 +52,7 @@ export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [session, setSession] = useState<SessionContext | null>(null);
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +64,7 @@ export default function CampaignsPage() {
 
   /* Pagination */
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(10);
+  const pageSize = 10;
 
   /* -----------------------------------
    * LOAD SESSION CONTEXT
@@ -101,36 +101,34 @@ export default function CampaignsPage() {
    * ----------------------------------- */
   const loadCampaigns = async () => {
     const selected = getSelectedAccountId();
-    if (!selected) {
-      setCampaigns([]);
-      setLoading(false);
-      return;
-    }
+    if (!selected) return;
 
     try {
       setLoading(true);
       setError(null);
 
       const params = new URLSearchParams({
+        account_id: selected,
         page: String(page),
         page_size: String(pageSize),
-        account_id: selected,
       });
 
       if (statusFilter) params.append("status", statusFilter);
       if (aiFilter) params.append("ai_active", aiFilter);
       if (objectiveFilter) params.append("objective", objectiveFilter);
 
-      const res = await fetch(`/api/campaigns?${params}`, {
+      const res = await fetch(`/api/campaigns?${params.toString()}`, {
         credentials: "include",
         cache: "no-store",
       });
 
       if (!res.ok) throw new Error();
       const data = await res.json();
+
       setCampaigns(Array.isArray(data) ? data : []);
     } catch {
       setError("Unable to load campaigns");
+      setCampaigns([]);
     } finally {
       setLoading(false);
     }
@@ -144,14 +142,16 @@ export default function CampaignsPage() {
   }, []);
 
   useEffect(() => {
-    if (session) loadCampaigns();
+    if (!session) return;
+    loadCampaigns();
   }, [session, statusFilter, aiFilter, objectiveFilter, page]);
 
   /* -----------------------------------
-   * SWITCH ACCOUNT (COOKIE-ONLY)
+   * SWITCH ACCOUNT
    * ----------------------------------- */
   const switchAdAccount = (accountId: string) => {
     setCookie(COOKIE_KEY, accountId);
+    setPage(1);
     loadCampaigns();
   };
 
@@ -159,10 +159,10 @@ export default function CampaignsPage() {
    * SYNC CAMPAIGNS
    * ----------------------------------- */
   const syncCampaigns = async () => {
-    setSyncing(true);
-
     const selected = getSelectedAccountId();
     if (!selected) return;
+
+    setSyncing(true);
 
     await fetch(`/api/campaigns/sync?account_id=${selected}`, {
       method: "POST",
@@ -184,9 +184,7 @@ export default function CampaignsPage() {
     setTogglingId(campaign.id);
 
     setCampaigns((prev) =>
-      prev.map((c) =>
-        c.id === campaign.id ? { ...c, ai_active: nextValue } : c
-      )
+      prev.map((c) => (c.id === campaign.id ? { ...c, ai_active: nextValue } : c))
     );
 
     try {
@@ -218,18 +216,17 @@ export default function CampaignsPage() {
           <p className="text-sm text-gray-500">
             Active account:{" "}
             <strong>
-              {session.ad_accounts.find(a => a.id === selectedId)?.name}
+              {session.ad_accounts.find((a) => a.id === selectedId)?.name}
             </strong>
           </p>
         </div>
 
-        {/* ALWAYS-visible dropdown */}
         <select
           className="border rounded px-2 py-1 text-sm"
           value={selectedId || ""}
           onChange={(e) => switchAdAccount(e.target.value)}
         >
-          {session.ad_accounts.map(acc => (
+          {session.ad_accounts.map((acc) => (
             <option key={acc.id} value={acc.id}>
               {acc.name}
             </option>
@@ -265,7 +262,7 @@ export default function CampaignsPage() {
           className="border rounded px-2 py-1"
         >
           <option value="">All Objectives</option>
-          <option value="LEAD">Leads</option>
+          <option value="LEAD">Lead Gen</option>
           <option value="SALES">Sales</option>
         </select>
 
@@ -281,9 +278,7 @@ export default function CampaignsPage() {
       {loading && <div>Loading campaigns…</div>}
       {error && <div className="text-red-600">{error}</div>}
 
-      {!loading && campaigns.length === 0 && (
-        <div>No campaigns found</div>
-      )}
+      {!loading && campaigns.length === 0 && <div>No campaigns found</div>}
 
       {!loading && campaigns.length > 0 && (
         <div className="surface overflow-hidden">
