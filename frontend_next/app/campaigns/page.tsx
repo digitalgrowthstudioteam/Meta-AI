@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import toast from "react-hot-toast";
 
 /* -----------------------------------
  * TYPES
@@ -175,13 +176,18 @@ export default function CampaignsPage() {
   };
 
   /* -----------------------------------
-   * TOGGLE AI  (ENFORCEMENT AWARE)
+   * TOGGLE AI  (PLAN ENFORCED + UI REVERT)
    * ----------------------------------- */
   const toggleAI = async (campaign: Campaign) => {
     if (togglingId) return;
 
     const nextValue = !campaign.ai_active;
     setTogglingId(campaign.id);
+
+    // Optimistic UI update
+    setCampaigns((prev) =>
+      prev.map((c) => (c.id === campaign.id ? { ...c, ai_active: nextValue } : c))
+    );
 
     try {
       const res = await fetch(`/api/campaigns/${campaign.id}/ai-toggle`, {
@@ -192,25 +198,31 @@ export default function CampaignsPage() {
       });
 
       if (!res.ok) {
-        // ENFORCEMENT ERRORS FROM BACKEND
         const err = await res.json().catch(() => null);
+
+        // Revert UI
+        setCampaigns((prev) =>
+          prev.map((c) => (c.id === campaign.id ? { ...c, ai_active: !nextValue } : c))
+        );
+
         if (res.status === 409 && err?.detail?.message) {
-          alert(err.detail.message);
+          toast.error(err.detail.message);
         } else {
-          alert("Action failed");
+          toast.error("Action failed");
         }
-        return; // stop and DO NOT update UI
+
+        return;
       }
 
-      // SUCCESS
+      toast.success(nextValue ? "AI activated" : "AI deactivated");
+
+    } catch {
+      // Revert UI on unexpected failure
       setCampaigns((prev) =>
-        prev.map((c) => (c.id === campaign.id ? { ...c, ai_active: nextValue } : c))
+        prev.map((c) => (c.id === campaign.id ? { ...c, ai_active: !nextValue } : c))
       );
 
-      alert(nextValue ? "AI activated successfully" : "AI deactivated successfully");
-
-    } catch (e) {
-      alert("Action failed");
+      toast.error("Action failed");
     } finally {
       setTogglingId(null);
     }
