@@ -1,5 +1,5 @@
 """
-Session Context Routes
+Session Context Routes — COOKIE MODE (NO DB is_selected)
 SINGLE SOURCE OF TRUTH for frontend state
 
 Exposes:
@@ -7,13 +7,14 @@ Exposes:
 - POST /api/session/set-active
 
 Rules:
-- Cookie-based auth
-- Used by ALL frontend pages
+- Uses cookie `active_account_id`
+- No DB writes for switching accounts
+- DB only validates ownership
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select
 
 from app.core.db_session import get_db
 from app.auth.dependencies import get_current_user
@@ -28,6 +29,7 @@ router = APIRouter(
 
 @router.get("/context")
 async def session_context(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -36,15 +38,15 @@ async def session_context(
     Returns:
     - Authenticated user
     - List of ALL linked Meta ad accounts
-    - Exactly ONE active (selected) Meta ad account if exists
+    - Active ad account via cookie
     """
 
+    # Load all linked ad accounts
     result = await db.execute(
         select(
             MetaAdAccount.id,
             MetaAdAccount.account_name,
             MetaAdAccount.meta_account_id,
-            UserMetaAdAccount.is_selected,
         )
         .join(
             UserMetaAdAccount,
@@ -61,12 +63,20 @@ async def session_context(
             "id": str(r.id),
             "name": r.account_name,
             "meta_account_id": r.meta_account_id,
-            "is_selected": r.is_selected,
         }
         for r in rows
     ]
 
-    active = next((a for a in ad_accounts if a["is_selected"]), None)
+    # Read active from cookie
+    cookie_active_id = request.cookies.get("active_account_id")
+
+    # Validate cookie belongs to current user
+    active = next((a for a in ad_accounts if a["id"] == cookie_active_id), None)
+
+    # Fallback to first account if invalid or not set
+    if not active and ad_accounts:
+        active = ad_accounts[0]
+        cookie_active_id = active["id"]
 
     return {
         "user": {
@@ -76,26 +86,20 @@ async def session_context(
             "is_impersonated": getattr(user, "_is_impersonated", False),
         },
         "ad_accounts": ad_accounts,
-        "active_ad_account_id": active["id"] if active else None,
-        "ad_account": (
-            {
-                "id": active["id"],
-                "name": active["name"],
-                "meta_account_id": active["meta_account_id"],
-            }
-            if active else None
-        ),
+        "active_ad_account_id": cookie_active_id,
+        "ad_account": active,  # backward compatibility
     }
 
 
 @router.post("/set-active")
 async def set_active_ad_account(
     payload: dict,
+    response: Response,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     """
-    Switch currently active Meta Ad Account for this user.
+    Switch active account using a cookie (NO DB writes)
     Body: { "account_id": "<uuid>" }
     """
 
@@ -103,7 +107,7 @@ async def set_active_ad_account(
     if not account_id:
         raise HTTPException(status_code=400, detail="account_id required")
 
-    # Verify that account belongs to this user
+    # Validate account belongs to this user
     result = await db.execute(
         select(UserMetaAdAccount)
         .where(
@@ -114,27 +118,15 @@ async def set_active_ad_account(
     relation = result.scalar_one_or_none()
 
     if not relation:
-        raise HTTPException(status_code=403, detail="Not authorized to select this account")
+        raise HTTPException(status_code=403, detail="Not authorized to use this account")
 
-    # 1) Set all accounts to false
-    await db.execute(
-        update(UserMetaAdAccount)
-        .where(UserMetaAdAccount.user_id == user.id)
-        .values(is_selected=False)
+    # Write cookie for frontend
+    response.set_cookie(
+        key="active_account_id",
+        value=account_id,
+        httponly=False,   # FE needs access
+        samesite="Lax",
+        path="/",
     )
 
-    # 2) Set selected account to true
-    await db.execute(
-        update(UserMetaAdAccount)
-        .where(
-            UserMetaAdAccount.user_id == user.id,
-            UserMetaAdAccount.meta_ad_account_id == account_id,
-        )
-        .values(is_selected=True)
-    )
-
-    await db.commit()
-
-    # Return updated context
-    return await session_context(db=db, user=user)
-
+    return {"status": "ok", "active_account_id": account_id}
