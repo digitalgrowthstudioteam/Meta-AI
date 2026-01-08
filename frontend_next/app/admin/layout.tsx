@@ -1,83 +1,148 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
+import { Menu, X } from "lucide-react";
+import { Toaster } from "react-hot-toast";
 
-const adminNav = [
-  { href: "/admin/dashboard", label: "Dashboard" },
-  { href: "/admin/users", label: "Users" },
-  { href: "/admin/audit", label: "Audit Logs" },
-  { href: "/admin/chat", label: "AI Chat" },
-];
+type SessionContext = {
+  user: {
+    email: string;
+    is_admin: boolean;
+  };
+};
 
-export default function AdminLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const router = useRouter();
+export default function AdminLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [session, setSession] = useState<SessionContext | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    const ctxStr = sessionStorage.getItem("session_context");
-    if (!ctxStr) {
-      setIsAdmin(false);
-      router.replace("/dashboard");
-      return;
+    const ctx = sessionStorage.getItem("session_context");
+    if (ctx) {
+      setSession(JSON.parse(ctx));
     }
+    setLoaded(true);
+  }, []);
 
-    const ctx = JSON.parse(ctxStr);
-    if (!ctx.user?.is_admin) {
-      setIsAdmin(false);
-      router.replace("/dashboard");
-    } else {
-      setIsAdmin(true);
-    }
-  }, [router]);
-
-  if (isAdmin === null)
+  if (!loaded) {
     return (
       <div className="p-6 text-sm text-gray-500">
-        Loading admin panel...
+        Loading admin…
       </div>
     );
+  }
 
   return (
-    <div className="flex min-h-screen bg-gray-100">
+    <div className="flex h-screen w-screen bg-slate-50 overflow-hidden text-gray-900">
+      <Toaster position="bottom-right" />
+
+      {/* Overlay (mobile) */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* SIDEBAR */}
-      <aside className="w-56 bg-white border-r flex flex-col">
-        <div className="px-4 py-3 border-b font-semibold text-gray-800">
-          Admin Panel
+      <aside
+        className={`
+          fixed md:static z-50 inset-y-0 left-0 w-64 bg-white border-r
+          flex flex-col transform transition-transform duration-200
+          ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+          md:translate-x-0
+        `}
+      >
+        <div className="px-5 py-4 border-b flex items-center justify-between">
+          <div>
+            <div className="text-sm uppercase tracking-wide text-blue-700">
+              Admin Console
+            </div>
+            <div className="text-xs text-gray-500">
+              Digital Growth Studio
+            </div>
+          </div>
+          <button className="md:hidden" onClick={() => setSidebarOpen(false)}>
+            <X size={20} />
+          </button>
         </div>
 
-        <nav className="flex-1 py-2 space-y-1">
-          {adminNav.map((item) => {
-            const active = pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`block px-4 py-2 text-sm rounded ${
-                  active
-                    ? "bg-blue-600 text-white"
-                    : "text-gray-700 hover:bg-gray-100"
-                }`}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          <SectionLabel label="Overview" />
+          <NavLink href="/admin/dashboard" current={pathname === "/admin/dashboard"}>
+            Dashboard
+          </NavLink>
+
+          <SectionLabel label="Users" />
+          <NavLink href="/admin/users" current={pathname === "/admin/users"}>
+            Users & Impersonation
+          </NavLink>
+
+          <SectionLabel label="Controls" />
+          <NavLink href="/admin/settings" current={pathname === "/admin/settings"}>
+            Global Settings
+          </NavLink>
+          <NavLink href="/admin/metrics" current={pathname === "/admin/metrics"}>
+            Metrics Sync
+          </NavLink>
+
+          <SectionLabel label="Audit" />
+          <NavLink href="/admin/audit" current={pathname === "/admin/audit"}>
+            Audit Logs
+          </NavLink>
         </nav>
 
-        <div className="p-3 border-t text-xs text-gray-400">
-          © {new Date().getFullYear()} Meta-AI
+        <div className="px-4 py-3 border-t text-xs text-gray-500">
+          Admin Only • Audited
         </div>
       </aside>
 
-      {/* MAIN CONTENT */}
-      <main className="flex-1 p-6">{children}</main>
+      {/* MAIN */}
+      <div className="flex flex-col flex-1 min-w-0">
+        <header className="md:hidden flex items-center gap-3 px-4 py-3 border-b bg-white">
+          <button onClick={() => setSidebarOpen(true)}>
+            <Menu size={22} />
+          </button>
+          <span className="text-sm font-medium">Admin Console</span>
+        </header>
+
+        <main className="flex-1 overflow-y-auto p-4 md:p-8">
+          <div className="max-w-7xl mx-auto space-y-6">{children}</div>
+        </main>
+      </div>
     </div>
+  );
+}
+
+function SectionLabel({ label }: { label: string }) {
+  return (
+    <div className="px-2 pt-4 pb-1 text-xs font-medium text-gray-400 uppercase tracking-wide">
+      {label}
+    </div>
+  );
+}
+
+function NavLink({
+  href,
+  current,
+  children,
+}: {
+  href: string;
+  current: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <a
+      href={href}
+      className={`block rounded-md px-3 py-2 text-sm transition ${
+        current
+          ? "bg-blue-100 text-blue-800 font-medium"
+          : "text-gray-700 hover:bg-blue-50 hover:text-gray-900"
+      }`}
+    >
+      {children}
+    </a>
   );
 }
