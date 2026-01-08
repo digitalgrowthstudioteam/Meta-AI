@@ -4,6 +4,7 @@ import "./globals.css";
 import { ReactNode, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
+import { Toaster } from "react-hot-toast";
 
 /* ----------------------------------
  * TYPES
@@ -22,11 +23,7 @@ type SessionContext = {
   } | null;
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isAdminRoute = pathname.startsWith("/admin");
 
@@ -38,10 +35,7 @@ export default function RootLayout({
   // LOAD SESSION CONTEXT
   // ----------------------------------
   useEffect(() => {
-    if (
-      pathname === "/" ||
-      pathname === "/login"
-    ) {
+    if (pathname === "/" || pathname === "/login") {
       setSessionLoaded(true);
       return;
     }
@@ -88,9 +82,7 @@ export default function RootLayout({
     return (
       <html lang="en">
         <body className="bg-amber-50 text-gray-900">
-          <div className="p-6 text-sm text-gray-500">
-            Loading application…
-          </div>
+          <div className="p-6 text-sm text-gray-500">Loading application…</div>
         </body>
       </html>
     );
@@ -103,9 +95,9 @@ export default function RootLayout({
     return (
       <html lang="en">
         <body className="bg-slate-50 text-gray-900">
-          <main className="p-6 max-w-7xl mx-auto">
-            {children}
-          </main>
+          {/* Toast optional for admin too */}
+          <Toaster position="bottom-right" />
+          <main className="p-6 max-w-7xl mx-auto">{children}</main>
         </body>
       </html>
     );
@@ -117,6 +109,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-amber-50 text-gray-900">
+        {/* 🔥 GLOBAL TOASTER FOR USER UI */}
+        <Toaster position="bottom-right" />
+
         <div className="flex h-screen w-screen overflow-hidden">
           {sidebarOpen && (
             <div
@@ -138,14 +133,9 @@ export default function RootLayout({
                 <div className="text-sm uppercase tracking-wide text-amber-700">
                   Digital Growth Studio
                 </div>
-                <div className="text-xs text-gray-500">
-                  Meta Ads AI Platform
-                </div>
+                <div className="text-xs text-gray-500">Meta Ads AI Platform</div>
               </div>
-              <button
-                className="md:hidden"
-                onClick={() => setSidebarOpen(false)}
-              >
+              <button className="md:hidden" onClick={() => setSidebarOpen(false)}>
                 <X size={20} />
               </button>
             </div>
@@ -171,10 +161,7 @@ export default function RootLayout({
               <NavLink href="/billing" current={pathname === "/billing"}>
                 Billing
               </NavLink>
-              <NavLink
-                href="/buy-campaign"
-                current={pathname === "/buy-campaign"}
-              >
+              <NavLink href="/buy-campaign" current={pathname === "/buy-campaign"}>
                 Buy Campaign
               </NavLink>
               <NavLink href="/settings" current={pathname === "/settings"}>
@@ -191,10 +178,7 @@ export default function RootLayout({
             {session?.user.is_impersonated && (
               <div className="bg-yellow-100 border-b border-yellow-300 px-4 py-2 flex items-center justify-between text-sm">
                 <div className="text-yellow-900">
-                  🔒 Viewing as{" "}
-                  <span className="font-medium">
-                    {session.user.email}
-                  </span>
+                  🔒 Viewing as <span className="font-medium">{session.user.email}</span>
                 </div>
                 <button
                   onClick={exitImpersonation}
@@ -207,8 +191,7 @@ export default function RootLayout({
 
             {session?.ad_account && (
               <div className="bg-white border-b px-4 py-2 text-xs text-gray-600">
-                Active Ad Account:{" "}
-                <strong>{session.ad_account.name}</strong>
+                Active Ad Account: <strong>{session.ad_account.name}</strong>
               </div>
             )}
 
@@ -216,15 +199,11 @@ export default function RootLayout({
               <button onClick={() => setSidebarOpen(true)}>
                 <Menu size={22} />
               </button>
-              <span className="text-sm font-medium">
-                Digital Growth Studio
-              </span>
+              <span className="text-sm font-medium">Digital Growth Studio</span>
             </header>
 
             <main className="flex-1 overflow-y-auto p-4 md:p-8">
-              <div className="max-w-7xl mx-auto space-y-6">
-                {children}
-              </div>
+              <div className="max-w-7xl mx-auto space-y-6">{children}</div>
             </main>
           </div>
         </div>
