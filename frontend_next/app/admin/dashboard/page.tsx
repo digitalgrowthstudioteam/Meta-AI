@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiFetch } from "@/lib/apiFetch";
 
 type DashboardStats = {
   users: number;
@@ -32,25 +33,17 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [impersonating, setImpersonating] = useState(false);
 
-  // ---------------------------------------
-  // LOAD DASHBOARD + USER LIST (ADMIN ONLY)
-  // ---------------------------------------
   useEffect(() => {
     const load = async () => {
       try {
-        const statsRes = await fetch("/api/admin/dashboard", {
-          credentials: "include",
-        });
+        const statsRes = await apiFetch("/api/admin/dashboard");
 
-        // 🔒 HARD GUARD — NOT ADMIN
         if (statsRes.status === 403) {
           router.replace("/dashboard");
           return;
         }
 
-        const usersRes = await fetch("/api/admin/users", {
-          credentials: "include",
-        });
+        const usersRes = await apiFetch("/api/admin/users");
 
         setStats(await statsRes.json());
         setUsers(await usersRes.json());
@@ -62,12 +55,8 @@ export default function AdminDashboardPage() {
     load();
   }, [router]);
 
-  // ---------------------------------------
-  // IMPERSONATE USER
-  // ---------------------------------------
   const impersonate = () => {
     if (!selectedUser) return;
-
     sessionStorage.setItem("impersonate_user", selectedUser);
     setImpersonating(true);
     router.push("/dashboard");
