@@ -22,7 +22,6 @@ type SessionContext = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const isAdminRoute = pathname.startsWith("/admin");
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [session, setSession] = useState<SessionContext | null>(null);
@@ -30,7 +29,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const load = async () => {
-      // Public pages skip loading
       if (pathname === "/" || pathname === "/login") {
         setSessionLoaded(true);
         return;
@@ -45,8 +43,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         if (res.ok) {
           const json = await res.json();
           setSession(json);
-
-          // 🔑 Store for admin sidebar usage
           sessionStorage.setItem("session_context", JSON.stringify(json));
         } else {
           setSession(null);
@@ -66,13 +62,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     window.location.reload();
   };
 
-  // Public pages
   if (pathname === "/" || pathname === "/login") {
     return (
       <html lang="en">
-        <body className="bg-slate-50 text-gray-900">
-          {children}
-        </body>
+        <body className="bg-slate-50 text-gray-900">{children}</body>
       </html>
     );
   }
@@ -87,19 +80,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  // ADMIN LAYOUT
-  if (isAdminRoute) {
-    return (
-      <html lang="en">
-        <body className="bg-slate-50 text-gray-900">
-          <Toaster position="bottom-right" />
-          <main className="p-6 max-w-7xl mx-auto">{children}</main>
-        </body>
-      </html>
-    );
-  }
+  // NOTE: ⛔️ NO ADMIN RETURN HERE — nested admin layout will now render!
 
-  // USER LAYOUT
   return (
     <html lang="en">
       <body className="bg-amber-50 text-gray-900">
