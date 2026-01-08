@@ -175,7 +175,7 @@ export default function CampaignsPage() {
   };
 
   /* -----------------------------------
-   * TOGGLE AI
+   * TOGGLE AI  (ENFORCEMENT AWARE)
    * ----------------------------------- */
   const toggleAI = async (campaign: Campaign) => {
     if (togglingId) return;
@@ -183,18 +183,33 @@ export default function CampaignsPage() {
     const nextValue = !campaign.ai_active;
     setTogglingId(campaign.id);
 
-    setCampaigns((prev) =>
-      prev.map((c) => (c.id === campaign.id ? { ...c, ai_active: nextValue } : c))
-    );
-
     try {
-      await fetch(`/api/campaigns/${campaign.id}/ai-toggle`, {
+      const res = await fetch(`/api/campaigns/${campaign.id}/ai-toggle`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enable: nextValue }),
       });
-    } catch {
+
+      if (!res.ok) {
+        // ENFORCEMENT ERRORS FROM BACKEND
+        const err = await res.json().catch(() => null);
+        if (res.status === 409 && err?.detail?.message) {
+          alert(err.detail.message);
+        } else {
+          alert("Action failed");
+        }
+        return; // stop and DO NOT update UI
+      }
+
+      // SUCCESS
+      setCampaigns((prev) =>
+        prev.map((c) => (c.id === campaign.id ? { ...c, ai_active: nextValue } : c))
+      );
+
+      alert(nextValue ? "AI activated successfully" : "AI deactivated successfully");
+
+    } catch (e) {
       alert("Action failed");
     } finally {
       setTogglingId(null);
@@ -266,11 +281,7 @@ export default function CampaignsPage() {
           <option value="SALES">Sales</option>
         </select>
 
-        <button
-          onClick={syncCampaigns}
-          disabled={syncing}
-          className="btn-secondary"
-        >
+        <button onClick={syncCampaigns} disabled={syncing} className="btn-secondary">
           {syncing ? "Syncing…" : "Sync"}
         </button>
       </div>
