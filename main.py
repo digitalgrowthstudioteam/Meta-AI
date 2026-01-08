@@ -22,6 +22,8 @@ from app.meta_insights.routes import router as meta_insights_router
 from app.reports.routes import router as reports_router
 from app.dashboard.routes import router as dashboard_router
 from app.ai_engine.routes import router as ai_router
+from backend.app.admin.dashboard_routes import router as admin_dashboard_router
+from backend.app.admin.users_routes import router as admin_users_router
 
 # 🔒 ADMIN (IMPERSONATION)
 from backend.app.admin.impersonation_routes import router as admin_router
@@ -62,7 +64,8 @@ app.include_router(meta_insights_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(ai_router, prefix="/api")
-
+app.include_router(admin_dashboard_router, prefix="/api")
+app.include_router(admin_users_router, prefix="/api")
 
 # =========================
 # HEALTH CHECK
