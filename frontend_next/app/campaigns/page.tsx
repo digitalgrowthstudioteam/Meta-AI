@@ -17,7 +17,6 @@ type AdAccount = {
   id: string;
   name: string;
   meta_account_id: string;
-  is_selected?: boolean;
 };
 
 type SessionContext = {
@@ -27,10 +26,24 @@ type SessionContext = {
     is_admin: boolean;
     is_impersonated: boolean;
   };
-  ad_account: AdAccount | null;
   ad_accounts?: AdAccount[];
-  active_ad_account_id?: string;
 };
+
+/* -----------------------------------
+ * COOKIE HELPERS
+ * ----------------------------------- */
+const COOKIE_KEY = "selected_ad_account";
+
+function getCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
+  return match ? match[2] : null;
+}
+
+function setCookie(name: string, value: string) {
+  if (typeof document === "undefined") return;
+  document.cookie = `${name}=${value}; path=/; max-age=31536000`; // 1 year
+}
 
 /* -----------------------------------
  * PAGE
@@ -68,23 +81,27 @@ export default function CampaignsPage() {
     }
 
     const data = await res.json();
-
-    // Backward compatibility
-    if (!data.ad_account && data.ad_accounts && data.active_ad_account_id) {
-      const active = data.ad_accounts.find(
-        (a: any) => a.id === data.active_ad_account_id
-      );
-      if (active) data.ad_account = active;
-    }
-
     setSession(data);
   };
 
   /* -----------------------------------
-   * LOAD CAMPAIGNS (STRICT)
+   * DETERMINE SELECTED ACCOUNT
+   * ----------------------------------- */
+  const getSelectedAccountId = () => {
+    const cookieId = getCookie(COOKIE_KEY);
+    if (cookieId) return cookieId;
+
+    const first = session?.ad_accounts?.[0]?.id ?? null;
+    if (first) setCookie(COOKIE_KEY, first);
+    return first;
+  };
+
+  /* -----------------------------------
+   * LOAD CAMPAIGNS
    * ----------------------------------- */
   const loadCampaigns = async () => {
-    if (!session?.ad_account) {
+    const selected = getSelectedAccountId();
+    if (!selected) {
       setCampaigns([]);
       setLoading(false);
       return;
@@ -97,6 +114,7 @@ export default function CampaignsPage() {
       const params = new URLSearchParams({
         page: String(page),
         page_size: String(pageSize),
+        account_id: selected,
       });
 
       if (statusFilter) params.append("status", statusFilter);
@@ -109,7 +127,6 @@ export default function CampaignsPage() {
       });
 
       if (!res.ok) throw new Error();
-
       const data = await res.json();
       setCampaigns(Array.isArray(data) ? data : []);
     } catch {
@@ -127,41 +144,15 @@ export default function CampaignsPage() {
   }, []);
 
   useEffect(() => {
+    if (session) loadCampaigns();
+  }, [session, statusFilter, aiFilter, objectiveFilter, page]);
+
+  /* -----------------------------------
+   * SWITCH ACCOUNT (COOKIE-ONLY)
+   * ----------------------------------- */
+  const switchAdAccount = (accountId: string) => {
+    setCookie(COOKIE_KEY, accountId);
     loadCampaigns();
-  }, [
-    session?.ad_account?.id,
-    statusFilter,
-    aiFilter,
-    objectiveFilter,
-    page,
-  ]);
-
-  /* -----------------------------------
-   * META CONNECT
-   * ----------------------------------- */
-  const connectMeta = async () => {
-    const res = await fetch("/api/meta/connect", {
-      credentials: "include",
-      cache: "no-store",
-    });
-
-    const data = await res.json();
-    if (data?.redirect_url) window.location.href = data.redirect_url;
-  };
-
-  /* -----------------------------------
-   * SWITCH ACCOUNT (ALWAYS VISIBLE)
-   * ----------------------------------- */
-  const switchAdAccount = async (accountId: string) => {
-    await fetch("/api/session/set-active", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ account_id: accountId }),
-    });
-
-    await loadSession();
-    await loadCampaigns();
   };
 
   /* -----------------------------------
@@ -169,11 +160,16 @@ export default function CampaignsPage() {
    * ----------------------------------- */
   const syncCampaigns = async () => {
     setSyncing(true);
-    await fetch("/api/campaigns/sync", {
+
+    const selected = getSelectedAccountId();
+    if (!selected) return;
+
+    await fetch(`/api/campaigns/sync?account_id=${selected}`, {
       method: "POST",
       credentials: "include",
       cache: "no-store",
     });
+
     await loadCampaigns();
     setSyncing(false);
   };
@@ -194,17 +190,12 @@ export default function CampaignsPage() {
     );
 
     try {
-      const res = await fetch(
-        `/api/campaigns/${campaign.id}/ai-toggle`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ enable: nextValue }),
-        }
-      );
-
-      if (!res.ok) throw new Error();
+      await fetch(`/api/campaigns/${campaign.id}/ai-toggle`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enable: nextValue }),
+      });
     } catch {
       alert("Action failed");
     } finally {
@@ -215,13 +206,9 @@ export default function CampaignsPage() {
   /* -----------------------------------
    * RENDER
    * ----------------------------------- */
-  if (!session?.ad_accounts) {
-    return <div>Loading...</div>;
-  }
+  if (!session?.ad_accounts) return <div>Loading...</div>;
 
-  // Fallback if no ad_account yet but accounts exist
-  const activeId =
-    session.ad_account?.id || session.active_ad_account_id || session.ad_accounts[0]?.id;
+  const selectedId = getSelectedAccountId();
 
   return (
     <div className="space-y-6">
@@ -231,18 +218,18 @@ export default function CampaignsPage() {
           <p className="text-sm text-gray-500">
             Active account:{" "}
             <strong>
-              {session.ad_accounts.find((a) => a.id === activeId)?.name}
+              {session.ad_accounts.find(a => a.id === selectedId)?.name}
             </strong>
           </p>
         </div>
 
-        {/* ALWAYS-visible account dropdown */}
+        {/* ALWAYS-visible dropdown */}
         <select
           className="border rounded px-2 py-1 text-sm"
-          value={activeId}
+          value={selectedId || ""}
           onChange={(e) => switchAdAccount(e.target.value)}
         >
-          {session.ad_accounts.map((acc) => (
+          {session.ad_accounts.map(acc => (
             <option key={acc.id} value={acc.id}>
               {acc.name}
             </option>
