@@ -23,6 +23,17 @@ type SessionContext = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
+  // ⛔️ NEW: if admin route, do not wrap with user UI
+  if (pathname.startsWith("/admin")) {
+    return (
+      <html lang="en">
+        <body className="bg-slate-50 text-gray-900">
+          {children}
+        </body>
+      </html>
+    );
+  }
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [session, setSession] = useState<SessionContext | null>(null);
   const [sessionLoaded, setSessionLoaded] = useState(false);
@@ -79,8 +90,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       </html>
     );
   }
-
-  // NOTE: ⛔️ NO ADMIN RETURN HERE — nested admin layout will now render!
 
   return (
     <html lang="en">
