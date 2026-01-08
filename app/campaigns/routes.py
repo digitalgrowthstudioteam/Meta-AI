@@ -75,47 +75,44 @@ async def list_campaigns(
     if account_id:
         stmt = stmt.where(Campaign.ad_account_id == account_id)
 
-    # STATUS filter ("ACTIVE" / "PAUSED")
+    # Filter by status
     if status:
         stmt = stmt.where(Campaign.status == status)
 
-    # OBJECTIVE filter ("LEAD", "SALES", etc)
+    # Filter by objective
     if objective:
         stmt = stmt.where(Campaign.objective == objective)
 
-    # AI filter ("true" / "false")
+    # Filter AI (true/false)
     if ai_active is not None and ai_active != "":
         if ai_active.lower() == "true":
             stmt = stmt.where(Campaign.ai_active.is_(True))
         elif ai_active.lower() == "false":
             stmt = stmt.where(Campaign.ai_active.is_(False))
 
+    # Execute query
     result = await db.execute(stmt)
     campaigns = result.scalars().all()
 
-    response: list[CampaignResponse] = []
-
-    for campaign in campaigns:
-        category_map = campaign.category_map
-        response.append(
-            CampaignResponse(
-                id=campaign.id,
-                name=campaign.name,
-                objective=campaign.objective,
-                status=campaign.status,
-                ai_active=campaign.ai_active,
-                ai_activated_at=campaign.ai_activated_at,
-                category=category_map.final_category if category_map else None,
-                category_confidence=category_map.confidence_score if category_map else None,
-                category_source=category_map.source.value if category_map else None,
-            )
+    # Serialize
+    return [
+        CampaignResponse(
+            id=c.id,
+            name=c.name,
+            objective=c.objective,
+            status=c.status,
+            ai_active=c.ai_active,
+            ai_activated_at=c.ai_activated_at,
+            category=c.category_map.final_category if c.category_map else None,
+            category_confidence=c.category_map.confidence_score if c.category_map else None,
+            category_source=c.category_map.source.value if c.category_map else None,
         )
-
-    return response
+        for c in campaigns
+    ]
 
 
 # =========================================================
-# SYNC CAMPAIGNS (Cookie Based)
+# SYNC CAMPAIGNS — Cookie Based
 # =========================================================
 @router.post(
     "/sync",
@@ -131,15 +128,31 @@ async def sync_campaigns_from_meta(
     if not cookie_active_id:
         return []
 
-    return await CampaignService.sync_from_meta(
+    synced = await CampaignService.sync_from_meta(
         db=db,
         user_id=current_user.id,
         ad_account_ids=[cookie_active_id],
     )
 
+    # Serialize output for response_model compliance
+    return [
+        CampaignResponse(
+            id=c.id,
+            name=c.name,
+            objective=c.objective,
+            status=c.status,
+            ai_active=c.ai_active,
+            ai_activated_at=c.ai_activated_at,
+            category=c.category_map.final_category if c.category_map else None,
+            category_confidence=c.category_map.confidence_score if c.category_map else None,
+            category_source=c.category_map.source.value if c.category_map else None,
+        )
+        for c in synced
+    ]
+
 
 # =========================================================
-# AI TOGGLE (unchanged)
+# AI TOGGLE — Plan Enforcement & Structured Errors
 # =========================================================
 @router.post(
     "/{campaign_id}/ai-toggle",
@@ -153,20 +166,34 @@ async def toggle_ai(
     current_user: User = Depends(get_current_user),
 ):
     try:
-        return await CampaignService.toggle_ai(
+        campaign = await CampaignService.toggle_ai(
             db=db,
             user_id=current_user.id,
             campaign_id=campaign_id,
             enable=payload.enable,
         )
 
+        return CampaignResponse(
+            id=campaign.id,
+            name=campaign.name,
+            objective=campaign.objective,
+            status=campaign.status,
+            ai_active=campaign.ai_active,
+            ai_activated_at=campaign.ai_activated_at,
+            category=campaign.category_map.final_category if campaign.category_map else None,
+            category_confidence=campaign.category_map.confidence_score if campaign.category_map else None,
+            category_source=campaign.category_map.source.value if campaign.category_map else None,
+        )
+
     except EnforcementError as e:
+        # AI LIMIT / PLAN VIOLATION
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=e.to_dict(),
         )
 
     except ValueError as e:
+        # Campaign not found
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
