@@ -1,13 +1,62 @@
 "use client";
 
 import { ReactNode, useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 
+type SessionContext = {
+  user: {
+    email: string;
+    is_admin: boolean;
+  };
+};
+
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [session, setSession] = useState<SessionContext | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  // Load session from backend
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/session/context", {
+          credentials: "include",
+          cache: "no-store",
+        });
+
+        if (!res.ok) {
+          router.replace("/login");
+          return;
+        }
+
+        const data = await res.json();
+        setSession(data);
+      } catch {
+        router.replace("/login");
+      } finally {
+        setLoaded(true);
+      }
+    })();
+  }, [router]);
+
+  if (!loaded) {
+    return (
+      <div className="p-6 text-sm text-gray-500">Loading admin…</div>
+    );
+  }
+
+  if (!session?.user.is_admin) {
+    return (
+      <div className="p-6 text-sm text-red-600">
+        Access denied — Admin only.
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen w-screen bg-slate-50 overflow-hidden text-gray-900">
@@ -35,9 +84,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             <div className="text-sm uppercase tracking-wide text-blue-700">
               Admin Console
             </div>
-            <div className="text-xs text-gray-500">
-              Digital Growth Studio
-            </div>
+            <div className="text-xs text-gray-500">Digital Growth Studio</div>
           </div>
           <button className="md:hidden" onClick={() => setSidebarOpen(false)}>
             <X size={20} />
@@ -87,9 +134,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 md:p-8">
-          <div className="max-w-7xl mx-auto space-y-6">
-            {children}
-          </div>
+          <div className="max-w-7xl mx-auto space-y-6">{children}</div>
         </main>
       </div>
     </div>
