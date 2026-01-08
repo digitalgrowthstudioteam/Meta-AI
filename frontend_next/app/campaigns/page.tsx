@@ -13,6 +13,13 @@ type Campaign = {
   ai_active?: boolean;
 };
 
+type AdAccount = {
+  id: string;
+  name: string;
+  meta_account_id: string;
+  is_selected?: boolean;
+};
+
 type SessionContext = {
   user: {
     id: string;
@@ -20,11 +27,9 @@ type SessionContext = {
     is_admin: boolean;
     is_impersonated: boolean;
   };
-  ad_account: {
-    id: string;
-    name: string;
-    meta_account_id: string;
-  } | null;
+  ad_account: AdAccount | null; // backward compat
+  ad_accounts?: AdAccount[]; // new
+  active_ad_account_id?: string; // new
 };
 
 /* -----------------------------------
@@ -63,6 +68,15 @@ export default function CampaignsPage() {
     }
 
     const data = await res.json();
+
+    // backward compatibility fallback
+    if (!data.ad_account && data.ad_accounts && data.active_ad_account_id) {
+      const active = data.ad_accounts.find(
+        (a: any) => a.id === data.active_ad_account_id
+      );
+      if (active) data.ad_account = active;
+    }
+
     setSession(data);
   };
 
@@ -133,6 +147,21 @@ export default function CampaignsPage() {
 
     const data = await res.json();
     if (data?.redirect_url) window.location.href = data.redirect_url;
+  };
+
+  /* -----------------------------------
+   * SWITCH ACTIVE ACCOUNT (NEW)
+   * ----------------------------------- */
+  const switchAdAccount = async (accountId: string) => {
+    await fetch("/api/session/set-active", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ account_id: accountId }),
+    });
+
+    await loadSession();
+    await loadCampaigns();
   };
 
   /* -----------------------------------
@@ -209,11 +238,28 @@ export default function CampaignsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold">Campaigns</h1>
-        <p className="text-sm text-gray-500">
-          Active account: <strong>{session.ad_account.name}</strong>
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold">Campaigns</h1>
+          <p className="text-sm text-gray-500">
+            Active account: <strong>{session.ad_account.name}</strong>
+          </p>
+        </div>
+
+        {/* NEW ACCOUNT SWITCHER */}
+        {session.ad_accounts && session.ad_accounts.length > 1 && (
+          <select
+            className="border rounded px-2 py-1 text-sm"
+            value={session.ad_account.id}
+            onChange={(e) => switchAdAccount(e.target.value)}
+          >
+            {session.ad_accounts.map((acc) => (
+              <option key={acc.id} value={acc.id}>
+                {acc.name}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* FILTER BAR */}
