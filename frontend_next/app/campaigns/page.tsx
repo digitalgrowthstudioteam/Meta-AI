@@ -27,9 +27,9 @@ type SessionContext = {
     is_admin: boolean;
     is_impersonated: boolean;
   };
-  ad_account: AdAccount | null; // backward compat
-  ad_accounts?: AdAccount[]; // new
-  active_ad_account_id?: string; // new
+  ad_account: AdAccount | null;
+  ad_accounts?: AdAccount[];
+  active_ad_account_id?: string;
 };
 
 /* -----------------------------------
@@ -54,7 +54,7 @@ export default function CampaignsPage() {
   const [pageSize] = useState(10);
 
   /* -----------------------------------
-   * LOAD SESSION CONTEXT (SINGLE SOURCE)
+   * LOAD SESSION CONTEXT
    * ----------------------------------- */
   const loadSession = async () => {
     const res = await fetch("/api/session/context", {
@@ -69,7 +69,7 @@ export default function CampaignsPage() {
 
     const data = await res.json();
 
-    // backward compatibility fallback
+    // Backward compatibility
     if (!data.ad_account && data.ad_accounts && data.active_ad_account_id) {
       const active = data.ad_accounts.find(
         (a: any) => a.id === data.active_ad_account_id
@@ -81,7 +81,7 @@ export default function CampaignsPage() {
   };
 
   /* -----------------------------------
-   * LOAD CAMPAIGNS (STRICT CONTEXT)
+   * LOAD CAMPAIGNS (STRICT)
    * ----------------------------------- */
   const loadCampaigns = async () => {
     if (!session?.ad_account) {
@@ -150,7 +150,7 @@ export default function CampaignsPage() {
   };
 
   /* -----------------------------------
-   * SWITCH ACTIVE ACCOUNT (NEW)
+   * SWITCH ACCOUNT (ALWAYS VISIBLE)
    * ----------------------------------- */
   const switchAdAccount = async (accountId: string) => {
     await fetch("/api/session/set-active", {
@@ -206,13 +206,6 @@ export default function CampaignsPage() {
 
       if (!res.ok) throw new Error();
     } catch {
-      setCampaigns((prev) =>
-        prev.map((c) =>
-          c.id === campaign.id
-            ? { ...c, ai_active: campaign.ai_active }
-            : c
-        )
-      );
       alert("Action failed");
     } finally {
       setTogglingId(null);
@@ -222,19 +215,13 @@ export default function CampaignsPage() {
   /* -----------------------------------
    * RENDER
    * ----------------------------------- */
-  if (!session?.ad_account) {
-    return (
-      <div className="space-y-4 max-w-xl">
-        <h1 className="text-xl font-semibold">Campaigns</h1>
-        <p className="text-sm text-gray-600">
-          Connect Meta Ads and select an ad account.
-        </p>
-        <button onClick={connectMeta} className="btn-primary">
-          Connect Meta Ads
-        </button>
-      </div>
-    );
+  if (!session?.ad_accounts) {
+    return <div>Loading...</div>;
   }
+
+  // Fallback if no ad_account yet but accounts exist
+  const activeId =
+    session.ad_account?.id || session.active_ad_account_id || session.ad_accounts[0]?.id;
 
   return (
     <div className="space-y-6">
@@ -242,24 +229,25 @@ export default function CampaignsPage() {
         <div>
           <h1 className="text-xl font-semibold">Campaigns</h1>
           <p className="text-sm text-gray-500">
-            Active account: <strong>{session.ad_account.name}</strong>
+            Active account:{" "}
+            <strong>
+              {session.ad_accounts.find((a) => a.id === activeId)?.name}
+            </strong>
           </p>
         </div>
 
-        {/* NEW ACCOUNT SWITCHER */}
-        {session.ad_accounts && session.ad_accounts.length > 1 && (
-          <select
-            className="border rounded px-2 py-1 text-sm"
-            value={session.ad_account.id}
-            onChange={(e) => switchAdAccount(e.target.value)}
-          >
-            {session.ad_accounts.map((acc) => (
-              <option key={acc.id} value={acc.id}>
-                {acc.name}
-              </option>
-            ))}
-          </select>
-        )}
+        {/* ALWAYS-visible account dropdown */}
+        <select
+          className="border rounded px-2 py-1 text-sm"
+          value={activeId}
+          onChange={(e) => switchAdAccount(e.target.value)}
+        >
+          {session.ad_accounts.map((acc) => (
+            <option key={acc.id} value={acc.id}>
+              {acc.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* FILTER BAR */}
@@ -307,9 +295,7 @@ export default function CampaignsPage() {
       {error && <div className="text-red-600">{error}</div>}
 
       {!loading && campaigns.length === 0 && (
-        <div className="empty-state">
-          <p className="empty-state-title mb-2">No campaigns found</p>
-        </div>
+        <div>No campaigns found</div>
       )}
 
       {!loading && campaigns.length > 0 && (
@@ -339,9 +325,7 @@ export default function CampaignsPage() {
                     >
                       <span
                         className={`inline-block h-4 w-4 rounded-full bg-white transition ${
-                          c.ai_active
-                            ? "translate-x-6"
-                            : "translate-x-1"
+                          c.ai_active ? "translate-x-6" : "translate-x-1"
                         }`}
                       />
                     </button>
