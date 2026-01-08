@@ -23,18 +23,6 @@ type SessionContext = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
-  // ADMIN LAYOUT WRAP
-  if (pathname.startsWith("/admin")) {
-    return (
-      <html lang="en">
-        <body className="bg-slate-50 text-gray-900">
-          <Toaster position="bottom-right" />
-          {children}
-        </body>
-      </html>
-    );
-  }
-
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [session, setSession] = useState<SessionContext | null>(null);
   const [sessionLoaded, setSessionLoaded] = useState(false);
@@ -73,6 +61,18 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     sessionStorage.clear();
     window.location.reload();
   };
+
+  // ADMIN LAYOUT — PASS THROUGH TO /app/admin/layout.tsx
+  if (pathname.startsWith("/admin")) {
+    return (
+      <html lang="en">
+        <body className="bg-slate-50 text-gray-900">
+          <Toaster position="bottom-right" />
+          {children}
+        </body>
+      </html>
+    );
+  }
 
   if (pathname === "/" || pathname === "/login") {
     return (
