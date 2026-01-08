@@ -5,34 +5,9 @@ import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 
-type SessionContext = {
-  user: {
-    email: string;
-    is_admin: boolean;
-  };
-};
-
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [session, setSession] = useState<SessionContext | null>(null);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    const ctx = sessionStorage.getItem("session_context");
-    if (ctx) {
-      setSession(JSON.parse(ctx));
-    }
-    setLoaded(true);
-  }, []);
-
-  if (!loaded) {
-    return (
-      <div className="p-6 text-sm text-gray-500">
-        Loading admin…
-      </div>
-    );
-  }
 
   return (
     <div className="flex h-screen w-screen bg-slate-50 overflow-hidden text-gray-900">
@@ -71,25 +46,28 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           <SectionLabel label="Overview" />
-          <NavLink href="/admin/dashboard" current={pathname === "/admin/dashboard"}>
+          <NavLink href="/admin/dashboard" pathname={pathname}>
             Dashboard
           </NavLink>
 
           <SectionLabel label="Users" />
-          <NavLink href="/admin/users" current={pathname === "/admin/users"}>
+          <NavLink href="/admin/users" pathname={pathname}>
             Users & Impersonation
+          </NavLink>
+          <NavLink href="/admin/chat" pathname={pathname}>
+            Chat Monitor
           </NavLink>
 
           <SectionLabel label="Controls" />
-          <NavLink href="/admin/settings" current={pathname === "/admin/settings"}>
+          <NavLink href="/admin/settings" pathname={pathname}>
             Global Settings
           </NavLink>
-          <NavLink href="/admin/metrics" current={pathname === "/admin/metrics"}>
+          <NavLink href="/admin/metrics" pathname={pathname}>
             Metrics Sync
           </NavLink>
 
           <SectionLabel label="Audit" />
-          <NavLink href="/admin/audit" current={pathname === "/admin/audit"}>
+          <NavLink href="/admin/audit" pathname={pathname}>
             Audit Logs
           </NavLink>
         </nav>
@@ -109,13 +87,16 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 md:p-8">
-          <div className="max-w-7xl mx-auto space-y-6">{children}</div>
+          <div className="max-w-7xl mx-auto space-y-6">
+            {children}
+          </div>
         </main>
       </div>
     </div>
   );
 }
 
+/* ---------------------------------- */
 function SectionLabel({ label }: { label: string }) {
   return (
     <div className="px-2 pt-4 pb-1 text-xs font-medium text-gray-400 uppercase tracking-wide">
@@ -124,20 +105,23 @@ function SectionLabel({ label }: { label: string }) {
   );
 }
 
+/* ---------------------------------- */
 function NavLink({
   href,
-  current,
+  pathname,
   children,
 }: {
   href: string;
-  current: boolean;
+  pathname: string;
   children: ReactNode;
 }) {
+  const active = pathname.startsWith(href);
+
   return (
     <a
       href={href}
       className={`block rounded-md px-3 py-2 text-sm transition ${
-        current
+        active
           ? "bg-blue-100 text-blue-800 font-medium"
           : "text-gray-700 hover:bg-blue-50 hover:text-gray-900"
       }`}
