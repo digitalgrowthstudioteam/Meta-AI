@@ -4,16 +4,16 @@ SINGLE SOURCE OF TRUTH for frontend state
 
 Exposes:
 - GET /api/session/context
+- POST /api/session/set-active
 
 Rules:
-- Read-only
 - Cookie-based auth
 - Used by ALL frontend pages
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.core.db_session import get_db
 from app.auth.dependencies import get_current_user
@@ -39,7 +39,6 @@ async def session_context(
     - Exactly ONE active (selected) Meta ad account if exists
     """
 
-    # Fetch all linked ad accounts for this user
     result = await db.execute(
         select(
             MetaAdAccount.id,
@@ -57,7 +56,6 @@ async def session_context(
 
     rows = result.all()
 
-    # Transform rows → list
     ad_accounts = [
         {
             "id": str(r.id),
@@ -68,7 +66,6 @@ async def session_context(
         for r in rows
     ]
 
-    # Identify active ad account (if any)
     active = next((a for a in ad_accounts if a["is_selected"]), None)
 
     return {
@@ -78,18 +75,65 @@ async def session_context(
             "is_admin": user.role == "admin",
             "is_impersonated": getattr(user, "_is_impersonated", False),
         },
-        # New fields for FE multi-account support
         "ad_accounts": ad_accounts,
         "active_ad_account_id": active["id"] if active else None,
-
-        # Backward compatibility field for old UI (optional)
         "ad_account": (
             {
                 "id": active["id"],
                 "name": active["name"],
                 "meta_account_id": active["meta_account_id"],
             }
-            if active
-            else None
+            if active else None
         ),
     }
+
+
+@router.post("/set-active")
+async def set_active_ad_account(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    Switch currently active Meta Ad Account for this user.
+    Body: { "account_id": "<uuid>" }
+    """
+
+    account_id = payload.get("account_id")
+    if not account_id:
+        raise HTTPException(status_code=400, detail="account_id required")
+
+    # Verify that account belongs to this user
+    result = await db.execute(
+        select(UserMetaAdAccount)
+        .where(
+            UserMetaAdAccount.user_id == user.id,
+            UserMetaAdAccount.meta_ad_account_id == account_id,
+        )
+    )
+    relation = result.scalar_one_or_none()
+
+    if not relation:
+        raise HTTPException(status_code=403, detail="Not authorized to select this account")
+
+    # 1) Set all accounts to false
+    await db.execute(
+        update(UserMetaAdAccount)
+        .where(UserMetaAdAccount.user_id == user.id)
+        .values(is_selected=False)
+    )
+
+    # 2) Set selected account to true
+    await db.execute(
+        update(UserMetaAdAccount)
+        .where(
+            UserMetaAdAccount.user_id == user.id,
+            UserMetaAdAccount.meta_ad_account_id == account_id,
+        )
+        .values(is_selected=True)
+    )
+
+    await db.commit()
+
+    # Return updated context
+    return await session_context(db=db, user=user)
