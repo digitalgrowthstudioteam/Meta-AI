@@ -20,7 +20,7 @@ router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
 
 
 # =========================================================
-# LIST CAMPAIGNS — COOKIE MODE (NO is_selected required)
+# LIST CAMPAIGNS — With Filters + Cookie Mode
 # =========================================================
 @router.get(
     "",
@@ -29,6 +29,9 @@ router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
 )
 async def list_campaigns(
     account_id: UUID | None = None,
+    status: str | None = None,
+    ai_active: str | None = None,
+    objective: str | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(get_current_user),
 ):
@@ -53,37 +56,39 @@ async def list_campaigns(
             detail="Meta account not connected",
         )
 
-    # Specific account filter (cookie-based UI)
+    # Base Query
+    stmt = (
+        select(Campaign)
+        .options(selectinload(Campaign.category_map))
+        .join(MetaAdAccount, Campaign.ad_account_id == MetaAdAccount.id)
+        .join(
+            UserMetaAdAccount,
+            UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
+        )
+        .where(
+            UserMetaAdAccount.user_id == current_user.id,
+            Campaign.is_archived.is_(False),
+        )
+    )
+
+    # Filter by account_id
     if account_id:
-        stmt = (
-            select(Campaign)
-            .options(selectinload(Campaign.category_map))
-            .join(MetaAdAccount, Campaign.ad_account_id == MetaAdAccount.id)
-            .join(
-                UserMetaAdAccount,
-                UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
-            )
-            .where(
-                UserMetaAdAccount.user_id == current_user.id,
-                Campaign.ad_account_id == account_id,
-                Campaign.is_archived.is_(False),
-            )
-        )
-    else:
-        # Fallback: all user's accounts
-        stmt = (
-            select(Campaign)
-            .options(selectinload(Campaign.category_map))
-            .join(MetaAdAccount, Campaign.ad_account_id == MetaAdAccount.id)
-            .join(
-                UserMetaAdAccount,
-                UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
-            )
-            .where(
-                UserMetaAdAccount.user_id == current_user.id,
-                Campaign.is_archived.is_(False),
-            )
-        )
+        stmt = stmt.where(Campaign.ad_account_id == account_id)
+
+    # STATUS filter ("ACTIVE" / "PAUSED")
+    if status:
+        stmt = stmt.where(Campaign.status == status)
+
+    # OBJECTIVE filter ("LEAD", "SALES", etc)
+    if objective:
+        stmt = stmt.where(Campaign.objective == objective)
+
+    # AI filter ("true" / "false")
+    if ai_active is not None and ai_active != "":
+        if ai_active.lower() == "true":
+            stmt = stmt.where(Campaign.ai_active.is_(True))
+        elif ai_active.lower() == "false":
+            stmt = stmt.where(Campaign.ai_active.is_(False))
 
     result = await db.execute(stmt)
     campaigns = result.scalars().all()
@@ -110,7 +115,7 @@ async def list_campaigns(
 
 
 # =========================================================
-# SYNC CAMPAIGNS — COOKIE TARGETED
+# SYNC CAMPAIGNS (Cookie Based)
 # =========================================================
 @router.post(
     "/sync",
