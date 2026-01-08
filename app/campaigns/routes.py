@@ -24,14 +24,14 @@ router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
     status_code=status.HTTP_200_OK,
 )
 async def list_campaigns(
-    request: Request,
+    account_id: UUID | None = None,   # ⬅ NEW
     db: AsyncSession = Depends(get_db),
     current_user: User | None = Depends(get_current_user),
 ):
     if current_user is None:
         return []
 
-    # 1️⃣ Ensure Meta OAuth token exists
+    # 1️⃣ Ensure Meta is connected
     token = (
         await db.execute(
             select(MetaOAuthToken)
@@ -49,40 +49,46 @@ async def list_campaigns(
             detail="Meta account not connected",
         )
 
-    # 2️⃣ Read ad account from cookie
-    cookie_active_id = request.cookies.get("active_account_id")
-    if not cookie_active_id:
-        return []  # frontend should set one via session context
-
-    # 3️⃣ Validate that account belongs to user
-    owned = await db.execute(
-        select(UserMetaAdAccount)
-        .where(
-            UserMetaAdAccount.user_id == current_user.id,
-            UserMetaAdAccount.meta_ad_account_id == cookie_active_id,
-        )
-        .limit(1)
-    )
-    relation = owned.scalar_one_or_none()
-
-    if not relation:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid ad account selection"
+    # 2️⃣ If frontend sent account_id → filter by that
+    if account_id:
+        stmt = (
+            select(Campaign)
+            .options(selectinload(Campaign.category_map))
+            .join(MetaAdAccount, Campaign.ad_account_id == MetaAdAccount.id)
+            .join(
+                UserMetaAdAccount,
+                UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
+            )
+            .where(
+                UserMetaAdAccount.user_id == current_user.id,
+                Campaign.ad_account_id == account_id,
+                Campaign.is_archived.is_(False),
+            )
         )
 
-    # 4️⃣ Fetch campaigns for ONLY this account
-    campaigns = await CampaignService.list_campaigns_with_visibility(
-        db=db,
-        user_id=current_user.id,
-        ad_account_ids=[cookie_active_id],
-    )
+    else:
+        # 3️⃣ Otherwise fallback: load all linked accounts (old behavior)
+        stmt = (
+            select(Campaign)
+            .options(selectinload(Campaign.category_map))
+            .join(MetaAdAccount, Campaign.ad_account_id == MetaAdAccount.id)
+            .join(
+                UserMetaAdAccount,
+                UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
+            )
+            .where(
+                UserMetaAdAccount.user_id == current_user.id,
+                Campaign.is_archived.is_(False),
+            )
+        )
+
+    result = await db.execute(stmt)
+    campaigns = result.scalars().all()
 
     response: list[CampaignResponse] = []
 
     for campaign in campaigns:
         category_map = campaign.category_map
-
         response.append(
             CampaignResponse(
                 id=campaign.id,
