@@ -67,7 +67,6 @@ class CampaignService:
             logger.warning("sync_from_meta: no accounts provided for user=%s", user_id)
             return []
 
-        # fetch only owned ad_accounts
         result = await db.execute(
             select(MetaAdAccount)
             .join(
@@ -164,7 +163,8 @@ class CampaignService:
             db.add(
                 CampaignActionLog(
                     campaign_id=campaign.id,
-                    user_id=campaign.ad_account_id,  # system trace
+                    # system actor trace
+                    user_id=campaign.ad_account_id,
                     actor_type="system",
                     action_type="manual_expiry",
                     before_state=before_state,
@@ -174,7 +174,7 @@ class CampaignService:
             )
 
     # =====================================================
-    # AI TOGGLE — COOKIE MODE (NO is_selected)
+    # AI TOGGLE — PLAN ENFORCED + TRANSACTION SAFE
     # =====================================================
     @staticmethod
     async def toggle_ai(
@@ -185,7 +185,7 @@ class CampaignService:
         enable: bool,
     ) -> Campaign:
 
-        # Ensure user owns the campaign
+        # 1) Ensure ownership
         stmt = (
             select(Campaign)
             .join(MetaAdAccount, Campaign.ad_account_id == MetaAdAccount.id)
@@ -197,7 +197,7 @@ class CampaignService:
                 Campaign.id == campaign_id,
                 UserMetaAdAccount.user_id == user_id,
             )
-            .with_for_update()
+            .with_for_update()  # prevent toggle race
         )
 
         result = await db.execute(stmt)
@@ -206,7 +206,7 @@ class CampaignService:
         if not campaign:
             raise ValueError("Campaign not found or not owned by user")
 
-        # 🔒 Enforce manual validity
+        # 2) Manual validity enforcement
         await CampaignService.enforce_manual_campaign_validity(
             db=db,
             campaign=campaign,
@@ -219,24 +219,23 @@ class CampaignService:
                 action="RENEW_MANUAL",
             )
 
-        before_state = {
-            "ai_active": campaign.ai_active,
-        }
+        before_state = {"ai_active": campaign.ai_active}
 
+        # 3) PLAN ENFORCEMENT — only on enabling
         if enable and not campaign.ai_active:
             await PlanEnforcementService.assert_ai_allowed(
                 db=db,
                 user_id=user_id,
             )
 
+        # 4) State mutation
         campaign.ai_active = enable
         campaign.ai_activated_at = datetime.utcnow() if enable else None
         campaign.ai_deactivated_at = None if enable else datetime.utcnow()
 
-        after_state = {
-            "ai_active": campaign.ai_active,
-        }
+        after_state = {"ai_active": campaign.ai_active}
 
+        # 5) Audit log
         db.add(
             CampaignActionLog(
                 campaign_id=campaign.id,
@@ -249,6 +248,7 @@ class CampaignService:
             )
         )
 
+        # 6) Final commit
         await db.commit()
         await db.refresh(campaign)
         return campaign
