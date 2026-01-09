@@ -21,12 +21,10 @@ jobs:
 
       - name: Deploy to VPS
         run: |
-          ssh -o StrictHostKeyChecking=yes ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} << 'EOF'
-            echo "DEPLOY USER:"
-            whoami
-            echo "PWD:"
+          ssh -o StrictHostKeyChecking=yes root@${{ secrets.VPS_HOST }} << 'EOF'
+            set -e
+            cd /var/www/projects/meta-ai-campaign
             pwd
-            ls -ld /var/www/projects/meta-ai-campaign
-            exit 1
+            ls -la .git
+            git pull origin main
           EOF
-
