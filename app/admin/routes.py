@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, update
+from sqlalchemy import select, func
 from uuid import UUID
 from datetime import datetime
 
@@ -9,7 +9,6 @@ from app.auth.dependencies import require_user, forbid_impersonated_writes
 from app.users.models import User
 from app.campaigns.models import Campaign, CampaignActionLog
 from app.plans.subscription_models import Subscription
-from app.admin.campaign_routes import router as campaign_admin_router
 
 # -------------------------
 # Admin Schemas / Services
@@ -206,11 +205,15 @@ async def admin_force_ai_toggle(
 
     await db.commit()
 
-    return {"status": "ok", "campaign_id": str(campaign.id), "ai_active": campaign.ai_active}
+    return {
+        "status": "ok",
+        "campaign_id": str(campaign.id),
+        "ai_active": campaign.ai_active,
+    }
 
 
 # ==========================================================
-# PHASE 5 — RESET BENCHMARKS / MARK INCOMPATIBLE
+# PHASE 5 — RESET CAMPAIGN AI STATE
 # ==========================================================
 @router.post("/campaigns/{campaign_id}/reset")
 async def admin_reset_campaign_state(
@@ -259,6 +262,7 @@ async def admin_reset_campaign_state(
     )
 
     await db.commit()
+
     return {"status": "ok", "campaign_id": str(campaign.id)}
 
 
@@ -464,4 +468,3 @@ async def rebuild_ml_aggregations(
 # METRICS SYNC ROUTES
 # =========================
 router.include_router(metrics_sync_router)
-router.include_router(campaign_admin_router)
