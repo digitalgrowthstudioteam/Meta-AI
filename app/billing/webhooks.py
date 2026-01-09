@@ -96,8 +96,9 @@ async def razorpay_webhook(
         if not plan:
             raise HTTPException(status_code=400, detail="Plan not found")
 
+        # Billing cycle = 30 days
         period_from = datetime.utcnow()
-        period_to = period_from + timedelta(days=plan.validity_days)
+        period_to = period_from + timedelta(days=30)
 
         subscription = Subscription(
             user_id=payment.user_id,
@@ -106,8 +107,9 @@ async def razorpay_webhook(
             status="active",
             starts_at=period_from,
             ends_at=period_to,
-            ai_campaign_limit_snapshot=plan.ai_campaign_limit,
+            ai_campaign_limit_snapshot=plan.ai_campaign_limit or 0,
             is_trial=False,
+            is_active=True,
             created_by_admin=False,
             assigned_by_admin=False,
         )
