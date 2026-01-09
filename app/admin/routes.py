@@ -9,6 +9,8 @@ from app.auth.dependencies import require_user, forbid_impersonated_writes
 from app.users.models import User
 from app.campaigns.models import Campaign, CampaignActionLog
 from app.plans.subscription_models import Subscription
+from app.admin.campaign_routes import router as campaign_admin_router
+router.include_router(campaign_admin_router)
 
 # -------------------------
 # Admin Schemas / Services
