@@ -8,6 +8,7 @@ from app.users.models import User
 from app.admin.models import GlobalSettings
 from app.meta_api.models import MetaAdAccount, UserMetaAdAccount
 from app.auth.sessions import get_active_session
+from app.campaigns.models import CampaignActionLog
 
 
 # =================================================
@@ -56,7 +57,7 @@ async def _resolve_user_from_session(
 
 
 # -------------------------------------------------
-# CORE USER RESOLVER (WITH IMPERSONATION)
+# CORE USER RESOLVER (STRICT IMPERSONATION)
 # -------------------------------------------------
 async def get_current_user(
     request: Request,
@@ -72,8 +73,9 @@ async def get_current_user(
                 detail="System under maintenance",
             )
 
-    # 🔁 Admin → Impersonation
+    # 🔁 ADMIN IMPERSONATION (STRICT)
     impersonate_user = request.headers.get("X-Impersonate-User")
+
     if impersonate_user:
         if user.email not in ADMIN_EMAILS:
             raise HTTPException(
@@ -81,15 +83,17 @@ async def get_current_user(
                 detail="Impersonation not allowed",
             )
 
-        # Allow email OR UUID
-        target_query = select(User).where(
-            (User.email == impersonate_user)
-            |
-            # UUID check fallback
-            (User.id == _safe_uuid_cast(impersonate_user))
-        )
+        # Only allow UUID (no silent email impersonation)
+        target_user_id = _safe_uuid_cast(impersonate_user)
+        if not target_user_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid impersonation target",
+            )
 
-        result = await db.execute(target_query)
+        result = await db.execute(
+            select(User).where(User.id == target_user_id)
+        )
         target_user = result.scalar_one_or_none()
 
         if not target_user:
@@ -98,8 +102,10 @@ async def get_current_user(
                 detail="Impersonated user not found",
             )
 
+        # 🔒 Mark impersonation flags (read-only enforced elsewhere)
         target_user._is_impersonated = True
         target_user._impersonated_by = user.email
+
         return target_user
 
     return user
@@ -134,6 +140,7 @@ async def get_session_context(
             "email": user.email,
             "is_admin": user.email in ADMIN_EMAILS,
             "is_impersonated": getattr(user, "_is_impersonated", False),
+            "impersonated_by": getattr(user, "_impersonated_by", None),
         },
         "ad_accounts": [
             {
