@@ -6,7 +6,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.core.db_session import get_db
 from app.core.config import settings
@@ -19,28 +19,17 @@ from app.plans.models import Plan
 router = APIRouter(prefix="/billing/webhook", tags=["Billing Webhooks"])
 
 
-# =====================================================
-# RAZORPAY WEBHOOK (SOURCE OF TRUTH)
-# =====================================================
 @router.post("/razorpay")
 async def razorpay_webhook(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Razorpay webhook handler.
-    FINAL authority for payment + activation + invoice.
-    """
-
     body = await request.body()
     signature = request.headers.get("X-Razorpay-Signature")
 
     if not signature:
         raise HTTPException(status_code=400, detail="Missing signature")
 
-    # -------------------------------------------------
-    # VERIFY SIGNATURE
-    # -------------------------------------------------
     expected_signature = hmac.new(
         settings.RAZORPAY_WEBHOOK_SECRET.encode(),
         body,
@@ -60,9 +49,6 @@ async def razorpay_webhook(
     if not razorpay_order_id:
         return {"status": "ignored"}
 
-    # -------------------------------------------------
-    # FETCH PAYMENT (IDEMPOTENT)
-    # -------------------------------------------------
     result = await db.execute(
         select(Payment).where(Payment.razorpay_order_id == razorpay_order_id)
     )
@@ -83,22 +69,25 @@ async def razorpay_webhook(
 
     payment.paid_at = datetime.utcnow()
 
-    # -------------------------------------------------
-    # ACTIVATE BUSINESS OBJECT
-    # -------------------------------------------------
     period_from = None
     period_to = None
 
     if payment.payment_for == "subscription":
-        plan = await db.scalar(
-            select(Plan).where(Plan.id == payment.related_reference_id)
-        )
+        plan = await db.scalar(select(Plan).where(Plan.id == payment.related_reference_id))
         if not plan:
             raise HTTPException(status_code=400, detail="Plan not found")
 
-        # Billing cycle = 30 days
         period_from = datetime.utcnow()
         period_to = period_from + timedelta(days=30)
+
+        await db.execute(
+            update(Subscription)
+            .where(
+                Subscription.user_id == payment.user_id,
+                Subscription.status.in_(["trial", "active"])
+            )
+            .values(status="expired", is_active=False, ends_at=datetime.utcnow())
+        )
 
         subscription = Subscription(
             user_id=payment.user_id,
@@ -116,12 +105,7 @@ async def razorpay_webhook(
 
         db.add(subscription)
 
-    # -------------------------------------------------
-    # CREATE INVOICE (IDEMPOTENT)
-    # -------------------------------------------------
-    existing_invoice = await db.scalar(
-        select(Invoice).where(Invoice.payment_id == payment.id)
-    )
+    existing_invoice = await db.scalar(select(Invoice).where(Invoice.payment_id == payment.id))
 
     if not existing_invoice:
         invoice = Invoice(
