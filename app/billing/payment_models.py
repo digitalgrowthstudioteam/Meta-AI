@@ -14,7 +14,7 @@ class Payment(Base):
     Covers:
     - Subscription purchase
     - Manual campaign purchase
-    - Add-ons (future)
+    - Add-ons
     """
 
     __tablename__ = "payments"
@@ -82,10 +82,11 @@ class Payment(Base):
         doc="subscription | manual_campaign | addon",
     )
 
-    related_reference_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True),
+    # IMPORTANT: Plan ID, Campaign ID, Addon ID are integers
+    related_reference_id: Mapped[int | None] = mapped_column(
+        Integer,
         nullable=True,
-        doc="Subscription ID / Campaign ID / Addon ID",
+        doc="Plan ID / Campaign ID / Addon ID",
     )
 
     # -------------------------
