@@ -8,9 +8,6 @@ from app.core.base import Base
 class Plan(Base):
     __tablename__ = "plans"
 
-    # =====================================================
-    # CORE IDENTIFIER
-    # =====================================================
     id: Mapped[int] = mapped_column(primary_key=True)
 
     name: Mapped[str] = mapped_column(
@@ -19,19 +16,24 @@ class Plan(Base):
         nullable=False,
     )
 
-    # =====================================================
-    # CANONICAL PRICING & LIMITS (SINGLE SOURCE)
-    # =====================================================
-    price_monthly: Mapped[int | None] = mapped_column(
+    # Pricing (paise)
+    monthly_price: Mapped[int] = mapped_column(
         Integer,
-        nullable=True,
+        nullable=False,
         doc="Monthly price in smallest currency unit (e.g. paise)",
     )
 
-    ai_campaign_limit: Mapped[int | None] = mapped_column(
+    # Limits
+    max_ai_campaigns: Mapped[int] = mapped_column(
         Integer,
-        nullable=True,
-        doc="Max AI-active campaigns allowed by this plan",
+        nullable=False,
+        doc="Max AI-active campaigns allowed",
+    )
+
+    max_ad_accounts: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        doc="Max connected Meta ad accounts",
     )
 
     allows_addons: Mapped[bool] = mapped_column(
@@ -40,9 +42,7 @@ class Plan(Base):
         nullable=False,
     )
 
-    # =====================================================
-    # TRIAL POLICY (PLAN-LEVEL ONLY)
-    # =====================================================
+    # Trial policy
     is_trial_allowed: Mapped[bool] = mapped_column(
         Boolean,
         default=False,
@@ -54,9 +54,7 @@ class Plan(Base):
         nullable=True,
     )
 
-    # =====================================================
-    # STATUS & AUDIT
-    # =====================================================
+    # Status
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         default=True,
