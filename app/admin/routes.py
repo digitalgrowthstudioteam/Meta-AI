@@ -2,13 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from uuid import UUID
-from datetime import date
+from datetime import datetime
 
 from app.core.db_session import get_db
-from app.auth.dependencies import require_user
+from app.auth.dependencies import require_user, forbid_impersonated_writes
 from app.users.models import User
 from app.campaigns.models import Campaign
 from app.plans.subscription_models import Subscription
+from app.campaigns.models import CampaignActionLog
 
 # -------------------------
 # Admin Schemas / Services
@@ -25,12 +26,19 @@ from app.admin.service import AdminOverrideService
 from app.plans.enforcement import PlanEnforcementService
 
 # -------------------------
-# Audit Models
+# Metrics / AI Services
 # -------------------------
-from app.campaigns.models import CampaignActionLog
+from app.meta_insights.services.campaign_daily_metrics_sync_service import (
+    CampaignDailyMetricsSyncService,
+)
+from app.ai_engine.aggregation_engine.campaign_aggregation_service import (
+    CampaignAggregationService,
+)
+from app.billing.invoice_service import InvoiceService
+from app.billing.service import BillingService
 
 # -------------------------
-# Metrics Sync (Phase 6.5)
+# Metrics Sync (already wired)
 # -------------------------
 from app.admin.metrics_sync_routes import router as metrics_sync_router
 
@@ -60,7 +68,7 @@ async def get_admin_dashboard(
 
 
 # =========================
-# ADMIN USERS — PHASE 2.2 (READ-ONLY ACTIVITY VIEW)
+# ADMIN USERS (READ ONLY)
 # =========================
 @router.get("/users")
 async def list_users(
@@ -69,15 +77,12 @@ async def list_users(
 ):
     require_admin(current_user)
 
-    result = await db.execute(
-        select(User).order_by(User.created_at.desc())
-    )
+    result = await db.execute(select(User).order_by(User.created_at.desc()))
     users = result.scalars().all()
 
     response = []
 
     for u in users:
-        # Subscription status (latest)
         sub_status = await db.scalar(
             select(Subscription.status)
             .where(Subscription.user_id == u.id)
@@ -85,7 +90,6 @@ async def list_users(
             .limit(1)
         )
 
-        # AI campaign count
         ai_campaigns = await db.scalar(
             select(func.count(Campaign.id))
             .where(
@@ -114,194 +118,203 @@ async def list_users(
     return response
 
 
-# =========================
-# GLOBAL SETTINGS
-# =========================
-@router.get("/settings")
-async def get_global_settings(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_user),
-):
-    require_admin(current_user)
-    settings = await AdminOverrideService.get_global_settings(db=db)
+# ==========================================================
+# PHASE 3.2 — SUPPORT TOOLS (AUDITED, REASON REQUIRED)
+# ==========================================================
 
-    return {
-        "site_name": settings.site_name,
-        "dashboard_title": settings.dashboard_title,
-        "logo_url": settings.logo_url,
-        "ai_globally_enabled": settings.ai_globally_enabled,
-        "meta_sync_enabled": settings.meta_sync_enabled,
-        "maintenance_mode": settings.maintenance_mode,
-        "updated_at": settings.updated_at.isoformat(),
-    }
-
-
-@router.put("/settings")
-async def update_global_settings(
-    payload: dict,
-    reason: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_user),
-):
-    require_admin(current_user)
-
-    settings = await AdminOverrideService.update_global_settings(
-        db=db,
-        admin_user_id=current_user.id,
-        updates=payload,
-        reason=reason,
-    )
-
-    return {
-        "status": "updated",
-        "settings": {
-            "site_name": settings.site_name,
-            "dashboard_title": settings.dashboard_title,
-            "logo_url": settings.logo_url,
-            "ai_globally_enabled": settings.ai_globally_enabled,
-            "meta_sync_enabled": settings.meta_sync_enabled,
-            "maintenance_mode": settings.maintenance_mode,
-            "updated_at": settings.updated_at.isoformat(),
-        },
-    }
-
-
-# =========================
-# ADMIN OVERRIDES
-# =========================
-@router.post("/overrides", response_model=AdminOverrideResponse)
-async def create_override(
-    payload: AdminOverrideCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_user),
-):
-    require_admin(current_user)
-    return await AdminOverrideService.create_override(
-        db=db,
-        user_id=payload.user_id,
-        extra_ai_campaigns=payload.extra_ai_campaigns,
-        force_ai_enabled=payload.force_ai_enabled,
-        override_expires_at=payload.override_expires_at,
-        reason=payload.reason,
-    )
-
-
-@router.get("/overrides", response_model=list[AdminOverrideResponse])
-async def list_overrides(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_user),
-):
-    require_admin(current_user)
-    return await AdminOverrideService.list_overrides(db)
-
-
-# =========================
-# ADMIN ROLLBACK
-# =========================
-@router.post("/campaigns/{action_log_id}/rollback")
-async def rollback_campaign_action(
-    action_log_id: UUID,
-    reason: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_user),
-):
-    require_admin(current_user)
-
-    campaign = await AdminOverrideService.rollback_campaign_action(
-        db=db,
-        action_log_id=action_log_id,
-        admin_user_id=current_user.id,
-        reason=reason,
-    )
-    return {
-        "status": "rolled_back",
-        "campaign_id": str(campaign.id),
-    }
-
-
-# =========================
-# SUBSCRIPTION EXPIRY CRON
-# =========================
-@router.post("/cron/subscription-expiry")
-async def run_subscription_expiry_cron(
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_user),
-):
-    require_admin(current_user)
-    affected = await PlanEnforcementService.enforce_subscription_expiry(db=db)
-    return {
-        "status": "ok",
-        "expired_campaigns_disabled": affected,
-    }
-
-
-# =========================
-# AUDIT APIs (READ-ONLY)
-# =========================
-@router.get("/audit/actions")
-async def list_campaign_action_logs(
+async def _log_support_action(
     *,
-    campaign_id: UUID | None = Query(default=None),
-    actor_type: str | None = Query(default=None),
-    limit: int = Query(default=50, le=200),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_user),
+    db: AsyncSession,
+    admin_user: User,
+    target_user_id: UUID,
+    action: str,
+    reason: str,
 ):
-    require_admin(current_user)
-
-    stmt = select(CampaignActionLog).order_by(
-        CampaignActionLog.created_at.desc()
-    )
-
-    if campaign_id:
-        stmt = stmt.where(CampaignActionLog.campaign_id == campaign_id)
-    if actor_type:
-        stmt = stmt.where(CampaignActionLog.actor_type == actor_type)
-
-    result = await db.execute(stmt.limit(limit))
-    logs = result.scalars().all()
-
-    return [
-        {
-            "id": str(log.id),
-            "campaign_id": str(log.campaign_id),
-            "actor_type": log.actor_type,
-            "action_type": log.action_type,
-            "reason": log.reason,
-            "created_at": log.created_at.isoformat(),
-        }
-        for log in logs
-    ]
-
-
-@router.get("/audit/actions/{action_log_id}")
-async def get_campaign_action_log(
-    action_log_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_user),
-):
-    require_admin(current_user)
-
-    result = await db.execute(
-        select(CampaignActionLog).where(
-            CampaignActionLog.id == action_log_id
+    db.add(
+        CampaignActionLog(
+            campaign_id=None,
+            user_id=admin_user.id,
+            actor_type="admin",
+            action_type=action,
+            reason=reason,
+            before_state={"target_user_id": str(target_user_id)},
+            after_state={},
+            created_at=datetime.utcnow(),
         )
     )
-    log = result.scalar_one_or_none()
+    await db.commit()
 
-    if not log:
-        raise HTTPException(status_code=404, detail="Audit log not found")
 
-    return {
-        "id": str(log.id),
-        "campaign_id": str(log.campaign_id),
-        "actor_type": log.actor_type,
-        "action_type": log.action_type,
-        "reason": log.reason,
-        "before_state": log.before_state,
-        "after_state": log.after_state,
-        "created_at": log.created_at.isoformat(),
-    }
+@router.post("/support/force_meta_resync")
+async def force_meta_resync(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    forbid_impersonated_writes(current_user)
+
+    user_id = UUID(payload["user_id"])
+    reason = payload.get("reason")
+    if not reason:
+        raise HTTPException(400, "Reason required")
+
+    await CampaignDailyMetricsSyncService.force_user_resync(
+        db=db, user_id=user_id
+    )
+
+    await _log_support_action(
+        db=db,
+        admin_user=current_user,
+        target_user_id=user_id,
+        action="force_meta_resync",
+        reason=reason,
+    )
+
+    return {"status": "ok"}
+
+
+@router.post("/support/refresh_billing")
+async def refresh_billing_from_razorpay(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    forbid_impersonated_writes(current_user)
+
+    user_id = UUID(payload["user_id"])
+    reason = payload.get("reason")
+    if not reason:
+        raise HTTPException(400, "Reason required")
+
+    await BillingService.refresh_user_billing(db=db, user_id=user_id)
+
+    await _log_support_action(
+        db=db,
+        admin_user=current_user,
+        target_user_id=user_id,
+        action="refresh_billing_from_razorpay",
+        reason=reason,
+    )
+
+    return {"status": "ok"}
+
+
+@router.post("/support/clear_ai_queue")
+async def clear_ai_queue(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    forbid_impersonated_writes(current_user)
+
+    user_id = UUID(payload["user_id"])
+    reason = payload.get("reason")
+    if not reason:
+        raise HTTPException(400, "Reason required")
+
+    await CampaignAggregationService.clear_user_queue(
+        db=db, user_id=user_id
+    )
+
+    await _log_support_action(
+        db=db,
+        admin_user=current_user,
+        target_user_id=user_id,
+        action="clear_ai_queue",
+        reason=reason,
+    )
+
+    return {"status": "ok"}
+
+
+@router.post("/support/reprocess_webhooks")
+async def reprocess_webhooks(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    forbid_impersonated_writes(current_user)
+
+    user_id = UUID(payload["user_id"])
+    reason = payload.get("reason")
+    if not reason:
+        raise HTTPException(400, "Reason required")
+
+    await BillingService.reprocess_failed_webhooks(
+        db=db, user_id=user_id
+    )
+
+    await _log_support_action(
+        db=db,
+        admin_user=current_user,
+        target_user_id=user_id,
+        action="reprocess_razorpay_webhooks",
+        reason=reason,
+    )
+
+    return {"status": "ok"}
+
+
+@router.post("/support/regenerate_invoices")
+async def regenerate_invoices(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    forbid_impersonated_writes(current_user)
+
+    user_id = UUID(payload["user_id"])
+    reason = payload.get("reason")
+    if not reason:
+        raise HTTPException(400, "Reason required")
+
+    await InvoiceService.regenerate_user_invoices(
+        db=db, user_id=user_id
+    )
+
+    await _log_support_action(
+        db=db,
+        admin_user=current_user,
+        target_user_id=user_id,
+        action="regenerate_invoice_pdfs",
+        reason=reason,
+    )
+
+    return {"status": "ok"}
+
+
+@router.post("/support/rebuild_ml")
+async def rebuild_ml_aggregations(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    forbid_impersonated_writes(current_user)
+
+    user_id = UUID(payload["user_id"])
+    reason = payload.get("reason")
+    if not reason:
+        raise HTTPException(400, "Reason required")
+
+    await CampaignAggregationService.rebuild_user_aggregations(
+        db=db, user_id=user_id
+    )
+
+    await _log_support_action(
+        db=db,
+        admin_user=current_user,
+        target_user_id=user_id,
+        action="rebuild_ml_aggregations",
+        reason=reason,
+    )
+
+    return {"status": "ok"}
 
 
 # =========================
