@@ -22,6 +22,12 @@ async def impersonate_user(
     db: AsyncSession = Depends(get_db),
     admin_user: User = Depends(require_admin),
 ):
+    if admin_user.id == user_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Admin cannot impersonate self",
+        )
+
     result = await db.execute(
         select(User).where(User.id == user_id)
     )
@@ -33,6 +39,7 @@ async def impersonate_user(
             detail="Target user not found",
         )
 
+    # AUDIT LOG — impersonation start
     db.add(
         CampaignActionLog(
             campaign_id=None,
@@ -46,6 +53,7 @@ async def impersonate_user(
             after_state={
                 "impersonated_user_id": str(target_user.id),
                 "impersonated_email": target_user.email,
+                "mode": "read_only",
             },
             reason="Admin impersonation (read-only)",
             created_at=datetime.utcnow(),
@@ -56,9 +64,38 @@ async def impersonate_user(
 
     return {
         "status": "impersonation_started",
-        "user": {
+        "mode": "read_only",
+        "impersonated_user": {
             "id": str(target_user.id),
             "email": target_user.email,
         },
         "started_at": datetime.utcnow().isoformat(),
+    }
+
+
+@router.post("/impersonate/exit")
+async def exit_impersonation(
+    *,
+    db: AsyncSession = Depends(get_db),
+    admin_user: User = Depends(require_admin),
+):
+    # AUDIT LOG — impersonation end
+    db.add(
+        CampaignActionLog(
+            campaign_id=None,
+            user_id=admin_user.id,
+            actor_type="admin",
+            action_type="impersonation_end",
+            before_state={},
+            after_state={},
+            reason="Admin exited impersonation",
+            created_at=datetime.utcnow(),
+        )
+    )
+
+    await db.commit()
+
+    return {
+        "status": "impersonation_ended",
+        "ended_at": datetime.utcnow().isoformat(),
     }
