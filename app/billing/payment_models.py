@@ -12,9 +12,9 @@ class Payment(Base):
     Razorpay payment record (immutable after success).
 
     Covers:
-    - Subscription purchase
-    - Manual campaign purchase
-    - Add-ons
+    - Subscription purchase (Plan snapshot stored as integer plan_id)
+    - Manual campaign purchase (UUID)
+    - Add-ons (UUID)
     """
 
     __tablename__ = "payments"
@@ -82,11 +82,18 @@ class Payment(Base):
         doc="subscription | manual_campaign | addon",
     )
 
-    # IMPORTANT: Plan ID, Campaign ID, Addon ID are integers
-    related_reference_id: Mapped[int | None] = mapped_column(
+    # PLAN ID stored separately for subscription billing
+    plan_id: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
-        doc="Plan ID / Campaign ID / Addon ID",
+        doc="Only used when payment_for='subscription'",
+    )
+
+    # UUID reference for addon, campaign, future features
+    reference_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        nullable=True,
+        doc="Addon ID / Campaign ID / etc.",
     )
 
     # -------------------------
