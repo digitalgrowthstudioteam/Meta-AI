@@ -1,12 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from uuid import UUID
 from datetime import date
 
 from app.core.db_session import get_db
 from app.auth.dependencies import require_user
 from app.users.models import User
+from app.campaigns.models import Campaign
+from app.plans.subscription_models import Subscription
 
 # -------------------------
 # Admin Schemas / Services
@@ -58,7 +60,7 @@ async def get_admin_dashboard(
 
 
 # =========================
-# ADMIN USERS (REQUIRED)
+# ADMIN USERS — PHASE 2.2 (READ-ONLY ACTIVITY VIEW)
 # =========================
 @router.get("/users")
 async def list_users(
@@ -72,15 +74,44 @@ async def list_users(
     )
     users = result.scalars().all()
 
-    return [
-        {
-            "id": str(u.id),
-            "email": u.email,
-            "role": u.role,
-            "created_at": u.created_at.isoformat(),
-        }
-        for u in users
-    ]
+    response = []
+
+    for u in users:
+        # Subscription status (latest)
+        sub_status = await db.scalar(
+            select(Subscription.status)
+            .where(Subscription.user_id == u.id)
+            .order_by(Subscription.created_at.desc())
+            .limit(1)
+        )
+
+        # AI campaign count
+        ai_campaigns = await db.scalar(
+            select(func.count(Campaign.id))
+            .where(
+                Campaign.user_id == u.id,
+                Campaign.ai_active.is_(True),
+            )
+        )
+
+        response.append(
+            {
+                "id": str(u.id),
+                "email": u.email,
+                "role": u.role,
+                "is_active": u.is_active,
+                "created_at": u.created_at.isoformat(),
+                "last_login_at": (
+                    u.last_login_at.isoformat()
+                    if getattr(u, "last_login_at", None)
+                    else None
+                ),
+                "subscription_status": sub_status,
+                "ai_campaigns_active": ai_campaigns or 0,
+            }
+        )
+
+    return response
 
 
 # =========================
