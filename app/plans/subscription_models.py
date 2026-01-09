@@ -1,5 +1,4 @@
-from datetime import datetime, date
-
+from datetime import datetime, date, timedelta
 from sqlalchemy import (
     String,
     DateTime,
@@ -34,7 +33,7 @@ class Subscription(Base):
         index=True,
     )
 
-    # 🔒 OPTION A — INTEGER PLAN ID (LOCKED)
+    # PLAN LINK
     plan_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("plans.id", ondelete="RESTRICT"),
@@ -140,6 +139,13 @@ class Subscription(Base):
         lazy="selectin",
     )
 
+    addons = relationship(
+        "SubscriptionAddon",
+        back_populates="subscription",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+    )
+
     # =====================================================
     # 🔒 DB-LEVEL SAFETY (CRITICAL)
     # =====================================================
@@ -153,3 +159,82 @@ class Subscription(Base):
             ),
         ),
     )
+
+
+# =========================================================
+# NEW: SUBSCRIPTION ADD-ON MODEL
+# =========================================================
+class SubscriptionAddon(Base):
+    """
+    Represents purchased add-on capacity for AI campaigns.
+    Each addon increases limit by `extra_ai_campaigns`.
+
+    Business rules:
+      - Addon expires in 30 days
+      - Effective expiry = min(addon_expiry, subscription_expiry)
+      - Agency plan only (handled in service layer)
+    """
+
+    __tablename__ = "subscription_addons"
+
+    id: Mapped[int] = mapped_column(
+        primary_key=True,
+        autoincrement=True,
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    subscription_id: Mapped[int] = mapped_column(
+        ForeignKey("subscriptions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    # Number of additional campaigns this addon gives
+    extra_ai_campaigns: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+    )
+
+    purchased_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+    )
+
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+    )
+
+    payment_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("payments.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=datetime.utcnow,
+        nullable=False,
+    )
+
+    # RELATIONSHIP
+    subscription = relationship(
+        Subscription,
+        back_populates="addons",
+        lazy="selectin",
+    )
+
+    # =====================================================
+    # HELPERS
+    # =====================================================
+    def compute_default_expiry(self) -> datetime:
+        """Default 30-day expiry."""
+        return self.purchased_at + timedelta(days=30)
