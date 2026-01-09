@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from uuid import UUID
+from typing import Optional
 
 from app.core.db_session import get_db
 from app.auth.dependencies import require_user
@@ -23,7 +23,7 @@ async def create_razorpay_order(
     *,
     amount: int = Query(..., gt=0, description="Amount in paise"),
     payment_for: str = Query(..., min_length=3),
-    related_reference_id: UUID | None = None,
+    related_reference_id: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
@@ -31,6 +31,11 @@ async def create_razorpay_order(
     Creates Razorpay order.
     Idempotent.
     """
+
+    # Validate supported types (future-safe)
+    allowed_types = {"subscription", "addon", "manual_campaign"}
+    if payment_for not in allowed_types:
+        raise HTTPException(status_code=400, detail="Invalid payment_for type")
 
     service = BillingService()
 
@@ -73,10 +78,7 @@ async def verify_razorpay_payment(
 ):
     """
     Verifies Razorpay payment.
-
-    IMPORTANT:
-    - Subscription activation happens INSIDE BillingService
-    - Route is logic-free
+    Subscription activation happens inside BillingService.
     """
 
     service = BillingService()
@@ -122,7 +124,7 @@ async def list_invoices(
         {
             "id": str(inv.id),
             "invoice_number": inv.invoice_number,
-            "amount": inv.total_amount / 100,
+            "amount": inv.total_amount,  # stored in paise
             "currency": inv.currency,
             "status": inv.status,
             "period_from": inv.period_from.isoformat() if inv.period_from else None,
@@ -139,7 +141,7 @@ async def list_invoices(
 # =====================================================
 @router.get("/invoices/{invoice_id}/download")
 async def download_invoice(
-    invoice_id: UUID,
+    invoice_id,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
