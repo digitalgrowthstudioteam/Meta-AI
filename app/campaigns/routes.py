@@ -9,7 +9,10 @@ from app.campaigns.models import Campaign
 from app.meta_api.models import MetaAdAccount, UserMetaAdAccount, MetaOAuthToken
 
 from app.core.db_session import get_db
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import (
+    get_current_user,
+    forbid_impersonated_writes,
+)
 from app.users.models import User
 from app.campaigns.service import CampaignService
 from app.campaigns.schemas import CampaignResponse, ToggleAIRequest
@@ -20,7 +23,7 @@ router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
 
 
 # =========================================================
-# LIST CAMPAIGNS — With Filters + Cookie Mode
+# LIST CAMPAIGNS — SAFE DURING IMPERSONATION (READ-ONLY)
 # =========================================================
 @router.get(
     "",
@@ -38,7 +41,6 @@ async def list_campaigns(
     if current_user is None:
         return []
 
-    # Ensure Meta is connected
     token = (
         await db.execute(
             select(MetaOAuthToken)
@@ -56,7 +58,6 @@ async def list_campaigns(
             detail="Meta account not connected",
         )
 
-    # Base Query
     stmt = (
         select(Campaign)
         .options(selectinload(Campaign.category_map))
@@ -71,30 +72,24 @@ async def list_campaigns(
         )
     )
 
-    # Filter by account_id
     if account_id:
         stmt = stmt.where(Campaign.ad_account_id == account_id)
 
-    # Filter by status
     if status:
         stmt = stmt.where(Campaign.status == status)
 
-    # Filter by objective
     if objective:
         stmt = stmt.where(Campaign.objective == objective)
 
-    # Filter AI (true/false)
     if ai_active is not None and ai_active != "":
         if ai_active.lower() == "true":
             stmt = stmt.where(Campaign.ai_active.is_(True))
         elif ai_active.lower() == "false":
             stmt = stmt.where(Campaign.ai_active.is_(False))
 
-    # Execute query
     result = await db.execute(stmt)
     campaigns = result.scalars().all()
 
-    # Serialize
     return [
         CampaignResponse(
             id=c.id,
@@ -112,7 +107,7 @@ async def list_campaigns(
 
 
 # =========================================================
-# SYNC CAMPAIGNS — Cookie Based
+# SYNC CAMPAIGNS — WRITE → BLOCKED DURING IMPERSONATION
 # =========================================================
 @router.post(
     "/sync",
@@ -122,7 +117,7 @@ async def list_campaigns(
 async def sync_campaigns_from_meta(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(forbid_impersonated_writes),
 ):
     cookie_active_id = request.cookies.get("active_account_id")
     if not cookie_active_id:
@@ -134,7 +129,6 @@ async def sync_campaigns_from_meta(
         ad_account_ids=[cookie_active_id],
     )
 
-    # Serialize output for response_model compliance
     return [
         CampaignResponse(
             id=c.id,
@@ -152,7 +146,7 @@ async def sync_campaigns_from_meta(
 
 
 # =========================================================
-# AI TOGGLE — Plan Enforcement & Structured Errors
+# AI TOGGLE — WRITE → BLOCKED DURING IMPERSONATION
 # =========================================================
 @router.post(
     "/{campaign_id}/ai-toggle",
@@ -163,7 +157,7 @@ async def toggle_ai(
     campaign_id: UUID,
     payload: ToggleAIRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(forbid_impersonated_writes),
 ):
     try:
         campaign = await CampaignService.toggle_ai(
@@ -186,14 +180,12 @@ async def toggle_ai(
         )
 
     except EnforcementError as e:
-        # AI LIMIT / PLAN VIOLATION
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=e.to_dict(),
         )
 
     except ValueError as e:
-        # Campaign not found
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
