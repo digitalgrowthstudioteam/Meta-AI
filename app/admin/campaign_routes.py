@@ -1,29 +1,30 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from app.core.db_session import get_db
-from app.auth.dependencies import require_user
-from app.users.models import User
+from typing import Optional, List
+
+from app.database import get_db
 from app.campaigns.models import Campaign
+from app.auth.dependencies import require_admin
 
 router = APIRouter(prefix="/admin/campaigns", tags=["Admin Campaigns"])
 
 
-@router.get("")
-async def list_admin_campaigns(
-    ai_active: bool | None = Query(None),
+@router.get("", dependencies=[Depends(require_admin)])
+async def list_campaigns(
+    ai_active: Optional[bool] = Query(None),
+    user_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_user),
 ):
-    if current_user.role != "admin":
-        return []
-
     stmt = select(Campaign)
 
     if ai_active is not None:
-        stmt = stmt.where(Campaign.ai_active.is_(ai_active))
+        stmt = stmt.where(Campaign.ai_active == ai_active)
 
-    result = await db.execute(stmt)
+    if user_id:
+        stmt = stmt.where(Campaign.user_id == user_id)
+
+    result = await db.execute(stmt.order_by(Campaign.created_at.desc()))
     campaigns = result.scalars().all()
 
     return [
