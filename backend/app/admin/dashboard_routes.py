@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from datetime import datetime
@@ -9,6 +9,7 @@ from app.users.models import User
 from app.campaigns.models import Campaign
 
 router = APIRouter(prefix="/admin", tags=["Admin Dashboard"])
+
 
 @router.get("/dashboard")
 async def admin_dashboard(
