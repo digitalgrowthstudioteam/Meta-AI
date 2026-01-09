@@ -22,16 +22,6 @@ async def impersonate_user(
     db: AsyncSession = Depends(get_db),
     admin_user: User = Depends(require_admin),
 ):
-    """
-    ADMIN-ONLY (READ-ONLY):
-    - Switch request context to another user
-    - No mutations
-    - Fully audited
-    """
-
-    # --------------------------------------------------
-    # Validate target user
-    # --------------------------------------------------
     result = await db.execute(
         select(User).where(User.id == user_id)
     )
@@ -43,9 +33,6 @@ async def impersonate_user(
             detail="Target user not found",
         )
 
-    # --------------------------------------------------
-    # Audit log (MANDATORY)
-    # --------------------------------------------------
     db.add(
         CampaignActionLog(
             campaign_id=None,
@@ -67,9 +54,6 @@ async def impersonate_user(
 
     await db.commit()
 
-    # --------------------------------------------------
-    # RESPONSE (frontend stores in sessionStorage)
-    # --------------------------------------------------
     return {
         "status": "impersonation_started",
         "user": {
