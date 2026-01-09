@@ -1,24 +1,23 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-export async function GET(request: NextRequest) {
-  const backendUrl = `${process.env.NEXT_PUBLIC_BACKEND_URL}/admin/users`;
+export async function GET(req: NextRequest) {
+  const cookie = req.headers.get("cookie") || "";
+  const backend = `${process.env.NEXT_PUBLIC_BACKEND_URL}/admin/users`;
 
-  const res = await fetch(backendUrl, {
+  const res = await fetch(backend, {
     method: "GET",
-    headers: {
-      cookie: request.headers.get("cookie") || "",
-    },
+    headers: { cookie },
     credentials: "include",
     cache: "no-store",
   });
 
   const text = await res.text();
+  let data: any = {};
+  try {
+    data = JSON.parse(text);
+  } catch {
+    data = text;
+  }
 
-  return new NextResponse(text, {
-    status: res.status,
-    headers: {
-      "Content-Type": "application/json",
-    },
-  });
+  return NextResponse.json(data, { status: res.status });
 }
