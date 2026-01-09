@@ -3,7 +3,7 @@ from uuid import UUID
 from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.core.config import settings
 from app.billing.payment_models import Payment
@@ -17,7 +17,7 @@ class BillingService:
     """
     Razorpay payment lifecycle + subscription activation service.
 
-    RULES (LOCKED):
+    RULES:
     - Order creation is idempotent
     - Payment verification is idempotent
     - Subscription activation happens HERE and ONLY HERE
@@ -43,7 +43,7 @@ class BillingService:
         user: User,
         amount: int,
         payment_for: str,
-        related_reference_id: UUID | None,
+        related_reference_id: int | None,
     ) -> Payment:
 
         result = await db.execute(
@@ -120,7 +120,6 @@ class BillingService:
         await db.commit()
         await db.refresh(payment)
 
-        # 🔥 ACTIVATE SUBSCRIPTION (SINGLE SOURCE)
         await self._activate_subscription_after_payment(
             db=db,
             payment=payment,
@@ -137,16 +136,10 @@ class BillingService:
         db: AsyncSession,
         payment: Payment,
     ) -> None:
-        """
-        Creates or updates subscription + invoice.
-        Safe to call multiple times.
-        """
 
-        # Only subscription payments allowed
         if payment.payment_for != "subscription":
             return
 
-        # Prevent duplicate activation
         result = await db.execute(
             select(Subscription).where(
                 Subscription.payment_id == payment.id
@@ -156,16 +149,34 @@ class BillingService:
         if existing_sub:
             return
 
-        # 🔒 TEMP: hard-map amount → plan (PHASE SAFE)
+        if payment.related_reference_id is None:
+            raise RuntimeError("related_reference_id missing for subscription")
+
         result = await db.execute(
-            select(Plan).where(Plan.is_active.is_(True))
+            select(Plan).where(
+                Plan.id == payment.related_reference_id,
+                Plan.is_active.is_(True)
+            )
         )
-        plan = result.scalars().first()
+        plan = result.scalar_one_or_none()
         if not plan:
-            raise RuntimeError("No active plan configured")
+            raise RuntimeError("Invalid or inactive plan")
 
         now = datetime.utcnow()
         ends_at = now + timedelta(days=30)
+
+        await db.execute(
+            update(Subscription)
+            .where(
+                Subscription.user_id == payment.user_id,
+                Subscription.status.in_(["trial", "active"])
+            )
+            .values(
+                status="expired",
+                is_active=False,
+                ends_at=now
+            )
+        )
 
         subscription = Subscription(
             user_id=payment.user_id,
@@ -176,6 +187,7 @@ class BillingService:
             ends_at=ends_at,
             ai_campaign_limit_snapshot=plan.ai_campaign_limit or 0,
             is_active=True,
+            is_trial=False,
             created_by_admin=False,
             assigned_by_admin=False,
         )
@@ -185,12 +197,15 @@ class BillingService:
         invoice = Invoice(
             user_id=payment.user_id,
             payment_id=payment.id,
-            invoice_number=f"INV-{payment.id}",
+            invoice_number=f"INV-{now.strftime('%Y%m%d')}-{payment.id.hex[:6].upper()}",
+            invoice_date=now,
+            subtotal=payment.amount,
+            tax_amount=0,
             total_amount=payment.amount,
             currency=payment.currency,
-            status="paid",
             period_from=now.date(),
             period_to=ends_at.date(),
+            status="paid",
         )
 
         db.add(invoice)
