@@ -39,36 +39,57 @@ export default function AdminDashboardPage() {
   }, []);
 
   if (loading) {
-    return <div className="text-sm text-gray-600">Loading dashboard…</div>;
+    return (
+      <div className="text-sm text-gray-600 p-4 bg-gray-50 rounded border">
+        Loading dashboard…
+      </div>
+    );
   }
 
   if (!data) {
-    return <div className="text-red-600 text-sm">Failed to load dashboard.</div>;
+    return (
+      <div className="text-red-600 text-sm p-4 bg-red-50 rounded border border-red-200">
+        Failed to load dashboard.
+      </div>
+    );
   }
 
   return (
     <div className="space-y-6">
-      <h1 className="text-lg font-semibold">Admin Dashboard</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Admin Dashboard</h1>
 
+      {/* KPI Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPI title="Users" value={data.users} />
         <KPI title="Active Subs" value={data.subscriptions.active} />
         <KPI title="Expired Subs" value={data.subscriptions.expired} />
-        <KPI title="Campaigns" value={data.campaigns.total} />
-        <KPI title="AI Active" value={data.campaigns.ai_active} />
-        <KPI title="Manual" value={data.campaigns.manual} />
+        <KPI title="Total Campaigns" value={data.campaigns.total} />
+        <KPI title="AI Active Campaigns" value={data.campaigns.ai_active} />
+        <KPI title="Manual Campaigns" value={data.campaigns.manual} />
       </div>
 
-      <div className="p-4 rounded border bg-white text-sm space-y-1">
-        <div>
-          <span className="font-medium">System Status:</span>{" "}
-          {data.system_status}
+      {/* System Status */}
+      <div className="p-4 rounded-lg border bg-white shadow-sm text-sm space-y-2">
+        <div className="flex justify-between">
+          <span className="font-medium text-gray-600">System Status:</span>
+          <span
+            className={`font-semibold ${
+              data.system_status === "ok"
+                ? "text-green-600"
+                : "text-red-600"
+            }`}
+          >
+            {data.system_status}
+          </span>
         </div>
-        <div>
-          <span className="font-medium">Last Activity:</span>{" "}
-          {data.last_activity
-            ? new Date(data.last_activity).toLocaleString()
-            : "—"}
+
+        <div className="flex justify-between">
+          <span className="font-medium text-gray-600">Last Activity:</span>
+          <span>
+            {data.last_activity
+              ? new Date(data.last_activity).toLocaleString()
+              : "—"}
+          </span>
         </div>
       </div>
     </div>
@@ -77,9 +98,13 @@ export default function AdminDashboardPage() {
 
 function KPI({ title, value }: { title: string; value: number }) {
   return (
-    <div className="p-4 rounded border bg-white">
-      <div className="text-xs text-gray-500 uppercase">{title}</div>
-      <div className="text-xl font-semibold mt-1">{value}</div>
+    <div className="p-4 rounded-lg border bg-white shadow-sm">
+      <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+        {title}
+      </div>
+      <div className="text-2xl font-semibold text-gray-900 mt-1">
+        {value}
+      </div>
     </div>
   );
 }
