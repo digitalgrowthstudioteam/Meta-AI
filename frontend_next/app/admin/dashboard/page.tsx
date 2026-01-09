@@ -13,7 +13,7 @@ type DashboardData = {
     ai_active: number;
     manual: number;
   };
-  last_activity: string;
+  last_activity: string | null;
   system_status: string;
 };
 
@@ -30,8 +30,8 @@ export default function AdminDashboardPage() {
         });
         const json = await res.json();
         setData(json);
-      } catch (e) {
-        console.error("Failed to load admin dashboard", e);
+      } catch {
+        setData(null);
       } finally {
         setLoading(false);
       }
@@ -50,7 +50,6 @@ export default function AdminDashboardPage() {
     <div className="space-y-6">
       <h1 className="text-lg font-semibold">Admin Dashboard</h1>
 
-      {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPI title="Users" value={data.users} />
         <KPI title="Active Subs" value={data.subscriptions.active} />
@@ -60,14 +59,16 @@ export default function AdminDashboardPage() {
         <KPI title="Manual" value={data.campaigns.manual} />
       </div>
 
-      {/* System Info */}
       <div className="p-4 rounded border bg-white text-sm space-y-1">
         <div>
-          <span className="font-medium">System Status:</span> {data.system_status}
+          <span className="font-medium">System Status:</span>{" "}
+          {data.system_status}
         </div>
         <div>
           <span className="font-medium">Last Activity:</span>{" "}
-          {new Date(data.last_activity).toLocaleString()}
+          {data.last_activity
+            ? new Date(data.last_activity).toLocaleString()
+            : "—"}
         </div>
       </div>
     </div>
