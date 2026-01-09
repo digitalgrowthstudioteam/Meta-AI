@@ -11,6 +11,8 @@ type SessionContext = {
     is_admin: boolean;
     is_impersonated?: boolean;
     impersonated_by?: string | null;
+    impersonation_mode?: string | null;
+    write_blocked?: boolean;
   };
 };
 
@@ -47,10 +49,13 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   }, [router]);
 
   const exitImpersonation = async () => {
-    await fetch("/admin/impersonate/exit", {
-      method: "POST",
-      credentials: "include",
-    });
+    await fetch(
+      `${process.env.NEXT_PUBLIC_BACKEND_URL}/admin/impersonate/exit`,
+      {
+        method: "POST",
+        credentials: "include",
+      }
+    );
     router.refresh();
   };
 
@@ -66,15 +71,18 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     );
   }
 
+  const isImpersonating = !!session.user.is_impersonated;
+  const writeBlocked = !!session.user.write_blocked;
+
   return (
     <div className="flex h-screen w-screen bg-slate-50 overflow-hidden text-gray-900">
       <Toaster position="bottom-right" />
 
-      {/* 🔴 IMPERSONATION BANNER */}
-      {session.user.is_impersonated && (
+      {/* 🔴 IMPERSONATION BANNER (HARD) */}
+      {isImpersonating && (
         <div className="fixed top-0 inset-x-0 z-50 bg-red-600 text-white text-sm px-4 py-2 flex items-center justify-between">
           <div>
-            Viewing as user (READ-ONLY). All actions are blocked.
+            Viewing as user — <b>READ ONLY</b>. All write actions are blocked.
           </div>
           <button
             onClick={exitImpersonation}
@@ -99,6 +107,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
           md:translate-x-0
         `}
+        style={{ marginTop: isImpersonating ? 40 : 0 }}
       >
         <div className="px-5 py-4 border-b flex items-center justify-between">
           <div>
@@ -180,19 +189,25 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="px-4 py-3 border-t text-xs text-gray-500">
-          Admin Only • Audited
+          {writeBlocked ? "READ-ONLY MODE • Audited" : "Admin Only • Audited"}
         </div>
       </aside>
 
       <div className="flex flex-col flex-1 min-w-0">
-        <header className="md:hidden flex items-center gap-3 px-4 py-3 border-b bg-white">
+        <header
+          className="md:hidden flex items-center gap-3 px-4 py-3 border-b bg-white"
+          style={{ marginTop: isImpersonating ? 40 : 0 }}
+        >
           <button onClick={() => setSidebarOpen(true)}>
             <Menu size={22} />
           </button>
           <span className="text-sm font-medium">Admin Console</span>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-8 pt-16">
+        <main
+          className="flex-1 overflow-y-auto p-4 md:p-8"
+          style={{ paddingTop: isImpersonating ? 80 : undefined }}
+        >
           <div className="max-w-7xl mx-auto space-y-6">{children}</div>
         </main>
       </div>
