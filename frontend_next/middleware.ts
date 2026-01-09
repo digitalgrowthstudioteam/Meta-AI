@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 // Publicly accessible pages
 const PUBLIC_PATHS = ["/", "/login"];
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Allow Next.js internals, static files & APIs
@@ -16,7 +16,6 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // ✅ Correct way to read cookie in middleware
   const session = request.cookies.get("meta_ai_session")?.value;
 
   // Not logged in → redirect to login
@@ -31,12 +30,39 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  /**
-   * 🔒 IMPORTANT
-   * Do NOT detect admin here.
-   * meta_ai_session is a session token, not email.
-   * Admin routing is handled after /api/session/context.
-   */
+  // Admin-only paths
+  if (pathname.startsWith("/admin")) {
+    try {
+      const backendURL = `${process.env.NEXT_PUBLIC_BACKEND_URL}/session/context`;
+      const res = await fetch(backendURL, {
+        method: "GET",
+        headers: {
+          cookie: `meta_ai_session=${session}`,
+        },
+        cache: "no-store",
+      });
+
+      if (!res.ok) {
+        const loginUrl = request.nextUrl.clone();
+        loginUrl.pathname = "/login";
+        loginUrl.searchParams.set("next", pathname);
+        return NextResponse.redirect(loginUrl);
+      }
+
+      const data = await res.json();
+
+      if (!data?.user?.is_admin) {
+        const deniedUrl = request.nextUrl.clone();
+        deniedUrl.pathname = "/dashboard";
+        return NextResponse.redirect(deniedUrl);
+      }
+    } catch {
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = "/login";
+      loginUrl.searchParams.set("next", pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+  }
 
   return NextResponse.next();
 }
