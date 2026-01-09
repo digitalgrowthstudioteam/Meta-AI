@@ -72,14 +72,21 @@ async def razorpay_webhook(
     period_from = None
     period_to = None
 
+    # ================================
+    # SUBSCRIPTION ACTIVATION LOGIC
+    # ================================
     if payment.payment_for == "subscription":
-        plan = await db.scalar(select(Plan).where(Plan.id == payment.related_reference_id))
+        if payment.plan_id is None:
+            raise HTTPException(status_code=400, detail="Missing plan_id")
+
+        plan = await db.scalar(select(Plan).where(Plan.id == payment.plan_id))
         if not plan:
             raise HTTPException(status_code=400, detail="Plan not found")
 
         period_from = datetime.utcnow()
         period_to = period_from + timedelta(days=30)
 
+        # expire existing subscriptions
         await db.execute(
             update(Subscription)
             .where(
@@ -89,7 +96,8 @@ async def razorpay_webhook(
             .values(status="expired", is_active=False, ends_at=datetime.utcnow())
         )
 
-        subscription = Subscription(
+        # create new subscription
+        sub = Subscription(
             user_id=payment.user_id,
             plan_id=plan.id,
             payment_id=payment.id,
@@ -103,9 +111,14 @@ async def razorpay_webhook(
             assigned_by_admin=False,
         )
 
-        db.add(subscription)
+        db.add(sub)
 
-    existing_invoice = await db.scalar(select(Invoice).where(Invoice.payment_id == payment.id))
+    # ================================
+    # INVOICE (IDEMPOTENT)
+    # ================================
+    existing_invoice = await db.scalar(
+        select(Invoice).where(Invoice.payment_id == payment.id)
+    )
 
     if not existing_invoice:
         invoice = Invoice(
