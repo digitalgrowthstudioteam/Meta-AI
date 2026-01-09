@@ -21,7 +21,7 @@ jobs:
 
       - name: Deploy to VPS
         run: |
-          ssh -o StrictHostKeyChecking=yes root@${{ secrets.VPS_HOST }} << 'EOF'
+          ssh -o StrictHostKeyChecking=yes metaai@${{ secrets.VPS_HOST }} << 'EOF'
             set -e
             cd /var/www/projects/meta-ai-campaign
             pwd
