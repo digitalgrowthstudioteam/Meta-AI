@@ -16,20 +16,30 @@ depends_on = None
 
 
 def upgrade():
+    # ======================================
+    # SEED INITIAL PLANS (IDEMPOTENT)
+    # ======================================
     op.execute("""
         INSERT INTO plans (
-            name, price_monthly, ai_campaign_limit, max_ad_accounts,
-            allows_addons, is_trial_allowed, trial_days, is_active
+            name,
+            price_monthly,
+            monthly_price,
+            ai_campaign_limit,
+            max_ad_accounts,
+            allows_addons,
+            is_trial_allowed,
+            trial_days,
+            is_active
         )
         VALUES
-            ('trial',   0,    3, 1,  false, true,  7,  true),
-            ('starter', 999,  3, 1,  false, false, NULL, true),
-            ('pro',     1999, 20, 5, false, false, NULL, true),
-            ('agency',  2999, 30, NULL, true,  false, NULL, true)
+            ('trial',   0,    0,    3, 1,  false, true,  7,  true),
+            ('starter', 999,  999,  3, 1,  false, false, NULL, true),
+            ('pro',     1999, 1999, 20, 5, false, false, NULL, true),
+            ('agency',  2999, 2999, 30, NULL, true,  false, NULL, true)
         ON CONFLICT (name) DO NOTHING;
     """)
 
 
 def downgrade():
-    # Data rollback is not performed for plans
+    # NOTE: We do not delete plans on downgrade
     pass
