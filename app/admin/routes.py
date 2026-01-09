@@ -1,15 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 from uuid import UUID
 from datetime import datetime
 
 from app.core.db_session import get_db
 from app.auth.dependencies import require_user, forbid_impersonated_writes
 from app.users.models import User
-from app.campaigns.models import Campaign
+from app.campaigns.models import Campaign, CampaignActionLog
 from app.plans.subscription_models import Subscription
-from app.campaigns.models import CampaignActionLog
 
 # -------------------------
 # Admin Schemas / Services
@@ -19,11 +18,6 @@ from app.admin.schemas import (
     AdminOverrideResponse,
 )
 from app.admin.service import AdminOverrideService
-
-# -------------------------
-# Plan / Subscription Enforcement
-# -------------------------
-from app.plans.enforcement import PlanEnforcementService
 
 # -------------------------
 # Metrics / AI Services
@@ -119,9 +113,157 @@ async def list_users(
 
 
 # ==========================================================
-# PHASE 3.2 — SUPPORT TOOLS (AUDITED, REASON REQUIRED)
+# PHASE 5 — ADMIN CAMPAIGN EXPLORER (READ)
 # ==========================================================
+@router.get("/campaigns")
+async def admin_list_campaigns(
+    *,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+    user_id: UUID | None = Query(None),
+    ai_active: bool | None = Query(None),
+):
+    require_admin(current_user)
 
+    stmt = select(Campaign)
+
+    if user_id:
+        stmt = stmt.where(Campaign.user_id == user_id)
+
+    if ai_active is not None:
+        stmt = stmt.where(Campaign.ai_active.is_(ai_active))
+
+    result = await db.execute(stmt.order_by(Campaign.created_at.desc()))
+    campaigns = result.scalars().all()
+
+    return [
+        {
+            "id": str(c.id),
+            "user_id": str(c.user_id),
+            "name": c.name,
+            "objective": c.objective,
+            "status": c.status,
+            "ai_active": c.ai_active,
+            "ai_execution_locked": c.ai_execution_locked,
+            "is_manual": c.is_manual,
+            "created_at": c.created_at.isoformat(),
+        }
+        for c in campaigns
+    ]
+
+
+# ==========================================================
+# PHASE 5 — FORCE AI ENABLE / DISABLE (AUDITED)
+# ==========================================================
+@router.post("/campaigns/{campaign_id}/force-ai")
+async def admin_force_ai_toggle(
+    campaign_id: UUID,
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    forbid_impersonated_writes(current_user)
+
+    enable = payload.get("enable")
+    reason = payload.get("reason")
+
+    if enable is None or not reason:
+        raise HTTPException(400, "enable and reason required")
+
+    campaign = await db.get(Campaign, campaign_id)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+
+    before_state = {
+        "ai_active": campaign.ai_active,
+        "ai_execution_locked": campaign.ai_execution_locked,
+    }
+
+    campaign.ai_active = bool(enable)
+    campaign.ai_execution_locked = False if enable else True
+    campaign.ai_activated_at = datetime.utcnow() if enable else None
+    campaign.ai_deactivated_at = None if enable else datetime.utcnow()
+
+    after_state = {
+        "ai_active": campaign.ai_active,
+        "ai_execution_locked": campaign.ai_execution_locked,
+    }
+
+    db.add(
+        CampaignActionLog(
+            campaign_id=campaign.id,
+            user_id=current_user.id,
+            actor_type="admin",
+            action_type="force_ai_toggle",
+            before_state=before_state,
+            after_state=after_state,
+            reason=reason,
+            created_at=datetime.utcnow(),
+        )
+    )
+
+    await db.commit()
+
+    return {"status": "ok", "campaign_id": str(campaign.id), "ai_active": campaign.ai_active}
+
+
+# ==========================================================
+# PHASE 5 — RESET BENCHMARKS / MARK INCOMPATIBLE
+# ==========================================================
+@router.post("/campaigns/{campaign_id}/reset")
+async def admin_reset_campaign_state(
+    campaign_id: UUID,
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    forbid_impersonated_writes(current_user)
+
+    reason = payload.get("reason")
+    if not reason:
+        raise HTTPException(400, "reason required")
+
+    campaign = await db.get(Campaign, campaign_id)
+    if not campaign:
+        raise HTTPException(404, "Campaign not found")
+
+    before_state = {
+        "ai_active": campaign.ai_active,
+        "ai_execution_locked": campaign.ai_execution_locked,
+    }
+
+    campaign.ai_active = False
+    campaign.ai_execution_locked = True
+    campaign.ai_activated_at = None
+    campaign.ai_deactivated_at = datetime.utcnow()
+
+    after_state = {
+        "ai_active": campaign.ai_active,
+        "ai_execution_locked": campaign.ai_execution_locked,
+    }
+
+    db.add(
+        CampaignActionLog(
+            campaign_id=campaign.id,
+            user_id=current_user.id,
+            actor_type="admin",
+            action_type="reset_campaign_ai_state",
+            before_state=before_state,
+            after_state=after_state,
+            reason=reason,
+            created_at=datetime.utcnow(),
+        )
+    )
+
+    await db.commit()
+    return {"status": "ok", "campaign_id": str(campaign.id)}
+
+
+# ==========================================================
+# PHASE 3.2 — SUPPORT TOOLS (UNCHANGED)
+# ==========================================================
 async def _log_support_action(
     *,
     db: AsyncSession,
