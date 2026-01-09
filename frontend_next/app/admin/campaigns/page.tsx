@@ -17,29 +17,50 @@ type Campaign = {
 export default function AdminCampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
-  const [aiFilter, setAiFilter] = useState<string>("all");
+  const [error, setError] = useState<string | null>(null);
+  const [aiFilter, setAiFilter] = useState<"all" | "true" | "false">("all");
 
   useEffect(() => {
     fetchCampaigns();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aiFilter]);
 
   async function fetchCampaigns() {
     setLoading(true);
-    let url = "/api/admin/campaigns";
-    if (aiFilter !== "all") {
-      url += `?ai_active=${aiFilter}`;
-    }
+    setError(null);
 
-    const res = await fetch(url, { credentials: "include" });
-    const data = await res.json();
-    setCampaigns(data);
-    setLoading(false);
+    try {
+      let url = "/api/admin/campaigns";
+      if (aiFilter !== "all") {
+        url += `?ai_active=${aiFilter}`;
+      }
+
+      const res = await fetch(url, {
+        credentials: "include",
+        cache: "no-store",
+      });
+
+      const data = await res.json();
+
+      // ✅ HARD GUARD — THIS FIXES THE CRASH
+      if (!Array.isArray(data)) {
+        console.error("Invalid campaigns response:", data);
+        setCampaigns([]);
+        setError("Failed to load campaigns");
+        return;
+      }
+
+      setCampaigns(data);
+    } catch (err) {
+      console.error("Campaign fetch failed:", err);
+      setError("Something went wrong while loading campaigns");
+      setCampaigns([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  async function forceToggleAI(
-    campaignId: string,
-    enable: boolean
-  ) {
+  async function forceToggleAI(campaignId: string, enable: boolean) {
     const reason = prompt(
       `Reason for ${enable ? "ENABLING" : "DISABLING"} AI`
     );
@@ -63,7 +84,9 @@ export default function AdminCampaignsPage() {
         <select
           className="border px-2 py-1 rounded text-sm"
           value={aiFilter}
-          onChange={(e) => setAiFilter(e.target.value)}
+          onChange={(e) =>
+            setAiFilter(e.target.value as "all" | "true" | "false")
+          }
         >
           <option value="all">All</option>
           <option value="true">AI Active</option>
@@ -71,9 +94,19 @@ export default function AdminCampaignsPage() {
         </select>
       </div>
 
-      {loading ? (
-        <div className="text-gray-500">Loading campaigns…</div>
-      ) : (
+      {loading && <div className="text-gray-500">Loading campaigns…</div>}
+
+      {error && (
+        <div className="text-red-600 bg-red-50 border border-red-200 rounded p-3">
+          {error}
+        </div>
+      )}
+
+      {!loading && !error && campaigns.length === 0 && (
+        <div className="text-gray-500">No campaigns found.</div>
+      )}
+
+      {!loading && !error && campaigns.length > 0 && (
         <div className="overflow-x-auto border rounded">
           <table className="w-full border-collapse">
             <thead className="bg-gray-100 text-left">
@@ -91,9 +124,7 @@ export default function AdminCampaignsPage() {
                 <tr key={c.id} className="hover:bg-gray-50">
                   <td className="p-2 border">
                     <div className="font-medium">{c.name}</div>
-                    <div className="text-xs text-gray-500">
-                      {c.id}
-                    </div>
+                    <div className="text-xs text-gray-500">{c.id}</div>
                   </td>
                   <td className="p-2 border">{c.objective}</td>
                   <td className="p-2 border">{c.status}</td>
@@ -107,18 +138,14 @@ export default function AdminCampaignsPage() {
                     {c.ai_active ? (
                       <button
                         className="px-2 py-1 bg-red-600 text-white rounded text-xs"
-                        onClick={() =>
-                          forceToggleAI(c.id, false)
-                        }
+                        onClick={() => forceToggleAI(c.id, false)}
                       >
                         Force OFF
                       </button>
                     ) : (
                       <button
                         className="px-2 py-1 bg-green-600 text-white rounded text-xs"
-                        onClick={() =>
-                          forceToggleAI(c.id, true)
-                        }
+                        onClick={() => forceToggleAI(c.id, true)}
                       >
                         Force ON
                       </button>
