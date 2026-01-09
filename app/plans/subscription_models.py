@@ -19,21 +19,19 @@ from app.plans.models import Plan
 class Subscription(Base):
     __tablename__ = "subscriptions"
 
-    # =====================================================
-    # CORE IDENTIFIERS
-    # =====================================================
-    id: Mapped[int] = mapped_column(
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
         primary_key=True,
-        autoincrement=True,
+        default=uuid.uuid4,
     )
 
-    user_id: Mapped[int] = mapped_column(
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
-    # PLAN LINK
     plan_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("plans.id", ondelete="RESTRICT"),
@@ -41,24 +39,16 @@ class Subscription(Base):
         index=True,
     )
 
-    # =====================================================
-    # PAYMENT LINK (PHASE 19)
-    # =====================================================
     payment_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("payments.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
-        doc="Payment that activated this subscription",
     )
 
-    # =====================================================
-    # SUBSCRIPTION STATE
-    # =====================================================
     status: Mapped[str] = mapped_column(
         String,
         nullable=False,
-        doc="trial | active | expired | cancelled",
     )
 
     starts_at: Mapped[datetime] = mapped_column(
@@ -71,9 +61,6 @@ class Subscription(Base):
         nullable=True,
     )
 
-    # =====================================================
-    # TRIAL METADATA
-    # =====================================================
     is_trial: Mapped[bool] = mapped_column(
         Boolean,
         default=False,
@@ -95,9 +82,6 @@ class Subscription(Base):
         nullable=True,
     )
 
-    # =====================================================
-    # SNAPSHOTS & FLAGS
-    # =====================================================
     ai_campaign_limit_snapshot: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
@@ -122,18 +106,12 @@ class Subscription(Base):
         nullable=False,
     )
 
-    # =====================================================
-    # AUDIT
-    # =====================================================
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.utcnow,
         nullable=False,
     )
 
-    # =====================================================
-    # RELATIONSHIPS
-    # =====================================================
     plan = relationship(
         Plan,
         lazy="selectin",
@@ -146,55 +124,39 @@ class Subscription(Base):
         cascade="all, delete-orphan",
     )
 
-    # =====================================================
-    # 🔒 DB-LEVEL SAFETY (CRITICAL)
-    # =====================================================
     __table_args__ = (
         Index(
             "uq_active_subscription_per_user",
             "user_id",
             unique=True,
-            postgresql_where=(
-                (status.in_(["trial", "active"]))
-            ),
+            postgresql_where=(status.in_(["trial", "active"])),
         ),
     )
 
 
-# =========================================================
-# NEW: SUBSCRIPTION ADD-ON MODEL
-# =========================================================
 class SubscriptionAddon(Base):
-    """
-    Represents purchased add-on capacity for AI campaigns.
-    Each addon increases limit by `extra_ai_campaigns`.
-
-    Business rules:
-      - Addon expires in 30 days
-      - Effective expiry = min(addon_expiry, subscription_expiry)
-      - Agency plan only (handled in service layer)
-    """
-
     __tablename__ = "subscription_addons"
 
-    id: Mapped[int] = mapped_column(
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
         primary_key=True,
-        autoincrement=True,
+        default=uuid.uuid4,
     )
 
-    user_id: Mapped[int] = mapped_column(
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
-    subscription_id: Mapped[int] = mapped_column(
+    subscription_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
         ForeignKey("subscriptions.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
 
-    # Number of additional campaigns this addon gives
     extra_ai_campaigns: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
@@ -225,16 +187,11 @@ class SubscriptionAddon(Base):
         nullable=False,
     )
 
-    # RELATIONSHIP
     subscription = relationship(
         Subscription,
         back_populates="addons",
         lazy="selectin",
     )
 
-    # =====================================================
-    # HELPERS
-    # =====================================================
     def compute_default_expiry(self) -> datetime:
-        """Default 30-day expiry."""
         return self.purchased_at + timedelta(days=30)
