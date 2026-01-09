@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { apiFetch } from "@/lib/apiFetch";
 
-type DashboardStats = {
+type DashboardData = {
   users: number;
   subscriptions: {
     active: number;
@@ -15,169 +13,72 @@ type DashboardStats = {
     ai_active: number;
     manual: number;
   };
-  last_activity: string | null;
+  last_activity: string;
   system_status: string;
 };
 
-type UserLite = {
-  id: string;
-  email: string;
-};
-
 export default function AdminDashboardPage() {
-  const router = useRouter();
-
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [users, setUsers] = useState<UserLite[]>([]);
-  const [selectedUser, setSelectedUser] = useState<string>("");
+  const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [impersonating, setImpersonating] = useState(false);
 
   useEffect(() => {
-    const load = async () => {
+    (async () => {
       try {
-        const statsRes = await apiFetch("/api/admin/dashboard");
-
-        if (statsRes.status === 403) {
-          router.replace("/dashboard");
-          return;
-        }
-
-        const usersRes = await apiFetch("/api/admin/users");
-
-        setStats(await statsRes.json());
-        setUsers(await usersRes.json());
+        const res = await fetch("/api/admin/dashboard", {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const json = await res.json();
+        setData(json);
+      } catch (e) {
+        console.error("Failed to load admin dashboard", e);
       } finally {
         setLoading(false);
       }
-    };
-
-    load();
-  }, [router]);
-
-  const impersonate = () => {
-    if (!selectedUser) return;
-    sessionStorage.setItem("impersonate_user", selectedUser);
-    setImpersonating(true);
-    router.push("/dashboard");
-  };
+    })();
+  }, []);
 
   if (loading) {
-    return (
-      <div className="text-sm text-gray-500">
-        Loading admin dashboard…
-      </div>
-    );
+    return <div className="text-sm text-gray-600">Loading dashboard…</div>;
   }
 
-  if (!stats) {
-    return (
-      <div className="text-sm text-red-600">
-        Failed to load admin stats.
-      </div>
-    );
+  if (!data) {
+    return <div className="text-red-600 text-sm">Failed to load dashboard.</div>;
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-lg font-semibold text-gray-900">
-          Admin Dashboard
-        </h1>
-        <p className="text-sm text-gray-500">
-          System health, usage, and admin controls
-        </p>
+    <div className="space-y-6">
+      <h1 className="text-lg font-semibold">Admin Dashboard</h1>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPI title="Users" value={data.users} />
+        <KPI title="Active Subs" value={data.subscriptions.active} />
+        <KPI title="Expired Subs" value={data.subscriptions.expired} />
+        <KPI title="Campaigns" value={data.campaigns.total} />
+        <KPI title="AI Active" value={data.campaigns.ai_active} />
+        <KPI title="Manual" value={data.campaigns.manual} />
       </div>
 
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-        <div className="text-sm font-medium text-amber-900">
-          View as User (Read-only)
+      {/* System Info */}
+      <div className="p-4 rounded border bg-white text-sm space-y-1">
+        <div>
+          <span className="font-medium">System Status:</span> {data.system_status}
         </div>
-        <p className="mt-1 text-xs text-amber-700">
-          Temporarily view the system exactly as a user sees it.
-          No mutations allowed.
-        </p>
-
-        <div className="mt-3 flex gap-2">
-          <select
-            value={selectedUser}
-            onChange={(e) => setSelectedUser(e.target.value)}
-            className="flex-1 border rounded-md px-3 py-2 text-sm"
-          >
-            <option value="">Select user…</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.email}
-              </option>
-            ))}
-          </select>
-
-          <button
-            onClick={impersonate}
-            disabled={!selectedUser || impersonating}
-            className="px-4 py-2 rounded-md text-sm font-medium bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-50"
-          >
-            View as User
-          </button>
+        <div>
+          <span className="font-medium">Last Activity:</span>{" "}
+          {new Date(data.last_activity).toLocaleString()}
         </div>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-700">
-          System OK
-        </span>
-        {stats.last_activity && (
-          <span className="text-xs text-gray-500">
-            Last activity:{" "}
-            {new Date(stats.last_activity).toLocaleString()}
-          </span>
-        )}
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Metric label="Total Users" value={stats.users} />
-        <Metric
-          label="Active Subscriptions"
-          value={stats.subscriptions.active}
-        />
-        <Metric
-          label="Expired Subscriptions"
-          value={stats.subscriptions.expired}
-        />
-        <Metric
-          label="Total Campaigns"
-          value={stats.campaigns.total}
-        />
-        <Metric
-          label="AI Active Campaigns"
-          value={stats.campaigns.ai_active}
-        />
-        <Metric
-          label="Manual Campaigns"
-          value={stats.campaigns.manual}
-        />
-      </div>
-
-      <div className="text-xs text-gray-400">
-        All admin actions are logged and auditable.
       </div>
     </div>
   );
 }
 
-function Metric({
-  label,
-  value,
-}: {
-  label: string;
-  value: number;
-}) {
+function KPI({ title, value }: { title: string; value: number }) {
   return (
-    <div className="bg-white border rounded-lg px-4 py-3">
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="mt-1 text-xl font-semibold text-gray-900">
-        {value}
-      </div>
+    <div className="p-4 rounded border bg-white">
+      <div className="text-xs text-gray-500 uppercase">{title}</div>
+      <div className="text-xl font-semibold mt-1">{value}</div>
     </div>
   );
 }
