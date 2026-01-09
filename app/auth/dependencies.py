@@ -73,7 +73,7 @@ async def get_current_user(
                 detail="System under maintenance",
             )
 
-    # 🔁 ADMIN IMPERSONATION (STRICT)
+    # 🔁 ADMIN IMPERSONATION (STRICT + READ-ONLY)
     impersonate_user = request.headers.get("X-Impersonate-User")
 
     if impersonate_user:
@@ -83,7 +83,6 @@ async def get_current_user(
                 detail="Impersonation not allowed",
             )
 
-        # Only allow UUID (no silent email impersonation)
         target_user_id = _safe_uuid_cast(impersonate_user)
         if not target_user_id:
             raise HTTPException(
@@ -102,17 +101,22 @@ async def get_current_user(
                 detail="Impersonated user not found",
             )
 
-        # 🔒 Mark impersonation flags (read-only enforced elsewhere)
+        # 🔒 HARD FLAGS — SINGLE SOURCE OF TRUTH
         target_user._is_impersonated = True
         target_user._impersonated_by = user.email
+        target_user._impersonation_mode = "read_only"
+        target_user._write_blocked = True
 
         return target_user
 
+    # Normal user
+    user._is_impersonated = False
+    user._write_blocked = False
     return user
 
 
 # -------------------------------------------------
-# 🌍 SESSION CONTEXT
+# 🌍 SESSION CONTEXT (IMPERSONATION-AWARE)
 # -------------------------------------------------
 async def get_session_context(
     db: AsyncSession = Depends(get_db),
@@ -124,15 +128,11 @@ async def get_session_context(
             UserMetaAdAccount,
             UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
         )
-        .where(
-            UserMetaAdAccount.user_id == user.id,
-            UserMetaAdAccount.is_selected.is_(True),
-        )
+        .where(UserMetaAdAccount.user_id == user.id)
         .order_by(MetaAdAccount.account_name)
     )
 
     ad_accounts = result.scalars().all()
-    active_ad_account = ad_accounts[0] if ad_accounts else None
 
     return {
         "user": {
@@ -140,7 +140,9 @@ async def get_session_context(
             "email": user.email,
             "is_admin": user.email in ADMIN_EMAILS,
             "is_impersonated": getattr(user, "_is_impersonated", False),
+            "impersonation_mode": getattr(user, "_impersonation_mode", None),
             "impersonated_by": getattr(user, "_impersonated_by", None),
+            "write_blocked": getattr(user, "_write_blocked", False),
         },
         "ad_accounts": [
             {
@@ -150,15 +152,6 @@ async def get_session_context(
             }
             for acct in ad_accounts
         ],
-        "ad_account": (
-            {
-                "id": str(active_ad_account.id),
-                "name": active_ad_account.account_name,
-                "meta_account_id": active_ad_account.meta_account_id,
-            }
-            if active_ad_account
-            else None
-        ),
     }
 
 
@@ -173,7 +166,7 @@ def _safe_uuid_cast(value: str) -> UUID | None:
 
 
 # -------------------------------------------------
-# 🔒 GUARDS
+# 🔒 GUARDS (CENTRALIZED WRITE BLOCK)
 # -------------------------------------------------
 async def require_user(
     user: User = Depends(get_current_user),
@@ -195,7 +188,7 @@ async def require_admin(
 async def forbid_impersonated_writes(
     user: User = Depends(get_current_user),
 ) -> User:
-    if getattr(user, "_is_impersonated", False):
+    if getattr(user, "_write_blocked", False):
         raise HTTPException(
             status_code=403,
             detail="Write operations disabled during impersonation",
