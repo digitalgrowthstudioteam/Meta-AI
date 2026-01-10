@@ -17,27 +17,55 @@ export default function AdminSettingsPage() {
   const [configs, setConfigs] = useState<PricingConfig[]>([]);
   const [activeConfig, setActiveConfig] = useState<PricingConfig | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activating, setActivating] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function load() {
-      const [activeRes, listRes] = await Promise.all([
-        fetch("/api/admin/pricing-config/active"),
-        fetch("/api/admin/pricing-config"),
-      ]);
+  async function load() {
+    const [activeRes, listRes] = await Promise.all([
+      fetch("/api/admin/pricing-config/active"),
+      fetch("/api/admin/pricing-config"),
+    ]);
 
-      if (activeRes.ok) {
-        setActiveConfig(await activeRes.json());
-      }
-
-      if (listRes.ok) {
-        setConfigs(await listRes.json());
-      }
-
-      setLoading(false);
+    if (activeRes.ok) {
+      setActiveConfig(await activeRes.json());
+    } else {
+      setActiveConfig(null);
     }
 
+    if (listRes.ok) {
+      setConfigs(await listRes.json());
+    }
+
+    setLoading(false);
+  }
+
+  useEffect(() => {
     load();
   }, []);
+
+  async function activateConfig(configId: string) {
+    const reason = prompt("Reason for activating this pricing config?");
+    if (!reason) return;
+
+    setActivating(configId);
+
+    const res = await fetch(
+      `/api/admin/pricing-config/${configId}/activate`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      }
+    );
+
+    setActivating(null);
+
+    if (!res.ok) {
+      alert("Activation failed");
+      return;
+    }
+
+    await load();
+  }
 
   if (loading) {
     return <div className="p-4 text-sm">Loading settings…</div>;
@@ -85,6 +113,7 @@ export default function AdminSettingsPage() {
               <th className="p-2 border">Currency</th>
               <th className="p-2 border">Tax %</th>
               <th className="p-2 border">Created At</th>
+              <th className="p-2 border">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -99,13 +128,24 @@ export default function AdminSettingsPage() {
                 <td className="p-2 border">
                   {new Date(c.created_at).toLocaleString()}
                 </td>
+                <td className="p-2 border">
+                  {!c.is_active && (
+                    <button
+                      onClick={() => activateConfig(c.id)}
+                      disabled={activating === c.id}
+                      className="px-3 py-1 text-xs border rounded hover:bg-gray-100 disabled:opacity-50"
+                    >
+                      {activating === c.id ? "Activating…" : "Activate"}
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
 
         <div className="mt-3 text-xs text-gray-500">
-          Creation & activation actions will be enabled next.
+          All activations are audited and reversible.
         </div>
       </div>
     </div>
