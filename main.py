@@ -24,6 +24,7 @@ from app.dashboard.routes import router as dashboard_router
 from app.ai_engine.routes import router as ai_router
 from backend.app.admin.dashboard_routes import router as admin_dashboard_router
 from backend.app.admin.users_routes import router as admin_users_router
+from app.admin.revenue_routes import router as admin_revenue_router
 
 # 🔒 ADMIN IMPERSONATION
 from backend.app.admin.impersonation_routes import router as admin_router
@@ -73,6 +74,7 @@ app.include_router(admin_users_router, prefix="/api")
 # 🆕 ADMIN CAMPAIGN ROUTES
 app.include_router(admin_campaigns_router, prefix="/api")
 app.include_router(admin_billing_router, prefix="/api")
+app.include_router(admin_revenue_router, prefix="/api")
 
 # =========================
 # HEALTH CHECK
