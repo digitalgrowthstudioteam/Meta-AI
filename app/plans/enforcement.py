@@ -28,13 +28,18 @@ class EnforcementError(Exception):
 
 class PlanEnforcementService:
 
+    # =========================
+    # INTERNAL LOADERS
+    # =========================
     @staticmethod
     async def _get_global_settings(db: AsyncSession) -> Optional[GlobalSettings]:
         result = await db.execute(select(GlobalSettings).limit(1))
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def _get_active_subscription(db: AsyncSession, user_id: UUID) -> Optional[Subscription]:
+    async def _get_active_subscription(
+        db: AsyncSession, user_id: UUID
+    ) -> Optional[Subscription]:
         result = await db.execute(
             select(Subscription).where(
                 Subscription.user_id == user_id,
@@ -44,35 +49,30 @@ class PlanEnforcementService:
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def _get_active_admin_override(db: AsyncSession, user_id: UUID) -> Optional[AdminOverride]:
+    async def _get_active_admin_override(
+        db: AsyncSession, user_id: UUID
+    ) -> Optional[AdminOverride]:
         now = datetime.utcnow()
         result = await db.execute(
             select(AdminOverride).where(
                 AdminOverride.user_id == user_id,
-                (AdminOverride.override_expires_at.is_(None)
-                 | (AdminOverride.override_expires_at > now)),
+                (AdminOverride.override_expires_at.is_(None))
+                | (AdminOverride.override_expires_at > now),
             )
         )
         return result.scalar_one_or_none()
 
     @staticmethod
-    async def _sum_active_addons(db: AsyncSession, subscription: Subscription) -> int:
-        now = datetime.utcnow()
-        result = await db.execute(
-            select(func.sum(SubscriptionAddon.extra_ai_campaigns))
-            .where(
-                SubscriptionAddon.subscription_id == subscription.id,
-                SubscriptionAddon.expires_at > now,
-            )
-        )
-        return result.scalar() or 0
-
-    @staticmethod
-    async def _count_active_ai_campaigns(db: AsyncSession, user_id: UUID) -> int:
+    async def _count_active_ai_campaigns(
+        db: AsyncSession, user_id: UUID
+    ) -> int:
         result = await db.execute(
             select(func.count(Campaign.id))
             .join(MetaAdAccount, Campaign.ad_account_id == MetaAdAccount.id)
-            .join(UserMetaAdAccount, UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id)
+            .join(
+                UserMetaAdAccount,
+                UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
+            )
             .where(
                 UserMetaAdAccount.user_id == user_id,
                 UserMetaAdAccount.is_selected.is_(True),
@@ -82,8 +82,50 @@ class PlanEnforcementService:
         )
         return result.scalar_one()
 
+    # =========================
+    # SLOT RESERVATION (NEW)
+    # =========================
     @staticmethod
-    async def assert_ai_allowed(db: AsyncSession, *, user_id: UUID) -> None:
+    async def _reserve_addon_slot(
+        db: AsyncSession,
+        *,
+        subscription: Subscription,
+        campaign: Campaign,
+    ) -> Optional[SubscriptionAddon]:
+        """
+        Atomically reserve ONE available addon slot and bind it to campaign.
+        """
+        now = datetime.utcnow()
+
+        result = await db.execute(
+            select(SubscriptionAddon)
+            .where(
+                SubscriptionAddon.subscription_id == subscription.id,
+                SubscriptionAddon.expires_at > now,
+                SubscriptionAddon.consumed_by_campaign_id.is_(None),
+            )
+            .order_by(SubscriptionAddon.purchased_at.asc())
+            .with_for_update()
+            .limit(1)
+        )
+        addon = result.scalar_one_or_none()
+
+        if not addon:
+            return None
+
+        addon.consumed_by_campaign_id = campaign.id
+        return addon
+
+    # =========================
+    # MAIN AI ENFORCEMENT
+    # =========================
+    @staticmethod
+    async def assert_ai_allowed(
+        db: AsyncSession,
+        *,
+        user_id: UUID,
+        campaign: Campaign,
+    ) -> None:
         settings = await PlanEnforcementService._get_global_settings(db)
         if settings and not settings.ai_globally_enabled:
             raise EnforcementError(
@@ -92,7 +134,9 @@ class PlanEnforcementService:
                 action="CONTACT_SUPPORT",
             )
 
-        subscription = await PlanEnforcementService._get_active_subscription(db=db, user_id=user_id)
+        subscription = await PlanEnforcementService._get_active_subscription(
+            db=db, user_id=user_id
+        )
         if not subscription:
             raise EnforcementError(
                 code="NO_SUBSCRIPTION",
@@ -109,28 +153,60 @@ class PlanEnforcementService:
             )
 
         base_limit = subscription.ai_campaign_limit_snapshot or 0
-        addon_extra = await PlanEnforcementService._sum_active_addons(db, subscription)
+        active_count = await PlanEnforcementService._count_active_ai_campaigns(
+            db=db, user_id=user_id
+        )
 
-        override = await PlanEnforcementService._get_active_admin_override(db=db, user_id=user_id)
+        override = await PlanEnforcementService._get_active_admin_override(
+            db=db, user_id=user_id
+        )
         admin_extra = override.extra_ai_campaigns if override else 0
 
-        effective_limit = base_limit + addon_extra + admin_extra
+        effective_limit = base_limit + admin_extra
 
-        active_count = await PlanEnforcementService._count_active_ai_campaigns(db=db, user_id=user_id)
+        # ---------------------------------
+        # BASE PLAN LIMIT CHECK
+        # ---------------------------------
+        if active_count < effective_limit:
+            return
 
-        if active_count >= effective_limit:
-            if addon_extra > 0 or admin_extra > 0:
-                raise EnforcementError(
-                    code="AI_ADDON_LIMIT_REACHED",
-                    message=f"AI add-on limit reached ({effective_limit}).",
-                    action="BUY_ADDON",
+        # ---------------------------------
+        # TRY SLOT ADDON CONSUMPTION
+        # ---------------------------------
+        addon = await PlanEnforcementService._reserve_addon_slot(
+            db=db,
+            subscription=subscription,
+            campaign=campaign,
+        )
+
+        if addon:
+            db.add(
+                CampaignActionLog(
+                    campaign_id=campaign.id,
+                    user_id=user_id,
+                    actor_type="system",
+                    action_type="slot_consumed",
+                    before_state={},
+                    after_state={
+                        "subscription_addon_id": str(addon.id)
+                    },
+                    reason="AI slot consumed",
                 )
-            raise EnforcementError(
-                code="AI_PLAN_LIMIT_REACHED",
-                message=f"AI campaign limit reached ({effective_limit}).",
-                action="UPGRADE_PLAN",
             )
+            return
 
+        # ---------------------------------
+        # HARD STOP
+        # ---------------------------------
+        raise EnforcementError(
+            code="AI_LIMIT_REACHED",
+            message="AI campaign limit reached.",
+            action="BUY_SLOTS",
+        )
+
+    # =========================
+    # SUBSCRIPTION EXPIRY
+    # =========================
     @staticmethod
     async def enforce_subscription_expiry(db: AsyncSession) -> int:
         now = datetime.utcnow()
@@ -151,7 +227,10 @@ class PlanEnforcementService:
             camp_result = await db.execute(
                 select(Campaign)
                 .join(MetaAdAccount, Campaign.ad_account_id == MetaAdAccount.id)
-                .join(UserMetaAdAccount, UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id)
+                .join(
+                    UserMetaAdAccount,
+                    UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
+                )
                 .where(
                     UserMetaAdAccount.user_id == sub.user_id,
                     Campaign.ai_active.is_(True),
@@ -181,29 +260,35 @@ class PlanEnforcementService:
         await db.commit()
         return affected
 
+    # =========================
+    # STATUS HELPERS
+    # =========================
     @staticmethod
     async def get_ai_limit_status(db: AsyncSession, *, user_id: UUID) -> dict:
         settings = await PlanEnforcementService._get_global_settings(db)
         if settings and not settings.ai_globally_enabled:
             return {"allowed": False, "reason": "AI_GLOBALLY_DISABLED"}
 
-        subscription = await PlanEnforcementService._get_active_subscription(db=db, user_id=user_id)
+        subscription = await PlanEnforcementService._get_active_subscription(
+            db=db, user_id=user_id
+        )
         if not subscription:
             return {"allowed": False, "reason": "NO_SUBSCRIPTION"}
 
         base_limit = subscription.ai_campaign_limit_snapshot or 0
-        addon_extra = await PlanEnforcementService._sum_active_addons(db, subscription)
-        override = await PlanEnforcementService._get_active_admin_override(db=db, user_id=user_id)
+        active_count = await PlanEnforcementService._count_active_ai_campaigns(
+            db=db, user_id=user_id
+        )
+
+        override = await PlanEnforcementService._get_active_admin_override(
+            db=db, user_id=user_id
+        )
         admin_extra = override.extra_ai_campaigns if override else 0
 
-        effective_limit = base_limit + addon_extra + admin_extra
-        active_count = await PlanEnforcementService._count_active_ai_campaigns(db=db, user_id=user_id)
-
         return {
-            "allowed": active_count < effective_limit,
+            "allowed": active_count < (base_limit + admin_extra),
             "active": active_count,
-            "limit": effective_limit,
+            "limit": base_limit + admin_extra,
             "base_limit": base_limit,
-            "addon_extra": addon_extra,
             "admin_extra": admin_extra,
         }
