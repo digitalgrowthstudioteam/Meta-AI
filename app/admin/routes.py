@@ -10,18 +10,9 @@ from app.users.models import User
 from app.campaigns.models import Campaign, CampaignActionLog
 from app.plans.subscription_models import Subscription
 
-# -------------------------
-# Admin Schemas / Services
-# -------------------------
-from app.admin.schemas import (
-    AdminOverrideCreate,
-    AdminOverrideResponse,
-)
+from app.admin.models import AdminAuditLog
 from app.admin.service import AdminOverrideService
 
-# -------------------------
-# Metrics / AI Services
-# -------------------------
 from app.meta_insights.services.campaign_daily_metrics_sync_service import (
     CampaignDailyMetricsSyncService,
 )
@@ -31,9 +22,6 @@ from app.ai_engine.aggregation_engine.campaign_aggregation_service import (
 from app.billing.invoice_service import InvoiceService
 from app.billing.service import BillingService
 
-# -------------------------
-# Metrics Sync (already wired)
-# -------------------------
 from app.admin.metrics_sync_routes import router as metrics_sync_router
 
 
@@ -113,47 +101,52 @@ async def list_users(
 
 
 # ==========================================================
-# PHASE 5 — ADMIN CAMPAIGN EXPLORER (READ)
+# PHASE 6 — ADMIN AUDIT LOG VIEWER (READ ONLY)
 # ==========================================================
-@router.get("/campaigns")
-async def admin_list_campaigns(
+@router.get("/audit-logs")
+async def list_admin_audit_logs(
     *,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_user),
-    user_id: UUID | None = Query(None),
-    ai_active: bool | None = Query(None),
+    target_type: str | None = Query(None),
+    action: str | None = Query(None),
+    limit: int = Query(50, le=200),
 ):
     require_admin(current_user)
 
-    stmt = select(Campaign)
+    stmt = select(AdminAuditLog)
 
-    if user_id:
-        stmt = stmt.where(Campaign.user_id == user_id)
+    if target_type:
+        stmt = stmt.where(AdminAuditLog.target_type == target_type)
 
-    if ai_active is not None:
-        stmt = stmt.where(Campaign.ai_active.is_(ai_active))
+    if action:
+        stmt = stmt.where(AdminAuditLog.action == action)
 
-    result = await db.execute(stmt.order_by(Campaign.created_at.desc()))
-    campaigns = result.scalars().all()
+    result = await db.execute(
+        stmt.order_by(AdminAuditLog.created_at.desc()).limit(limit)
+    )
+
+    logs = result.scalars().all()
 
     return [
         {
-            "id": str(c.id),
-            "user_id": str(c.user_id),
-            "name": c.name,
-            "objective": c.objective,
-            "status": c.status,
-            "ai_active": c.ai_active,
-            "ai_execution_locked": c.ai_execution_locked,
-            "is_manual": c.is_manual,
-            "created_at": c.created_at.isoformat(),
+            "id": str(l.id),
+            "admin_user_id": str(l.admin_user_id),
+            "target_type": l.target_type,
+            "target_id": str(l.target_id) if l.target_id else None,
+            "action": l.action,
+            "reason": l.reason,
+            "rollback_token": (
+                str(l.rollback_token) if l.rollback_token else None
+            ),
+            "created_at": l.created_at.isoformat(),
         }
-        for c in campaigns
+        for l in logs
     ]
 
 
 # ==========================================================
-# PHASE 5 — FORCE AI ENABLE / DISABLE (AUDITED)
+# PHASE 5 — CAMPAIGN ACTIONS (UNCHANGED, CAMPAIGN-ONLY)
 # ==========================================================
 @router.post("/campaigns/{campaign_id}/force-ai")
 async def admin_force_ai_toggle(
@@ -213,61 +206,7 @@ async def admin_force_ai_toggle(
 
 
 # ==========================================================
-# PHASE 5 — RESET CAMPAIGN AI STATE
-# ==========================================================
-@router.post("/campaigns/{campaign_id}/reset")
-async def admin_reset_campaign_state(
-    campaign_id: UUID,
-    payload: dict,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_user),
-):
-    require_admin(current_user)
-    forbid_impersonated_writes(current_user)
-
-    reason = payload.get("reason")
-    if not reason:
-        raise HTTPException(400, "reason required")
-
-    campaign = await db.get(Campaign, campaign_id)
-    if not campaign:
-        raise HTTPException(404, "Campaign not found")
-
-    before_state = {
-        "ai_active": campaign.ai_active,
-        "ai_execution_locked": campaign.ai_execution_locked,
-    }
-
-    campaign.ai_active = False
-    campaign.ai_execution_locked = True
-    campaign.ai_activated_at = None
-    campaign.ai_deactivated_at = datetime.utcnow()
-
-    after_state = {
-        "ai_active": campaign.ai_active,
-        "ai_execution_locked": campaign.ai_execution_locked,
-    }
-
-    db.add(
-        CampaignActionLog(
-            campaign_id=campaign.id,
-            user_id=current_user.id,
-            actor_type="admin",
-            action_type="reset_campaign_ai_state",
-            before_state=before_state,
-            after_state=after_state,
-            reason=reason,
-            created_at=datetime.utcnow(),
-        )
-    )
-
-    await db.commit()
-
-    return {"status": "ok", "campaign_id": str(campaign.id)}
-
-
-# ==========================================================
-# PHASE 3.2 — SUPPORT TOOLS (UNCHANGED)
+# PHASE 3.2 — SUPPORT TOOLS (AUDITED CORRECTLY)
 # ==========================================================
 async def _log_support_action(
     *,
@@ -278,14 +217,14 @@ async def _log_support_action(
     reason: str,
 ):
     db.add(
-        CampaignActionLog(
-            campaign_id=None,
-            user_id=admin_user.id,
-            actor_type="admin",
-            action_type=action,
-            reason=reason,
-            before_state={"target_user_id": str(target_user_id)},
+        AdminAuditLog(
+            admin_user_id=admin_user.id,
+            target_type="user",
+            target_id=target_user_id,
+            action=action,
+            before_state={},
             after_state={},
+            reason=reason,
             created_at=datetime.utcnow(),
         )
     )
@@ -315,149 +254,6 @@ async def force_meta_resync(
         admin_user=current_user,
         target_user_id=user_id,
         action="force_meta_resync",
-        reason=reason,
-    )
-
-    return {"status": "ok"}
-
-
-@router.post("/support/refresh_billing")
-async def refresh_billing_from_razorpay(
-    payload: dict,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_user),
-):
-    require_admin(current_user)
-    forbid_impersonated_writes(current_user)
-
-    user_id = UUID(payload["user_id"])
-    reason = payload.get("reason")
-    if not reason:
-        raise HTTPException(400, "Reason required")
-
-    await BillingService.refresh_user_billing(db=db, user_id=user_id)
-
-    await _log_support_action(
-        db=db,
-        admin_user=current_user,
-        target_user_id=user_id,
-        action="refresh_billing_from_razorpay",
-        reason=reason,
-    )
-
-    return {"status": "ok"}
-
-
-@router.post("/support/clear_ai_queue")
-async def clear_ai_queue(
-    payload: dict,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_user),
-):
-    require_admin(current_user)
-    forbid_impersonated_writes(current_user)
-
-    user_id = UUID(payload["user_id"])
-    reason = payload.get("reason")
-    if not reason:
-        raise HTTPException(400, "Reason required")
-
-    await CampaignAggregationService.clear_user_queue(
-        db=db, user_id=user_id
-    )
-
-    await _log_support_action(
-        db=db,
-        admin_user=current_user,
-        target_user_id=user_id,
-        action="clear_ai_queue",
-        reason=reason,
-    )
-
-    return {"status": "ok"}
-
-
-@router.post("/support/reprocess_webhooks")
-async def reprocess_webhooks(
-    payload: dict,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_user),
-):
-    require_admin(current_user)
-    forbid_impersonated_writes(current_user)
-
-    user_id = UUID(payload["user_id"])
-    reason = payload.get("reason")
-    if not reason:
-        raise HTTPException(400, "Reason required")
-
-    await BillingService.reprocess_failed_webhooks(
-        db=db, user_id=user_id
-    )
-
-    await _log_support_action(
-        db=db,
-        admin_user=current_user,
-        target_user_id=user_id,
-        action="reprocess_razorpay_webhooks",
-        reason=reason,
-    )
-
-    return {"status": "ok"}
-
-
-@router.post("/support/regenerate_invoices")
-async def regenerate_invoices(
-    payload: dict,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_user),
-):
-    require_admin(current_user)
-    forbid_impersonated_writes(current_user)
-
-    user_id = UUID(payload["user_id"])
-    reason = payload.get("reason")
-    if not reason:
-        raise HTTPException(400, "Reason required")
-
-    await InvoiceService.regenerate_user_invoices(
-        db=db, user_id=user_id
-    )
-
-    await _log_support_action(
-        db=db,
-        admin_user=current_user,
-        target_user_id=user_id,
-        action="regenerate_invoice_pdfs",
-        reason=reason,
-    )
-
-    return {"status": "ok"}
-
-
-@router.post("/support/rebuild_ml")
-async def rebuild_ml_aggregations(
-    payload: dict,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_user),
-):
-    require_admin(current_user)
-    forbid_impersonated_writes(current_user)
-
-    user_id = UUID(payload["user_id"])
-    reason = payload.get("reason")
-    if not reason:
-        raise HTTPException(400, "Reason required")
-
-    await CampaignAggregationService.rebuild_user_aggregations(
-        db=db, user_id=user_id
-    )
-
-    await _log_support_action(
-        db=db,
-        admin_user=current_user,
-        target_user_id=user_id,
-        action="rebuild_ml_aggregations",
         reason=reason,
     )
 
