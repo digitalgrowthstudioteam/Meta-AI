@@ -11,6 +11,7 @@ from app.billing.invoice_models import Invoice
 from app.users.models import User
 from app.plans.subscription_models import Subscription
 from app.plans.models import Plan
+from app.admin.models_pricing import AdminPricingConfig
 
 
 class BillingService:
@@ -21,7 +22,7 @@ class BillingService:
     - Order creation is idempotent
     - Payment verification is idempotent
     - Subscription activation happens HERE and ONLY HERE
-    - Webhook may re-trigger this safely
+    - Pricing, currency, tax are read from AdminPricingConfig
     """
 
     def __init__(self):
@@ -32,6 +33,19 @@ class BillingService:
             auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET)
         )
         self.public_key = settings.RAZORPAY_KEY_ID
+
+    # =====================================================
+    # INTERNAL — LOAD ACTIVE PRICING CONFIG
+    # =====================================================
+    async def _get_active_pricing(self, db: AsyncSession) -> AdminPricingConfig:
+        config = await db.scalar(
+            select(AdminPricingConfig)
+            .where(AdminPricingConfig.is_active.is_(True))
+            .limit(1)
+        )
+        if not config:
+            raise RuntimeError("No active pricing configuration")
+        return config
 
     # =====================================================
     # CREATE RAZORPAY ORDER (IDEMPOTENT)
@@ -45,6 +59,8 @@ class BillingService:
         payment_for: str,
         related_reference_id: int | None,
     ) -> Payment:
+
+        pricing = await self._get_active_pricing(db)
 
         result = await db.execute(
             select(Payment).where(
@@ -61,7 +77,7 @@ class BillingService:
         order = self.client.order.create(
             {
                 "amount": amount,
-                "currency": "INR",
+                "currency": pricing.currency,
                 "payment_capture": 1,
             }
         )
@@ -70,7 +86,7 @@ class BillingService:
             user_id=user.id,
             razorpay_order_id=order["id"],
             amount=amount,
-            currency="INR",
+            currency=pricing.currency,
             status="created",
             payment_for=payment_for,
             related_reference_id=related_reference_id,
@@ -82,7 +98,7 @@ class BillingService:
         return payment
 
     # =====================================================
-    # VERIFY PAYMENT + ACTIVATE SUBSCRIPTION (FINAL)
+    # VERIFY PAYMENT + ACTIVATE SUBSCRIPTION
     # =====================================================
     async def verify_payment(
         self,
@@ -93,11 +109,11 @@ class BillingService:
         razorpay_signature: str,
     ) -> Payment:
 
-        result = await db.execute(
-            select(Payment).where(Payment.razorpay_order_id == razorpay_order_id)
+        payment = await db.scalar(
+            select(Payment).where(
+                Payment.razorpay_order_id == razorpay_order_id
+            )
         )
-        payment = result.scalar_one_or_none()
-
         if not payment:
             raise ValueError("Payment record not found")
 
@@ -140,27 +156,27 @@ class BillingService:
         if payment.payment_for != "subscription":
             return
 
-        result = await db.execute(
+        existing_sub = await db.scalar(
             select(Subscription).where(
                 Subscription.payment_id == payment.id
             )
         )
-        existing_sub = result.scalar_one_or_none()
         if existing_sub:
             return
 
         if payment.related_reference_id is None:
             raise RuntimeError("related_reference_id missing for subscription")
 
-        result = await db.execute(
+        plan = await db.scalar(
             select(Plan).where(
                 Plan.id == payment.related_reference_id,
-                Plan.is_active.is_(True)
+                Plan.is_active.is_(True),
             )
         )
-        plan = result.scalar_one_or_none()
         if not plan:
             raise RuntimeError("Invalid or inactive plan")
+
+        pricing = await self._get_active_pricing(db)
 
         now = datetime.utcnow()
         ends_at = now + timedelta(days=30)
@@ -169,12 +185,12 @@ class BillingService:
             update(Subscription)
             .where(
                 Subscription.user_id == payment.user_id,
-                Subscription.status.in_(["trial", "active"])
+                Subscription.status.in_(["trial", "active"]),
             )
             .values(
                 status="expired",
                 is_active=False,
-                ends_at=now
+                ends_at=now,
             )
         )
 
@@ -194,15 +210,19 @@ class BillingService:
 
         db.add(subscription)
 
+        tax_amount = int(
+            payment.amount * pricing.tax_percentage / 100
+        )
+
         invoice = Invoice(
             user_id=payment.user_id,
             payment_id=payment.id,
-            invoice_number=f"INV-{now.strftime('%Y%m%d')}-{payment.id.hex[:6].upper()}",
+            invoice_number=f"{pricing.invoice_prefix}-{now.strftime('%Y%m%d')}-{payment.id.hex[:6].upper()}",
             invoice_date=now,
             subtotal=payment.amount,
-            tax_amount=0,
-            total_amount=payment.amount,
-            currency=payment.currency,
+            tax_amount=tax_amount,
+            total_amount=payment.amount + tax_amount,
+            currency=pricing.currency,
             period_from=now.date(),
             period_to=ends_at.date(),
             status="paid",
