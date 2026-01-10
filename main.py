@@ -95,7 +95,7 @@ app.include_router(admin_users_router, prefix="/api")
 
 # 🆕 ADMIN CAMPAIGN ROUTES
 app.include_router(admin_campaigns_router, prefix="/api")
-app.include_router(admin_billing_router, prefix="/api")
+app.include_router(admin_user_billing_router, prefix="/api")
 app.include_router(admin_revenue_router, prefix="/api")
 app.include_router(admin_revenue_router, prefix="/api")
 app.include_router(admin_revenue_breakdown_router, prefix="/api")
