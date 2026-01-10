@@ -136,3 +136,47 @@ class AdminOverrideService:
         await db.commit()
         await db.refresh(settings)
         return settings
+
+    # =====================================================
+    # PHASE 6.4 — ROLLBACK ENGINE (ADMIN ONLY)
+    # =====================================================
+    @staticmethod
+    async def rollback_by_token(
+        *,
+        db: AsyncSession,
+        admin_user_id: UUID,
+        rollback_token: UUID,
+        reason: str,
+    ) -> None:
+        audit = await db.scalar(
+            select(AdminAuditLog)
+            .where(AdminAuditLog.rollback_token == rollback_token)
+        )
+
+        if not audit:
+            raise ValueError("Invalid rollback token")
+
+        if audit.target_type != "system":
+            raise ValueError("Rollback not supported for this target")
+
+        settings = await AdminOverrideService.get_global_settings(db)
+
+        # Apply rollback (before_state)
+        for field, value in audit.before_state.items():
+            if hasattr(settings, field):
+                setattr(settings, field, value)
+
+        rollback_audit = AdminAuditLog(
+            admin_user_id=admin_user_id,
+            target_type="system",
+            target_id=settings.id,
+            action="rollback_global_settings",
+            before_state=audit.after_state,
+            after_state=audit.before_state,
+            reason=reason,
+            rollback_token=None,
+            created_at=datetime.utcnow(),
+        )
+
+        db.add(rollback_audit)
+        await db.commit()
