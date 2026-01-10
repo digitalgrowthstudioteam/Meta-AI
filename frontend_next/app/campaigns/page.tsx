@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
+import { apiFetch } from "../lib/fetcher";
 
 /* -----------------------------------
  * TYPES
@@ -71,18 +72,22 @@ export default function CampaignsPage() {
    * LOAD SESSION CONTEXT
    * ----------------------------------- */
   const loadSession = async () => {
-    const res = await fetch("/api/session/context", {
-      credentials: "include",
-      cache: "no-store",
-    });
+    try {
+      const res = await apiFetch("/api/session/context", {
+        cache: "no-store",
+      });
 
-    if (!res.ok) {
+      if (!res.ok) {
+        setSession(null);
+        return;
+      }
+
+      const data = await res.json();
+      setSession(data);
+    } catch (error) {
+      console.error("Session error:", error);
       setSession(null);
-      return;
     }
-
-    const data = await res.json();
-    setSession(data);
   };
 
   /* -----------------------------------
@@ -118,8 +123,7 @@ export default function CampaignsPage() {
       if (aiFilter) params.append("ai_active", aiFilter);
       if (objectiveFilter) params.append("objective", objectiveFilter);
 
-      const res = await fetch(`/api/campaigns?${params.toString()}`, {
-        credentials: "include",
+      const res = await apiFetch(`/api/campaigns?${params.toString()}`, {
         cache: "no-store",
       });
 
@@ -165,14 +169,19 @@ export default function CampaignsPage() {
 
     setSyncing(true);
 
-    await fetch(`/api/campaigns/sync?account_id=${selected}`, {
-      method: "POST",
-      credentials: "include",
-      cache: "no-store",
-    });
+    try {
+      await apiFetch(`/api/campaigns/sync?account_id=${selected}`, {
+        method: "POST",
+        cache: "no-store",
+      });
 
-    await loadCampaigns();
-    setSyncing(false);
+      await loadCampaigns();
+      toast.success("Campaigns synced successfully");
+    } catch (error) {
+      toast.error("Failed to sync campaigns");
+    } finally {
+      setSyncing(false);
+    }
   };
 
   /* -----------------------------------
@@ -190,9 +199,8 @@ export default function CampaignsPage() {
     );
 
     try {
-      const res = await fetch(`/api/campaigns/${campaign.id}/ai-toggle`, {
+      const res = await apiFetch(`/api/campaigns/${campaign.id}/ai-toggle`, {
         method: "POST",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enable: nextValue }),
       });
@@ -231,25 +239,27 @@ export default function CampaignsPage() {
   /* -----------------------------------
    * RENDER
    * ----------------------------------- */
-  if (!session?.ad_accounts) return <div>Loading...</div>;
+  if (!session?.ad_accounts) {
+    return <div className="p-4 text-sm text-gray-500">Loading context...</div>;
+  }
 
   const selectedId = getSelectedAccountId();
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold">Campaigns</h1>
+          <h1 className="text-xl font-semibold text-gray-900">Campaigns</h1>
           <p className="text-sm text-gray-500">
             Active account:{" "}
-            <strong>
-              {session.ad_accounts.find((a) => a.id === selectedId)?.name}
+            <strong className="text-gray-900">
+              {session.ad_accounts.find((a) => a.id === selectedId)?.name || "None"}
             </strong>
           </p>
         </div>
 
         <select
-          className="border rounded px-2 py-1 text-sm"
+          className="block w-full sm:w-auto rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
           value={selectedId || ""}
           onChange={(e) => switchAdAccount(e.target.value)}
         >
@@ -262,11 +272,11 @@ export default function CampaignsPage() {
       </div>
 
       {/* FILTER BAR */}
-      <div className="surface p-4 grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+      <div className="bg-white p-4 rounded-lg border shadow-sm grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="border rounded px-2 py-1"
+          className="rounded-md border-0 py-1.5 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-indigo-600 sm:text-sm sm:leading-6"
         >
           <option value="">All Status</option>
           <option value="ACTIVE">Active</option>
@@ -276,7 +286,7 @@ export default function CampaignsPage() {
         <select
           value={aiFilter}
           onChange={(e) => setAiFilter(e.target.value)}
-          className="border rounded px-2 py-1"
+          className="rounded-md border-0 py-1.5 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-indigo-600 sm:text-sm sm:leading-6"
         >
           <option value="">AI (All)</option>
           <option value="true">AI Active</option>
@@ -286,51 +296,69 @@ export default function CampaignsPage() {
         <select
           value={objectiveFilter}
           onChange={(e) => setObjectiveFilter(e.target.value)}
-          className="border rounded px-2 py-1"
+          className="rounded-md border-0 py-1.5 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-indigo-600 sm:text-sm sm:leading-6"
         >
           <option value="">All Objectives</option>
           <option value="LEAD">Lead Gen</option>
           <option value="SALES">Sales</option>
         </select>
 
-        <button onClick={syncCampaigns} disabled={syncing} className="btn-secondary">
+        <button 
+          onClick={syncCampaigns} 
+          disabled={syncing} 
+          className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50"
+        >
           {syncing ? "Syncing…" : "Sync"}
         </button>
       </div>
 
-      {loading && <div>Loading campaigns…</div>}
-      {error && <div className="text-red-600">{error}</div>}
+      {loading && <div className="text-sm text-gray-500">Loading campaigns…</div>}
+      {error && <div className="text-sm text-red-600">{error}</div>}
 
-      {!loading && campaigns.length === 0 && <div>No campaigns found</div>}
+      {!loading && campaigns.length === 0 && (
+        <div className="text-center py-10 bg-white rounded-lg border border-dashed">
+          <p className="text-sm text-gray-500">No campaigns found matching your criteria.</p>
+        </div>
+      )}
 
       {!loading && campaigns.length > 0 && (
-        <div className="surface overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="border-b">
+        <div className="bg-white shadow-sm ring-1 ring-gray-900/5 sm:rounded-lg overflow-hidden">
+          <table className="min-w-full divide-y divide-gray-300">
+            <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-3 text-left">Campaign</th>
-                <th className="px-4 py-3 text-left">Objective</th>
-                <th className="px-4 py-3 text-left">Status</th>
-                <th className="px-4 py-3 text-left">AI</th>
+                <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">Campaign</th>
+                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Objective</th>
+                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Status</th>
+                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">AI Optimization</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-gray-200 bg-white">
               {campaigns.map((c) => (
-                <tr key={c.id} className="border-b last:border-0">
-                  <td className="px-4 py-3 font-medium">{c.name}</td>
-                  <td className="px-4 py-3">{c.objective ?? "—"}</td>
-                  <td className="px-4 py-3">{c.status}</td>
-                  <td className="px-4 py-3">
+                <tr key={c.id}>
+                  <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">{c.name}</td>
+                  <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{c.objective ?? "—"}</td>
+                  <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                    <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${
+                      c.status === 'ACTIVE' 
+                        ? 'bg-green-50 text-green-700 ring-green-600/20' 
+                        : 'bg-yellow-50 text-yellow-800 ring-yellow-600/20'
+                    }`}>
+                      {c.status}
+                    </span>
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                     <button
                       onClick={() => toggleAI(c)}
                       disabled={togglingId === c.id}
-                      className={`inline-flex h-6 w-11 items-center rounded-full transition ${
-                        c.ai_active ? "bg-green-600" : "bg-gray-300"
-                      }`}
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2 ${
+                        c.ai_active ? "bg-indigo-600" : "bg-gray-200"
+                      } ${togglingId === c.id ? "opacity-50 cursor-wait" : ""}`}
                     >
+                      <span className="sr-only">Use setting</span>
                       <span
-                        className={`inline-block h-4 w-4 rounded-full bg-white transition ${
-                          c.ai_active ? "translate-x-6" : "translate-x-1"
+                        aria-hidden="true"
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          c.ai_active ? "translate-x-5" : "translate-x-0"
                         }`}
                       />
                     </button>
