@@ -30,7 +30,7 @@ export default function AdminCampaignsPage() {
     setError(null);
 
     try {
-      let url = "/api/admin/campaigns";
+      let url = "/admin/campaigns";
       if (aiFilter !== "all") {
         url += `?ai_active=${aiFilter}`;
       }
