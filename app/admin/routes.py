@@ -2,13 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.core.db_session import get_db
 from app.auth.dependencies import require_user, forbid_impersonated_writes
 from app.users.models import User
 from app.campaigns.models import Campaign, CampaignActionLog
-from app.plans.subscription_models import Subscription
+from app.plans.subscription_models import Subscription, SubscriptionAddon
 
 from app.admin.models import AdminAuditLog
 from app.admin.service import AdminOverrideService
@@ -97,6 +97,136 @@ async def list_users(
 
 
 # ==========================================================
+# PHASE 7.13 — ADMIN SLOT CONTROLS (AUDITED)
+# ==========================================================
+@router.post("/slots/{addon_id}/extend")
+async def admin_extend_slot_expiry(
+    addon_id: UUID,
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    forbid_impersonated_writes(current_user)
+
+    days = payload.get("days")
+    reason = payload.get("reason")
+
+    if not days or not reason:
+        raise HTTPException(400, "days and reason required")
+
+    addon = await db.get(SubscriptionAddon, addon_id)
+    if not addon:
+        raise HTTPException(404, "Slot addon not found")
+
+    before_state = {"expires_at": addon.expires_at.isoformat()}
+
+    addon.expires_at = addon.expires_at + timedelta(days=int(days))
+
+    after_state = {"expires_at": addon.expires_at.isoformat()}
+
+    db.add(
+        AdminAuditLog(
+            admin_user_id=current_user.id,
+            target_type="slot_addon",
+            target_id=addon.id,
+            action="extend_slot_expiry",
+            before_state=before_state,
+            after_state=after_state,
+            reason=reason,
+            created_at=datetime.utcnow(),
+        )
+    )
+
+    await db.commit()
+    return {"status": "extended", "expires_at": addon.expires_at.isoformat()}
+
+
+@router.post("/slots/{addon_id}/expire")
+async def admin_force_expire_slot(
+    addon_id: UUID,
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    forbid_impersonated_writes(current_user)
+
+    reason = payload.get("reason")
+    if not reason:
+        raise HTTPException(400, "reason required")
+
+    addon = await db.get(SubscriptionAddon, addon_id)
+    if not addon:
+        raise HTTPException(404, "Slot addon not found")
+
+    before_state = {"expires_at": addon.expires_at.isoformat()}
+
+    addon.expires_at = datetime.utcnow()
+
+    after_state = {"expires_at": addon.expires_at.isoformat()}
+
+    db.add(
+        AdminAuditLog(
+            admin_user_id=current_user.id,
+            target_type="slot_addon",
+            target_id=addon.id,
+            action="force_expire_slot",
+            before_state=before_state,
+            after_state=after_state,
+            reason=reason,
+            created_at=datetime.utcnow(),
+        )
+    )
+
+    await db.commit()
+    return {"status": "expired"}
+
+
+@router.post("/slots/{addon_id}/adjust")
+async def admin_adjust_slot_quantity(
+    addon_id: UUID,
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    forbid_impersonated_writes(current_user)
+
+    new_quantity = payload.get("extra_ai_campaigns")
+    reason = payload.get("reason")
+
+    if new_quantity is None or not reason:
+        raise HTTPException(400, "extra_ai_campaigns and reason required")
+
+    addon = await db.get(SubscriptionAddon, addon_id)
+    if not addon:
+        raise HTTPException(404, "Slot addon not found")
+
+    before_state = {"extra_ai_campaigns": addon.extra_ai_campaigns}
+
+    addon.extra_ai_campaigns = int(new_quantity)
+
+    after_state = {"extra_ai_campaigns": addon.extra_ai_campaigns}
+
+    db.add(
+        AdminAuditLog(
+            admin_user_id=current_user.id,
+            target_type="slot_addon",
+            target_id=addon.id,
+            action="adjust_slot_quantity",
+            before_state=before_state,
+            after_state=after_state,
+            reason=reason,
+            created_at=datetime.utcnow(),
+        )
+    )
+
+    await db.commit()
+    return {"status": "adjusted", "extra_ai_campaigns": addon.extra_ai_campaigns}
+
+
+# ==========================================================
 # PHASE 7 — PRICING CONFIG (ADMIN ONLY)
 # ==========================================================
 @router.get("/pricing-config/active")
@@ -178,7 +308,7 @@ async def activate_pricing_config(
 
 
 # ==========================================================
-# PHASE 6 — ADMIN AUDIT LOG VIEWER (READ ONLY)
+# PHASE 6 — ADMIN AUDIT LOG VIEWER
 # ==========================================================
 @router.get("/audit-logs")
 async def list_admin_audit_logs(
