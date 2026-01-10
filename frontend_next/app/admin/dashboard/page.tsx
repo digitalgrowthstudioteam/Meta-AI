@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
+import { apiFetch } from "../../lib/fetcher";
 
 type DashboardData = {
   users: number;
@@ -41,13 +42,17 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("/api/admin/dashboard", {
-          credentials: "include",
+        const res = await apiFetch("/api/admin/dashboard", {
           cache: "no-store",
         });
-        const json = await res.json();
-        setData(json);
-      } catch {
+        if (res.ok) {
+          const json = await res.json();
+          setData(json);
+        } else {
+          setData(null);
+        }
+      } catch (error) {
+        console.error("Failed to fetch admin dashboard", error);
         setData(null);
       } finally {
         setLoading(false);
@@ -55,7 +60,7 @@ export default function AdminDashboardPage() {
     })();
   }, []);
 
-  // Empty-safe mock series until backend series is wired (UI COMPLETE)
+  // Empty-safe mock series until backend series is fully wired
   const series = useMemo<TrendPoint[]>(() => {
     const days =
       range === "7d" ? 7 : range === "14d" ? 14 : range === "30d" ? 30 : 90;
@@ -68,31 +73,31 @@ export default function AdminDashboardPage() {
 
   if (loading) {
     return (
-      <div className="text-sm text-gray-600 p-4 bg-gray-50 rounded border">
-        Loading dashboard…
+      <div className="flex items-center justify-center h-64 text-sm text-gray-500">
+        Loading system status...
       </div>
     );
   }
 
   if (!data) {
     return (
-      <div className="text-red-600 text-sm p-4 bg-red-50 rounded border border-red-200">
-        Failed to load dashboard.
+      <div className="rounded-md bg-red-50 p-4 text-sm text-red-700 border border-red-200">
+        Failed to load dashboard data. Please check the backend connection.
       </div>
     );
   }
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold tracking-tight">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <h1 className="text-2xl font-semibold tracking-tight text-gray-900">
           Admin Dashboard
         </h1>
 
         <select
           value={range}
           onChange={(e) => setRange(e.target.value as TimeRange)}
-          className="border rounded px-3 py-1.5 text-sm bg-white"
+          className="block w-full sm:w-auto rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
         >
           <option value="7d">Last 7 days</option>
           <option value="14d">Last 14 days</option>
@@ -102,41 +107,41 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* KPI Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPI title="Users" value={data.users} />
-        <KPI title="Active Subs" value={data.subscriptions.active} />
-        <KPI title="Expired Subs" value={data.subscriptions.expired} />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        <KPI title="Total Users" value={data.users} />
+        <KPI title="Active Subs" value={data.subscriptions.active} color="text-green-600" />
+        <KPI title="Expired Subs" value={data.subscriptions.expired} color="text-gray-500" />
         <KPI title="Total Campaigns" value={data.campaigns.total} />
-        <KPI title="AI Active Campaigns" value={data.campaigns.ai_active} />
-        <KPI title="Manual Campaigns" value={data.campaigns.manual} />
+        <KPI title="AI Active" value={data.campaigns.ai_active} color="text-indigo-600" />
+        <KPI title="Manual Mode" value={data.campaigns.manual} color="text-orange-600" />
       </div>
 
       {/* Trend Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ChartCard title="New Users / Day" data={series} />
-        <ChartCard title="Revenue / Day" data={series} />
-        <ChartCard title="AI Actions / Day" data={series} />
-        <ChartCard title="Meta API Errors / Day" data={series} />
+        <ChartCard title="Revenue Trends" data={series} />
+        <ChartCard title="AI Actions Executed" data={series} />
+        <ChartCard title="API Error Rates" data={series} />
       </div>
 
-      {/* System Status */}
-      <div className="p-4 rounded-lg border bg-white shadow-sm text-sm space-y-2">
-        <div className="flex justify-between">
-          <span className="font-medium text-gray-600">System Status:</span>
+      {/* System Status Footer */}
+      <div className="rounded-lg bg-white shadow-sm ring-1 ring-gray-900/5 p-4 flex items-center justify-between text-sm">
+        <div className="flex items-center gap-2">
+          <span className="text-gray-500">System Status:</span>
           <span
-            className={`font-semibold ${
+            className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${
               data.system_status === "ok"
-                ? "text-green-600"
-                : "text-red-600"
-            }`}
+                ? "bg-green-50 text-green-700 ring-green-600/20"
+                : "bg-red-50 text-red-700 ring-red-600/20"
+            } uppercase`}
           >
             {data.system_status}
           </span>
         </div>
 
-        <div className="flex justify-between">
-          <span className="font-medium text-gray-600">Last Activity:</span>
-          <span>
+        <div className="text-gray-500">
+          Last Activity:{" "}
+          <span className="font-medium text-gray-900">
             {data.last_activity
               ? new Date(data.last_activity).toLocaleString()
               : "—"}
@@ -147,15 +152,11 @@ export default function AdminDashboardPage() {
   );
 }
 
-function KPI({ title, value }: { title: string; value: number }) {
+function KPI({ title, value, color = "text-gray-900" }: { title: string; value: number; color?: string }) {
   return (
-    <div className="p-4 rounded-lg border bg-white shadow-sm">
-      <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-        {title}
-      </div>
-      <div className="text-2xl font-semibold text-gray-900 mt-1">
-        {value}
-      </div>
+    <div className="overflow-hidden rounded-lg bg-white px-4 py-5 shadow-sm ring-1 ring-gray-900/5 sm:p-6">
+      <dt className="truncate text-sm font-medium text-gray-500">{title}</dt>
+      <dd className={`mt-1 text-3xl font-semibold tracking-tight ${color}`}>{value}</dd>
     </div>
   );
 }
@@ -170,27 +171,60 @@ function ChartCard({
   const isEmpty = data.every((d) => d.value === 0);
 
   return (
-    <div className="p-4 rounded-lg border bg-white shadow-sm">
-      <div className="text-sm font-medium text-gray-700 mb-2">{title}</div>
+    <div className="rounded-lg bg-white shadow-sm ring-1 ring-gray-900/5 p-6">
+      <h3 className="text-base font-semibold leading-6 text-gray-900 mb-4">{title}</h3>
 
       {isEmpty ? (
-        <div className="h-48 flex items-center justify-center text-xs text-gray-400 border rounded bg-gray-50">
-          No data yet
+        <div className="h-64 flex items-center justify-center rounded-lg border-2 border-dashed border-gray-200 bg-gray-50">
+          <div className="text-center">
+            <svg
+              className="mx-auto h-12 w-12 text-gray-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1}
+                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
+              />
+            </svg>
+            <h3 className="mt-2 text-sm font-semibold text-gray-900">No Data Available</h3>
+            <p className="mt-1 text-sm text-gray-500">Trends will appear here once data accumulates.</p>
+          </div>
         </div>
       ) : (
-        <div className="h-48">
+        <div className="h-64 w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
-              <YAxis />
-              <Tooltip />
+            <LineChart data={data} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+              <XAxis 
+                dataKey="date" 
+                stroke="#6B7280" 
+                fontSize={12} 
+                tickLine={false} 
+                axisLine={false} 
+              />
+              <YAxis 
+                stroke="#6B7280" 
+                fontSize={12} 
+                tickLine={false} 
+                axisLine={false} 
+                tickFormatter={(value) => `${value}`} 
+              />
+              <Tooltip
+                contentStyle={{ backgroundColor: "#FFF", borderRadius: "8px", border: "1px solid #E5E7EB", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}
+                itemStyle={{ color: "#111827", fontSize: "14px", fontWeight: 500 }}
+              />
               <Line
                 type="monotone"
                 dataKey="value"
-                stroke="#2563eb"
+                stroke="#4F46E5"
                 strokeWidth={2}
                 dot={false}
+                activeDot={{ r: 6, strokeWidth: 0 }}
               />
             </LineChart>
           </ResponsiveContainer>
