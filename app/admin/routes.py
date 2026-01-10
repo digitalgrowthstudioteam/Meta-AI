@@ -13,6 +13,7 @@ from app.plans.subscription_models import Subscription, SubscriptionAddon
 from app.admin.models import AdminAuditLog
 from app.admin.service import AdminOverrideService
 from app.admin.pricing_service import AdminPricingConfigService
+from app.admin.rbac import assert_admin_permission
 
 from app.meta_insights.services.campaign_daily_metrics_sync_service import (
     CampaignDailyMetricsSyncService,
@@ -39,6 +40,7 @@ async def get_admin_dashboard(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
+    assert_admin_permission(current_user, "system:read")
     return await AdminOverrideService.get_dashboard_stats(db=db)
 
 # =========================
@@ -50,6 +52,7 @@ async def list_users(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
+    assert_admin_permission(current_user, "users:read")
     result = await db.execute(select(User).order_by(User.created_at.desc()))
     users = result.scalars().all()
     response = []
@@ -98,6 +101,7 @@ async def get_meta_settings(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
+    assert_admin_permission(current_user, "system:read")
     settings = await AdminOverrideService.get_global_settings(db)
     return {
         "meta_sync_enabled": settings.meta_sync_enabled,
@@ -122,6 +126,7 @@ async def update_meta_settings(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
+    assert_admin_permission(current_user, "system:write")
     forbid_impersonated_writes(current_user)
 
     allowed_fields = [
@@ -297,6 +302,7 @@ async def get_active_pricing_config(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
+    assert_admin_permission(current_user, "billing:read")
     return await AdminPricingConfigService.get_active_config(db)
 
 
@@ -306,6 +312,7 @@ async def list_pricing_configs(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
+    assert_admin_permission(current_user, "billing:read")
     return await AdminPricingConfigService.list_configs(db)
 
 
@@ -316,6 +323,7 @@ async def create_pricing_config(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
+    assert_admin_permission(current_user, "billing:write")
     forbid_impersonated_writes(current_user)
 
     required = [
@@ -353,6 +361,7 @@ async def activate_pricing_config(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
+    assert_admin_permission(current_user, "billing:write")
     forbid_impersonated_writes(current_user)
 
     reason = payload.get("reason")
@@ -418,6 +427,7 @@ async def rollback_by_token(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
+    assert_admin_permission(current_user, "system:write")
     forbid_impersonated_writes(current_user)
     rollback_token = payload.get("rollback_token")
     reason = payload.get("reason")
@@ -465,6 +475,7 @@ async def force_meta_resync(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
+    assert_admin_permission(current_user, "support:execute")
     forbid_impersonated_writes(current_user)
 
     user_id = UUID(payload["user_id"])
@@ -501,6 +512,7 @@ async def risk_freeze_user(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
+    assert_admin_permission(current_user, "users:write")
     forbid_impersonated_writes(current_user)
 
     user_id = payload.get("user_id")
@@ -526,6 +538,7 @@ async def risk_unfreeze_user(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
+    assert_admin_permission(current_user, "users:write")
     forbid_impersonated_writes(current_user)
 
     user_id = payload.get("user_id")
@@ -551,6 +564,7 @@ async def risk_disable_user_ai(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
+    assert_admin_permission(current_user, "users:write")
     forbid_impersonated_writes(current_user)
 
     user_id = payload.get("user_id")
