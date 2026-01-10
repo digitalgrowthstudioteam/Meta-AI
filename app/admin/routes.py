@@ -106,6 +106,13 @@ async def get_meta_settings(
         "site_name": settings.site_name,
         "dashboard_title": settings.dashboard_title,
         "logo_url": settings.logo_url,
+        "expansion_mode_enabled": settings.expansion_mode_enabled,
+        "fatigue_mode_enabled": settings.fatigue_mode_enabled,
+        "auto_pause_enabled": settings.auto_pause_enabled,
+        "confidence_gating_enabled": settings.confidence_gating_enabled,
+        "max_optimizations_per_day": settings.max_optimizations_per_day,
+        "max_expansions_per_day": settings.max_expansions_per_day,
+        "ai_refresh_frequency_minutes": settings.ai_refresh_frequency_minutes,
     }
 
 @router.post("/meta-settings")
@@ -124,6 +131,13 @@ async def update_meta_settings(
         "site_name",
         "dashboard_title",
         "logo_url",
+        "expansion_mode_enabled",
+        "fatigue_mode_enabled",
+        "auto_pause_enabled",
+        "confidence_gating_enabled",
+        "max_optimizations_per_day",
+        "max_expansions_per_day",
+        "ai_refresh_frequency_minutes",
     ]
 
     updates = {k: v for k, v in payload.items() if k in allowed_fields}
@@ -146,6 +160,13 @@ async def update_meta_settings(
         "site_name": updated_settings.site_name,
         "dashboard_title": updated_settings.dashboard_title,
         "logo_url": updated_settings.logo_url,
+        "expansion_mode_enabled": updated_settings.expansion_mode_enabled,
+        "fatigue_mode_enabled": updated_settings.fatigue_mode_enabled,
+        "auto_pause_enabled": updated_settings.auto_pause_enabled,
+        "confidence_gating_enabled": updated_settings.confidence_gating_enabled,
+        "max_optimizations_per_day": updated_settings.max_optimizations_per_day,
+        "max_expansions_per_day": updated_settings.max_expansions_per_day,
+        "ai_refresh_frequency_minutes": updated_settings.ai_refresh_frequency_minutes,        
     }
 
 # ==========================================================
