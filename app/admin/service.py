@@ -12,6 +12,20 @@ from app.campaigns.models import Campaign
 from app.users.models import User
 from app.plans.subscription_models import Subscription
 
+# =====================================================
+# PHASE P3 — ADMIN ROLES
+# =====================================================
+ROLE_SUPER_ADMIN = "super_admin"
+ROLE_SUPPORT_ADMIN = "support_admin"
+ROLE_BILLING_ADMIN = "billing_admin"
+ROLE_AUDITOR = "auditor"
+
+ALL_ADMIN_ROLES = {
+    ROLE_SUPER_ADMIN,
+    ROLE_SUPPORT_ADMIN,
+    ROLE_BILLING_ADMIN,
+    ROLE_AUDITOR,
+}
 
 class AdminOverrideService:
     """
