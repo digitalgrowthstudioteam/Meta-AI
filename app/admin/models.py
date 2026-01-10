@@ -10,7 +10,6 @@ from sqlalchemy import (
     ForeignKey,
     UniqueConstraint,
     String,
-    JSON,
     ARRAY,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
@@ -137,7 +136,6 @@ class AdminOverride(Base):
 class GlobalSettings(Base):
     """
     Global, system-wide admin-controlled settings.
-    Includes Meta API configuration.
     """
 
     __tablename__ = "global_settings"
@@ -147,84 +145,56 @@ class GlobalSettings(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
-    singleton_key = Column(
-        Integer,
-        nullable=False,
-        default=1,
-    )
+    singleton_key = Column(Integer, nullable=False, default=1)
 
-    site_name = Column(
-        Text,
-        nullable=False,
-        default="Digital Growth Studio",
-    )
+    # ---------------------------------
+    # PLATFORM BASICS
+    # ---------------------------------
+    site_name = Column(Text, nullable=False, default="Digital Growth Studio")
+    dashboard_title = Column(Text, nullable=False, default="Meta Ads AI Platform")
+    logo_url = Column(Text, nullable=True)
 
-    dashboard_title = Column(
-        Text,
-        nullable=False,
-        default="Meta Ads AI Platform",
-    )
-
-    logo_url = Column(
-        Text,
-        nullable=True,
-    )
-
-    ai_globally_enabled = Column(
-        Boolean,
-        default=True,
-        nullable=False,
-    )
-
-    meta_sync_enabled = Column(
-        Boolean,
-        default=True,
-        nullable=False,
-    )
-
-    maintenance_mode = Column(
-        Boolean,
-        default=False,
-        nullable=False,
-    )
+    # ---------------------------------
+    # CORE SYSTEM SWITCHES
+    # ---------------------------------
+    ai_globally_enabled = Column(Boolean, default=True, nullable=False)
+    meta_sync_enabled = Column(Boolean, default=True, nullable=False)
+    maintenance_mode = Column(Boolean, default=False, nullable=False)
 
     # =================================================
-    # Meta API Settings (Phase 7.2)
+    # PHASE P2 — GLOBAL AI CONTROLS (NEW)
     # =================================================
-    meta_sync_lookback_days = Column(
-        Integer,
-        default=30,
-        nullable=False,
-        doc="Number of days to look back when syncing Meta campaigns",
-    )
+    expansion_mode_enabled = Column(Boolean, default=True, nullable=False)
+    fatigue_mode_enabled = Column(Boolean, default=True, nullable=False)
+    auto_pause_enabled = Column(Boolean, default=True, nullable=False)
+    confidence_gating_enabled = Column(Boolean, default=True, nullable=False)
+
+    # =================================================
+    # PHASE P2 — AI THROTTLING (NEW)
+    # =================================================
+    max_optimizations_per_day = Column(Integer, default=100, nullable=False)
+    max_expansions_per_day = Column(Integer, default=50, nullable=False)
+    ai_refresh_frequency_minutes = Column(Integer, default=60, nullable=False)
+
+    # =================================================
+    # META API SETTINGS (PHASE 7.2)
+    # =================================================
+    meta_sync_lookback_days = Column(Integer, default=30, nullable=False)
 
     allowed_objectives = Column(
         ARRAY(String),
         default=["LEAD_GENERATION", "CONVERSIONS", "TRAFFIC"],
         nullable=False,
-        doc="Allowed campaign objectives for Meta sync",
     )
 
     whitelisted_ad_accounts = Column(
         ARRAY(String),
         default=[],
         nullable=False,
-        doc="Meta Ad Accounts that are allowed for sync",
     )
 
-    token_refresh_mode = Column(
-        String,
-        default="auto",
-        nullable=False,
-        doc="Token refresh logic: auto | manual",
-    )
-
-    webhook_validation_mode = Column(
-        String,
-        default="strict",
-        nullable=False,
-        doc="Webhook validation: strict | permissive",
-    )
+    token_refresh_mode = Column(String, default="auto", nullable=False)
+    webhook_validation_mode = Column(String, default="strict", nullable=False)
 
     updated_at = Column(
         DateTime(timezone=True),
