@@ -12,6 +12,7 @@ from app.campaigns.models import Campaign
 from app.users.models import User
 from app.plans.subscription_models import Subscription
 
+
 # =====================================================
 # PHASE P3 — ADMIN ROLES
 # =====================================================
@@ -26,6 +27,78 @@ ALL_ADMIN_ROLES = {
     ROLE_BILLING_ADMIN,
     ROLE_AUDITOR,
 }
+
+# =====================================================
+# PHASE P3 — PERMISSION MATRIX
+# =====================================================
+ADMIN_PERMISSIONS = {
+    # Full control
+    ROLE_SUPER_ADMIN: {
+        "system:read",
+        "system:write",
+        "billing:read",
+        "billing:write",
+        "users:read",
+        "users:write",
+        "campaigns:read",
+        "campaigns:write",
+        "audit:read",
+        "rollback:execute",
+        "support:execute",
+    },
+
+    # Support & debugging
+    ROLE_SUPPORT_ADMIN: {
+        "system:read",
+        "users:read",
+        "campaigns:read",
+        "support:execute",
+    },
+
+    # Billing-only
+    ROLE_BILLING_ADMIN: {
+        "billing:read",
+        "billing:write",
+        "audit:read",
+    },
+
+    # Compliance / read-only
+    ROLE_AUDITOR: {
+        "system:read",
+        "billing:read",
+        "users:read",
+        "campaigns:read",
+        "audit:read",
+    },
+}
+
+# =====================================================
+# PHASE P3 — RBAC GUARD
+# =====================================================
+def assert_admin_permission(
+    *,
+    admin_user: User,
+    permission: str,
+) -> None:
+    """
+    Enforces fine-grained admin permissions.
+    Backward compatible with existing 'admin' role.
+    """
+
+    # Backward compatibility
+    if admin_user.role == "admin":
+        return
+
+    # Super admin always allowed
+    if admin_user.role == ROLE_SUPER_ADMIN:
+        return
+
+    allowed = ADMIN_PERMISSIONS.get(admin_user.role, set())
+    if permission not in allowed:
+        raise PermissionError(
+            f"Admin role '{admin_user.role}' lacks permission '{permission}'"
+        )
+
 
 class AdminOverrideService:
     """
