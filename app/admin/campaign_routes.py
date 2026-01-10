@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import Optional, List
+from typing import Optional
 
-from app.database import get_db
+from app.core.db_session import get_db
 from app.campaigns.models import Campaign
 from app.auth.dependencies import require_admin
 
