@@ -74,18 +74,49 @@ export default function AdminBillingPage() {
     await load();
   }
 
+  /* ---------- ANALYTICS (UI ONLY) ---------- */
+  const paidPayments = payments.filter((p) => p.status === "captured");
+  const failedPayments = payments.filter((p) => p.status === "failed");
+  const refunds = payments.filter((p) => p.status === "refunded");
+
+  const mrr = paidPayments.reduce((sum, p) => sum + p.amount, 0);
+
   if (loading) {
     return <div className="p-4 text-sm">Loading billing data…</div>;
   }
 
   return (
-    <div className="p-6 space-y-8 text-sm text-gray-800">
+    <div className="p-6 space-y-10 text-sm text-gray-800">
       <div>
         <h1 className="text-xl font-semibold">Billing Overview</h1>
         <p className="text-gray-500">
-          Payments, invoices, and campaign slot controls
+          Payments, invoices, analytics, and campaign slot controls
         </p>
       </div>
+
+      {/* ANALYTICS */}
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="border rounded-lg p-4">
+          <div className="text-xs text-gray-500">MRR</div>
+          <div className="text-2xl font-semibold">
+            ₹ {(mrr / 100).toFixed(2)}
+          </div>
+        </div>
+
+        <div className="border rounded-lg p-4">
+          <div className="text-xs text-gray-500">Failed Payments</div>
+          <div className="text-2xl font-semibold text-red-600">
+            {failedPayments.length}
+          </div>
+        </div>
+
+        <div className="border rounded-lg p-4">
+          <div className="text-xs text-gray-500">Refunds</div>
+          <div className="text-2xl font-semibold text-yellow-600">
+            {refunds.length}
+          </div>
+        </div>
+      </section>
 
       {/* PAYMENTS */}
       <section className="border rounded-lg p-4">
@@ -244,7 +275,7 @@ export default function AdminBillingPage() {
       </section>
 
       <div className="text-xs text-gray-500">
-        All slot actions are audited and rollback-safe.
+        All billing actions are audited and rollback-safe.
       </div>
     </div>
   );
