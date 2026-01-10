@@ -1,0 +1,153 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import axios from "axios";
+
+export default function AdminMetaSettingsPage() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [settings, setSettings] = useState({
+    meta_sync_enabled: false,
+    ai_globally_enabled: false,
+    maintenance_mode: false,
+    site_name: "",
+    dashboard_title: "",
+    logo_url: "",
+  });
+  const [reason, setReason] = useState("");
+
+  useEffect(() => {
+    async function fetchSettings() {
+      try {
+        const res = await axios.get("/admin/meta-settings");
+        setSettings(res.data);
+      } catch (err) {
+        console.error("Failed to fetch meta settings", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchSettings();
+  }, []);
+
+  const handleToggle = (key: string) => {
+    setSettings({ ...settings, [key]: !settings[key as keyof typeof settings] });
+  };
+
+  const handleChange = (key: string, value: string) => {
+    setSettings({ ...settings, [key]: value });
+  };
+
+  const handleSave = async () => {
+    if (!reason.trim()) {
+      alert("Please provide a reason for the update.");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await axios.post("/admin/meta-settings", {
+        ...settings,
+        reason,
+      });
+      alert("Meta settings updated successfully!");
+      setReason("");
+    } catch (err) {
+      console.error("Failed to update settings", err);
+      alert("Failed to update settings");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return <div>Loading...</div>;
+
+  return (
+    <div className="p-6 max-w-3xl mx-auto">
+      <h1 className="text-2xl font-bold mb-6">Meta API Settings</h1>
+
+      <div className="space-y-4">
+        {/* Toggle Settings */}
+        <div className="flex items-center justify-between p-4 border rounded">
+          <span>Meta Sync Enabled</span>
+          <input
+            type="checkbox"
+            checked={settings.meta_sync_enabled}
+            onChange={() => handleToggle("meta_sync_enabled")}
+          />
+        </div>
+
+        <div className="flex items-center justify-between p-4 border rounded">
+          <span>AI Globally Enabled</span>
+          <input
+            type="checkbox"
+            checked={settings.ai_globally_enabled}
+            onChange={() => handleToggle("ai_globally_enabled")}
+          />
+        </div>
+
+        <div className="flex items-center justify-between p-4 border rounded">
+          <span>Maintenance Mode</span>
+          <input
+            type="checkbox"
+            checked={settings.maintenance_mode}
+            onChange={() => handleToggle("maintenance_mode")}
+          />
+        </div>
+
+        {/* Text Settings */}
+        <div className="p-4 border rounded">
+          <label className="block font-medium mb-1">Site Name</label>
+          <input
+            type="text"
+            value={settings.site_name}
+            onChange={(e) => handleChange("site_name", e.target.value)}
+            className="w-full p-2 border rounded"
+          />
+        </div>
+
+        <div className="p-4 border rounded">
+          <label className="block font-medium mb-1">Dashboard Title</label>
+          <input
+            type="text"
+            value={settings.dashboard_title}
+            onChange={(e) => handleChange("dashboard_title", e.target.value)}
+            className="w-full p-2 border rounded"
+          />
+        </div>
+
+        <div className="p-4 border rounded">
+          <label className="block font-medium mb-1">Logo URL</label>
+          <input
+            type="text"
+            value={settings.logo_url || ""}
+            onChange={(e) => handleChange("logo_url", e.target.value)}
+            className="w-full p-2 border rounded"
+          />
+        </div>
+
+        {/* Reason */}
+        <div className="p-4 border rounded">
+          <label className="block font-medium mb-1">Reason for update</label>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            className="w-full p-2 border rounded"
+            rows={3}
+          />
+        </div>
+
+        {/* Save Button */}
+        <div className="flex justify-end">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
