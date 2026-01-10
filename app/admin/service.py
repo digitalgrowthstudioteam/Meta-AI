@@ -1,5 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 from uuid import UUID, uuid4
 from datetime import datetime
 
@@ -138,6 +138,109 @@ class AdminOverrideService:
         return settings
 
     # =====================================================
+    # PHASE 8.3 — RISK ACTIONS (USER LEVEL)
+    # =====================================================
+    @staticmethod
+    async def freeze_user(
+        *,
+        db: AsyncSession,
+        admin_user_id: UUID,
+        target_user_id: UUID,
+        reason: str,
+    ) -> None:
+        user = await db.scalar(select(User).where(User.id == target_user_id))
+        if not user:
+            raise ValueError("User not found")
+
+        before_state = {"is_active": user.is_active}
+
+        await db.execute(
+            update(User)
+            .where(User.id == target_user_id)
+            .values(is_active=False)
+        )
+
+        audit = AdminAuditLog(
+            admin_user_id=admin_user_id,
+            target_type="user",
+            target_id=target_user_id,
+            action="risk_freeze_user",
+            before_state=before_state,
+            after_state={"is_active": False},
+            reason=reason,
+            rollback_token=uuid4(),
+            created_at=datetime.utcnow(),
+        )
+
+        db.add(audit)
+        await db.commit()
+
+    @staticmethod
+    async def unfreeze_user(
+        *,
+        db: AsyncSession,
+        admin_user_id: UUID,
+        target_user_id: UUID,
+        reason: str,
+    ) -> None:
+        user = await db.scalar(select(User).where(User.id == target_user_id))
+        if not user:
+            raise ValueError("User not found")
+
+        before_state = {"is_active": user.is_active}
+
+        await db.execute(
+            update(User)
+            .where(User.id == target_user_id)
+            .values(is_active=True)
+        )
+
+        audit = AdminAuditLog(
+            admin_user_id=admin_user_id,
+            target_type="user",
+            target_id=target_user_id,
+            action="risk_unfreeze_user",
+            before_state=before_state,
+            after_state={"is_active": True},
+            reason=reason,
+            rollback_token=uuid4(),
+            created_at=datetime.utcnow(),
+        )
+
+        db.add(audit)
+        await db.commit()
+
+    @staticmethod
+    async def disable_user_ai(
+        *,
+        db: AsyncSession,
+        admin_user_id: UUID,
+        target_user_id: UUID,
+        reason: str,
+    ) -> None:
+        override = AdminOverride(
+            user_id=target_user_id,
+            force_ai_enabled=False,
+            reason=reason,
+            created_at=datetime.utcnow(),
+        )
+
+        audit = AdminAuditLog(
+            admin_user_id=admin_user_id,
+            target_type="user",
+            target_id=target_user_id,
+            action="risk_disable_user_ai",
+            before_state={},
+            after_state={"force_ai_enabled": False},
+            reason=reason,
+            rollback_token=uuid4(),
+            created_at=datetime.utcnow(),
+        )
+
+        db.add_all([override, audit])
+        await db.commit()
+
+    # =====================================================
     # PHASE 6.4 — ROLLBACK ENGINE (ADMIN ONLY)
     # =====================================================
     @staticmethod
@@ -161,7 +264,6 @@ class AdminOverrideService:
 
         settings = await AdminOverrideService.get_global_settings(db)
 
-        # Apply rollback (before_state)
         for field, value in audit.before_state.items():
             if hasattr(settings, field):
                 setattr(settings, field, value)
