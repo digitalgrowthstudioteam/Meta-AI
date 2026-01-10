@@ -32,7 +32,7 @@ export default function AdminCampaignsPage() {
     try {
       let url = "/admin/campaigns";
       if (aiFilter !== "all") {
-        url += `?ai_active=${aiFilter}`;
+        url += `?ai_active=${aiFilter === "true" ? true : false}`;
       }
 
       const res = await fetch(url, {
