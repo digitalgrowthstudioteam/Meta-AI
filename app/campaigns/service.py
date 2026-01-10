@@ -163,7 +163,6 @@ class CampaignService:
             db.add(
                 CampaignActionLog(
                     campaign_id=campaign.id,
-                    # system actor trace
                     user_id=campaign.ad_account_id,
                     actor_type="system",
                     action_type="manual_expiry",
@@ -174,7 +173,7 @@ class CampaignService:
             )
 
     # =====================================================
-    # AI TOGGLE — PLAN ENFORCED + TRANSACTION SAFE
+    # AI TOGGLE — PLAN + SLOT ENFORCED
     # =====================================================
     @staticmethod
     async def toggle_ai(
@@ -185,7 +184,7 @@ class CampaignService:
         enable: bool,
     ) -> Campaign:
 
-        # 1) Ensure ownership
+        # 1) Ensure ownership + lock row
         stmt = (
             select(Campaign)
             .join(MetaAdAccount, Campaign.ad_account_id == MetaAdAccount.id)
@@ -197,7 +196,7 @@ class CampaignService:
                 Campaign.id == campaign_id,
                 UserMetaAdAccount.user_id == user_id,
             )
-            .with_for_update()  # prevent toggle race
+            .with_for_update()
         )
 
         result = await db.execute(stmt)
@@ -221,11 +220,12 @@ class CampaignService:
 
         before_state = {"ai_active": campaign.ai_active}
 
-        # 3) PLAN ENFORCEMENT — only on enabling
+        # 3) PLAN + SLOT ENFORCEMENT (ONLY WHEN ENABLING)
         if enable and not campaign.ai_active:
             await PlanEnforcementService.assert_ai_allowed(
                 db=db,
                 user_id=user_id,
+                campaign=campaign,
             )
 
         # 4) State mutation
@@ -248,7 +248,7 @@ class CampaignService:
             )
         )
 
-        # 6) Final commit
+        # 6) Commit
         await db.commit()
         await db.refresh(campaign)
         return campaign
