@@ -146,7 +146,38 @@ async def list_admin_audit_logs(
 
 
 # ==========================================================
-# PHASE 5 — CAMPAIGN ACTIONS (UNCHANGED, CAMPAIGN-ONLY)
+# PHASE 6.5 — ROLLBACK EXECUTION (ADMIN ONLY)
+# ==========================================================
+@router.post("/rollback")
+async def rollback_by_token(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    forbid_impersonated_writes(current_user)
+
+    rollback_token = payload.get("rollback_token")
+    reason = payload.get("reason")
+
+    if not rollback_token or not reason:
+        raise HTTPException(400, "rollback_token and reason required")
+
+    try:
+        await AdminOverrideService.rollback_by_token(
+            db=db,
+            admin_user_id=current_user.id,
+            rollback_token=UUID(rollback_token),
+            reason=reason,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+    return {"status": "rolled_back"}
+
+
+# ==========================================================
+# PHASE 5 — CAMPAIGN ACTIONS (UNCHANGED)
 # ==========================================================
 @router.post("/campaigns/{campaign_id}/force-ai")
 async def admin_force_ai_toggle(
@@ -206,7 +237,7 @@ async def admin_force_ai_toggle(
 
 
 # ==========================================================
-# PHASE 3.2 — SUPPORT TOOLS (AUDITED CORRECTLY)
+# PHASE 3.2 — SUPPORT TOOLS (AUDITED)
 # ==========================================================
 async def _log_support_action(
     *,
