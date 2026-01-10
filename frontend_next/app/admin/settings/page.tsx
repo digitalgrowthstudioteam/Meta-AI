@@ -2,48 +2,26 @@
 
 import { useEffect, useState } from "react";
 
-type PricingConfig = {
-  id: string;
-  version: number;
-  is_active: boolean;
-  currency: string;
-  tax_percentage: number;
-  razorpay_mode: string;
-  created_at: string;
-  activated_at?: string | null;
+type SystemSettings = {
+  expansion_mode_enabled: boolean;
+  fatigue_mode_enabled: boolean;
+  auto_pause_enabled: boolean;
+  confidence_gating_enabled: boolean;
+  max_optimizations_per_day: number;
+  max_expansions_per_day: number;
+  ai_refresh_frequency_minutes: number;
 };
 
 export default function AdminSettingsPage() {
-  const [configs, setConfigs] = useState<PricingConfig[]>([]);
-  const [activeConfig, setActiveConfig] = useState<PricingConfig | null>(null);
+  const [settings, setSettings] = useState<SystemSettings | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activating, setActivating] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-
-  const [form, setForm] = useState({
-    currency: "INR",
-    tax_percentage: 18,
-    razorpay_mode: "live",
-    plan_pricing: "{}",
-    slot_packs: "{}",
-  });
+  const [saving, setSaving] = useState<string | null>(null);
 
   async function load() {
-    const [activeRes, listRes] = await Promise.all([
-      fetch("/api/admin/pricing-config/active"),
-      fetch("/api/admin/pricing-config"),
-    ]);
-
-    if (activeRes.ok) {
-      setActiveConfig(await activeRes.json());
-    } else {
-      setActiveConfig(null);
+    const res = await fetch("/api/admin/meta-settings");
+    if (res.ok) {
+      setSettings(await res.json());
     }
-
-    if (listRes.ok) {
-      setConfigs(await listRes.json());
-    }
-
     setLoading(false);
   }
 
@@ -51,218 +29,155 @@ export default function AdminSettingsPage() {
     load();
   }, []);
 
-  async function activateConfig(configId: string) {
-    const reason = prompt("Reason for activating this pricing config?");
+  async function updateSetting(key: keyof SystemSettings, value: any) {
+    const reason = prompt(`Reason for changing ${key}?`);
     if (!reason) return;
 
-    setActivating(configId);
+    setSaving(key);
 
-    const res = await fetch(
-      `/api/admin/pricing-config/${configId}/activate`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason }),
-      }
-    );
-
-    setActivating(null);
-
-    if (!res.ok) {
-      alert("Activation failed");
-      return;
-    }
-
-    await load();
-  }
-
-  async function createConfig() {
-    const reason = prompt("Reason for creating new pricing config?");
-    if (!reason) return;
-
-    let plan_pricing;
-    let slot_packs;
-
-    try {
-      plan_pricing = JSON.parse(form.plan_pricing);
-      slot_packs = JSON.parse(form.slot_packs);
-    } catch {
-      alert("Invalid JSON in pricing fields");
-      return;
-    }
-
-    setCreating(true);
-
-    const res = await fetch("/api/admin/pricing-config", {
+    const res = await fetch("/api/admin/meta-settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        plan_pricing,
-        slot_packs,
-        currency: form.currency,
-        tax_percentage: form.tax_percentage,
-        invoice_prefix: "DGS",
-        razorpay_mode: form.razorpay_mode,
+        [key]: value,
         reason,
       }),
     });
 
-    setCreating(false);
+    setSaving(null);
 
     if (!res.ok) {
-      alert("Creation failed");
+      alert("Update failed");
       return;
     }
 
     await load();
   }
 
-  if (loading) {
-    return <div className="p-4 text-sm">Loading settings…</div>;
+  if (loading || !settings) {
+    return <div className="p-6 text-sm">Loading system controls…</div>;
   }
 
   return (
     <div className="p-6 space-y-6 text-sm text-gray-800">
       <div>
-        <h1 className="text-xl font-semibold">Admin Settings</h1>
+        <h1 className="text-xl font-semibold">Global AI System Controls</h1>
         <p className="text-gray-500">
-          System-wide configuration (audited & versioned)
+          System-wide AI behavior (all changes audited)
         </p>
       </div>
 
-      {/* CREATE PRICING CONFIG */}
-      <div className="border rounded-lg p-4 space-y-3">
-        <h2 className="font-semibold">Create Pricing Configuration</h2>
+      {/* TOGGLES */}
+      <div className="border rounded-lg p-4 space-y-4">
+        <h2 className="font-semibold">AI Control Toggles</h2>
 
-        <div className="grid grid-cols-2 gap-3">
-          <input
-            className="border p-2 text-sm"
-            placeholder="Currency (e.g. INR)"
-            value={form.currency}
-            onChange={(e) =>
-              setForm({ ...form, currency: e.target.value })
-            }
-          />
+        {[
+          ["expansion_mode_enabled", "Expansion Mode"],
+          ["fatigue_mode_enabled", "Fatigue Mode"],
+          ["auto_pause_enabled", "Auto-Pause"],
+          ["confidence_gating_enabled", "Confidence Gating"],
+        ].map(([key, label]) => (
+          <div
+            key={key}
+            className="flex items-center justify-between border-b pb-2"
+          >
+            <span>{label}</span>
+            <button
+              disabled={saving === key}
+              onClick={() =>
+                updateSetting(
+                  key as keyof SystemSettings,
+                  !settings[key as keyof SystemSettings]
+                )
+              }
+              className={`px-3 py-1 text-xs rounded border ${
+                settings[key as keyof SystemSettings]
+                  ? "bg-green-100 border-green-400"
+                  : "bg-red-100 border-red-400"
+              }`}
+            >
+              {settings[key as keyof SystemSettings] ? "ACTIVE" : "DISABLED"}
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* THROTTLING */}
+      <div className="border rounded-lg p-4 space-y-4">
+        <h2 className="font-semibold">AI Throttling Controls</h2>
+
+        <div className="space-y-2">
+          <label>Max Optimizations / Day</label>
           <input
             type="number"
-            className="border p-2 text-sm"
-            placeholder="Tax %"
-            value={form.tax_percentage}
+            min={0}
+            max={500}
+            value={settings.max_optimizations_per_day}
             onChange={(e) =>
-              setForm({
-                ...form,
-                tax_percentage: Number(e.target.value),
+              setSettings({
+                ...settings,
+                max_optimizations_per_day: Number(e.target.value),
               })
             }
-          />
-          <select
-            className="border p-2 text-sm"
-            value={form.razorpay_mode}
-            onChange={(e) =>
-              setForm({ ...form, razorpay_mode: e.target.value })
+            onBlur={(e) =>
+              updateSetting(
+                "max_optimizations_per_day",
+                Number(e.target.value)
+              )
             }
-          >
-            <option value="live">Live</option>
-            <option value="test">Test</option>
-          </select>
+            className="border p-2 w-full"
+          />
         </div>
 
-        <textarea
-          className="border p-2 w-full text-xs font-mono"
-          rows={4}
-          placeholder='Plan pricing JSON'
-          value={form.plan_pricing}
-          onChange={(e) =>
-            setForm({ ...form, plan_pricing: e.target.value })
-          }
-        />
-
-        <textarea
-          className="border p-2 w-full text-xs font-mono"
-          rows={4}
-          placeholder='Slot packs JSON'
-          value={form.slot_packs}
-          onChange={(e) =>
-            setForm({ ...form, slot_packs: e.target.value })
-          }
-        />
-
-        <button
-          onClick={createConfig}
-          disabled={creating}
-          className="px-4 py-2 border rounded text-xs hover:bg-gray-100 disabled:opacity-50"
-        >
-          {creating ? "Creating…" : "Create New Version"}
-        </button>
-      </div>
-
-      {/* ACTIVE PRICING CONFIG */}
-      <div className="border rounded-lg p-4">
-        <h2 className="font-semibold mb-2">Active Pricing Configuration</h2>
-        {activeConfig ? (
-          <div className="space-y-1">
-            <div>Version: v{activeConfig.version}</div>
-            <div>Currency: {activeConfig.currency}</div>
-            <div>GST / Tax: {activeConfig.tax_percentage}%</div>
-            <div>Razorpay Mode: {activeConfig.razorpay_mode}</div>
-            <div>
-              Activated At:{" "}
-              {activeConfig.activated_at
-                ? new Date(activeConfig.activated_at).toLocaleString()
-                : "—"}
-            </div>
-          </div>
-        ) : (
-          <div className="text-gray-500">No active pricing config</div>
-        )}
-      </div>
-
-      {/* PRICING CONFIG VERSIONS */}
-      <div className="border rounded-lg p-4">
-        <h2 className="font-semibold mb-3">Pricing Config Versions</h2>
-
-        <table className="w-full border text-left">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="p-2 border">Version</th>
-              <th className="p-2 border">Status</th>
-              <th className="p-2 border">Currency</th>
-              <th className="p-2 border">Tax %</th>
-              <th className="p-2 border">Created At</th>
-              <th className="p-2 border">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {configs.map((c) => (
-              <tr key={c.id}>
-                <td className="p-2 border">v{c.version}</td>
-                <td className="p-2 border">
-                  {c.is_active ? "ACTIVE" : "INACTIVE"}
-                </td>
-                <td className="p-2 border">{c.currency}</td>
-                <td className="p-2 border">{c.tax_percentage}%</td>
-                <td className="p-2 border">
-                  {new Date(c.created_at).toLocaleString()}
-                </td>
-                <td className="p-2 border">
-                  {!c.is_active && (
-                    <button
-                      onClick={() => activateConfig(c.id)}
-                      disabled={activating === c.id}
-                      className="px-3 py-1 text-xs border rounded hover:bg-gray-100 disabled:opacity-50"
-                    >
-                      {activating === c.id ? "Activating…" : "Activate"}
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        <div className="mt-3 text-xs text-gray-500">
-          All pricing changes are audited and versioned.
+        <div className="space-y-2">
+          <label>Max Expansions / Day</label>
+          <input
+            type="number"
+            min={0}
+            max={200}
+            value={settings.max_expansions_per_day}
+            onChange={(e) =>
+              setSettings({
+                ...settings,
+                max_expansions_per_day: Number(e.target.value),
+              })
+            }
+            onBlur={(e) =>
+              updateSetting(
+                "max_expansions_per_day",
+                Number(e.target.value)
+              )
+            }
+            className="border p-2 w-full"
+          />
         </div>
+
+        <div className="space-y-2">
+          <label>AI Refresh Frequency (minutes)</label>
+          <input
+            type="number"
+            min={5}
+            max={1440}
+            value={settings.ai_refresh_frequency_minutes}
+            onChange={(e) =>
+              setSettings({
+                ...settings,
+                ai_refresh_frequency_minutes: Number(e.target.value),
+              })
+            }
+            onBlur={(e) =>
+              updateSetting(
+                "ai_refresh_frequency_minutes",
+                Number(e.target.value)
+              )
+            }
+            className="border p-2 w-full"
+          />
+        </div>
+      </div>
+
+      <div className="text-xs text-gray-500">
+        All changes are logged with before/after snapshots.
       </div>
     </div>
   );
