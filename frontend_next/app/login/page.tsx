@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { apiFetch } from "../lib/fetcher";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -21,13 +22,12 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await apiFetch("/api/auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body: new URLSearchParams({ email }),
-        credentials: "include",
       });
 
       if (!res.ok) {
