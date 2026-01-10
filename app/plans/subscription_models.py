@@ -163,6 +163,17 @@ class SubscriptionAddon(Base):
         default=1,
     )
 
+    # =========================
+    # SLOT CONSUMPTION TRACE
+    # =========================
+    consumed_by_campaign_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("campaigns.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        doc="Campaign that consumed this slot (immutable once set)",
+    )
+
     purchased_at: Mapped[datetime] = mapped_column(
         DateTime,
         nullable=False,
