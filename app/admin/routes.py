@@ -469,3 +469,80 @@ async def force_meta_resync(
 # METRICS SYNC ROUTES
 # =========================
 router.include_router(metrics_sync_router)
+
+# ==========================================================
+# PHASE 8.3 — RISK ACTIONS (ADMIN ONLY)
+# ==========================================================
+@router.post("/risk/freeze-user")
+async def risk_freeze_user(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    forbid_impersonated_writes(current_user)
+
+    user_id = payload.get("user_id")
+    reason = payload.get("reason")
+
+    if not user_id or not reason:
+        raise HTTPException(400, "user_id and reason required")
+
+    await AdminOverrideService.freeze_user(
+        db=db,
+        admin_user_id=current_user.id,
+        target_user_id=UUID(user_id),
+        reason=reason,
+    )
+
+    return {"status": "user_frozen"}
+
+
+@router.post("/risk/unfreeze-user")
+async def risk_unfreeze_user(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    forbid_impersonated_writes(current_user)
+
+    user_id = payload.get("user_id")
+    reason = payload.get("reason")
+
+    if not user_id or not reason:
+        raise HTTPException(400, "user_id and reason required")
+
+    await AdminOverrideService.unfreeze_user(
+        db=db,
+        admin_user_id=current_user.id,
+        target_user_id=UUID(user_id),
+        reason=reason,
+    )
+
+    return {"status": "user_unfrozen"}
+
+
+@router.post("/risk/disable-user-ai")
+async def risk_disable_user_ai(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    forbid_impersonated_writes(current_user)
+
+    user_id = payload.get("user_id")
+    reason = payload.get("reason")
+
+    if not user_id or not reason:
+        raise HTTPException(400, "user_id and reason required")
+
+    await AdminOverrideService.disable_user_ai(
+        db=db,
+        admin_user_id=current_user.id,
+        target_user_id=UUID(user_id),
+        reason=reason,
+    )
+
+    return {"status": "ai_disabled_for_user"}
