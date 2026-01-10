@@ -17,9 +17,12 @@ type DashboardData = {
   system_status: string;
 };
 
+type TimeRange = "7d" | "14d" | "30d" | "90d";
+
 export default function AdminDashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState<TimeRange>("7d");
 
   useEffect(() => {
     (async () => {
@@ -55,8 +58,23 @@ export default function AdminDashboardPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Admin Dashboard</h1>
+    <div className="space-y-8">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Admin Dashboard
+        </h1>
+
+        <select
+          value={range}
+          onChange={(e) => setRange(e.target.value as TimeRange)}
+          className="border rounded px-3 py-1.5 text-sm bg-white"
+        >
+          <option value="7d">Last 7 days</option>
+          <option value="14d">Last 14 days</option>
+          <option value="30d">Last 30 days</option>
+          <option value="90d">Last 90 days</option>
+        </select>
+      </div>
 
       {/* KPI Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -66,6 +84,14 @@ export default function AdminDashboardPage() {
         <KPI title="Total Campaigns" value={data.campaigns.total} />
         <KPI title="AI Active Campaigns" value={data.campaigns.ai_active} />
         <KPI title="Manual Campaigns" value={data.campaigns.manual} />
+      </div>
+
+      {/* Trend Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ChartCard title="New Users / Day" />
+        <ChartCard title="Revenue / Day" />
+        <ChartCard title="AI Actions / Day" />
+        <ChartCard title="Meta API Errors / Day" />
       </div>
 
       {/* System Status */}
@@ -104,6 +130,17 @@ function KPI({ title, value }: { title: string; value: number }) {
       </div>
       <div className="text-2xl font-semibold text-gray-900 mt-1">
         {value}
+      </div>
+    </div>
+  );
+}
+
+function ChartCard({ title }: { title: string }) {
+  return (
+    <div className="p-4 rounded-lg border bg-white shadow-sm">
+      <div className="text-sm font-medium text-gray-700 mb-2">{title}</div>
+      <div className="h-48 flex items-center justify-center text-xs text-gray-400 border rounded bg-gray-50">
+        Chart placeholder
       </div>
     </div>
   );
