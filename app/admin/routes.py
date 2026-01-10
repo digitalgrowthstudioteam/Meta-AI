@@ -12,15 +12,11 @@ from app.plans.subscription_models import Subscription
 
 from app.admin.models import AdminAuditLog
 from app.admin.service import AdminOverrideService
+from app.admin.pricing_service import AdminPricingConfigService
 
 from app.meta_insights.services.campaign_daily_metrics_sync_service import (
     CampaignDailyMetricsSyncService,
 )
-from app.ai_engine.aggregation_engine.campaign_aggregation_service import (
-    CampaignAggregationService,
-)
-from app.billing.invoice_service import InvoiceService
-from app.billing.service import BillingService
 
 from app.admin.metrics_sync_routes import router as metrics_sync_router
 
@@ -101,6 +97,87 @@ async def list_users(
 
 
 # ==========================================================
+# PHASE 7 — PRICING CONFIG (ADMIN ONLY)
+# ==========================================================
+@router.get("/pricing-config/active")
+async def get_active_pricing_config(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    return await AdminPricingConfigService.get_active_config(db)
+
+
+@router.get("/pricing-config")
+async def list_pricing_configs(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    return await AdminPricingConfigService.list_configs(db)
+
+
+@router.post("/pricing-config")
+async def create_pricing_config(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    forbid_impersonated_writes(current_user)
+
+    required = [
+        "plan_pricing",
+        "slot_packs",
+        "currency",
+        "tax_percentage",
+        "invoice_prefix",
+        "razorpay_mode",
+        "reason",
+    ]
+    for field in required:
+        if field not in payload:
+            raise HTTPException(400, f"{field} is required")
+
+    return await AdminPricingConfigService.create_config(
+        db=db,
+        admin_user_id=current_user.id,
+        plan_pricing=payload["plan_pricing"],
+        slot_packs=payload["slot_packs"],
+        currency=payload["currency"],
+        tax_percentage=payload["tax_percentage"],
+        invoice_prefix=payload["invoice_prefix"],
+        invoice_notes=payload.get("invoice_notes"),
+        razorpay_mode=payload["razorpay_mode"],
+        reason=payload["reason"],
+    )
+
+
+@router.post("/pricing-config/{config_id}/activate")
+async def activate_pricing_config(
+    config_id: UUID,
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    forbid_impersonated_writes(current_user)
+
+    reason = payload.get("reason")
+    if not reason:
+        raise HTTPException(400, "reason required")
+
+    await AdminPricingConfigService.activate_config(
+        db=db,
+        admin_user_id=current_user.id,
+        config_id=config_id,
+        reason=reason,
+    )
+
+    return {"status": "activated"}
+
+
+# ==========================================================
 # PHASE 6 — ADMIN AUDIT LOG VIEWER (READ ONLY)
 # ==========================================================
 @router.get("/audit-logs")
@@ -146,7 +223,7 @@ async def list_admin_audit_logs(
 
 
 # ==========================================================
-# PHASE 6.5 — ROLLBACK EXECUTION (ADMIN ONLY)
+# PHASE 6.5 — ROLLBACK EXECUTION
 # ==========================================================
 @router.post("/rollback")
 async def rollback_by_token(
@@ -163,81 +240,18 @@ async def rollback_by_token(
     if not rollback_token or not reason:
         raise HTTPException(400, "rollback_token and reason required")
 
-    try:
-        await AdminOverrideService.rollback_by_token(
-            db=db,
-            admin_user_id=current_user.id,
-            rollback_token=UUID(rollback_token),
-            reason=reason,
-        )
-    except ValueError as e:
-        raise HTTPException(400, str(e))
+    await AdminOverrideService.rollback_by_token(
+        db=db,
+        admin_user_id=current_user.id,
+        rollback_token=UUID(rollback_token),
+        reason=reason,
+    )
 
     return {"status": "rolled_back"}
 
 
 # ==========================================================
-# PHASE 5 — CAMPAIGN ACTIONS (UNCHANGED)
-# ==========================================================
-@router.post("/campaigns/{campaign_id}/force-ai")
-async def admin_force_ai_toggle(
-    campaign_id: UUID,
-    payload: dict,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_user),
-):
-    require_admin(current_user)
-    forbid_impersonated_writes(current_user)
-
-    enable = payload.get("enable")
-    reason = payload.get("reason")
-
-    if enable is None or not reason:
-        raise HTTPException(400, "enable and reason required")
-
-    campaign = await db.get(Campaign, campaign_id)
-    if not campaign:
-        raise HTTPException(404, "Campaign not found")
-
-    before_state = {
-        "ai_active": campaign.ai_active,
-        "ai_execution_locked": campaign.ai_execution_locked,
-    }
-
-    campaign.ai_active = bool(enable)
-    campaign.ai_execution_locked = False if enable else True
-    campaign.ai_activated_at = datetime.utcnow() if enable else None
-    campaign.ai_deactivated_at = None if enable else datetime.utcnow()
-
-    after_state = {
-        "ai_active": campaign.ai_active,
-        "ai_execution_locked": campaign.ai_execution_locked,
-    }
-
-    db.add(
-        CampaignActionLog(
-            campaign_id=campaign.id,
-            user_id=current_user.id,
-            actor_type="admin",
-            action_type="force_ai_toggle",
-            before_state=before_state,
-            after_state=after_state,
-            reason=reason,
-            created_at=datetime.utcnow(),
-        )
-    )
-
-    await db.commit()
-
-    return {
-        "status": "ok",
-        "campaign_id": str(campaign.id),
-        "ai_active": campaign.ai_active,
-    }
-
-
-# ==========================================================
-# PHASE 3.2 — SUPPORT TOOLS (AUDITED)
+# PHASE 3.2 — SUPPORT TOOLS
 # ==========================================================
 async def _log_support_action(
     *,
