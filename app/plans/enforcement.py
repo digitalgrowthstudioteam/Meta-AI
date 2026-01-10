@@ -83,7 +83,7 @@ class PlanEnforcementService:
         return result.scalar_one()
 
     # =========================
-    # SLOT RESERVATION (NEW)
+    # SLOT RESERVATION
     # =========================
     @staticmethod
     async def _reserve_addon_slot(
@@ -127,12 +127,47 @@ class PlanEnforcementService:
         campaign: Campaign,
     ) -> None:
         settings = await PlanEnforcementService._get_global_settings(db)
+
         if settings and not settings.ai_globally_enabled:
             raise EnforcementError(
                 code="AI_GLOBALLY_DISABLED",
                 message="AI is temporarily disabled by admin.",
                 action="CONTACT_SUPPORT",
             )
+
+        # ---------------------------------
+        # PHASE P2 — GLOBAL AI FEATURE GATES
+        # ---------------------------------
+        if settings:
+            if (
+                not settings.expansion_mode_enabled
+                and getattr(campaign, "ai_mode", None) == "EXPANSION"
+            ):
+                raise EnforcementError(
+                    code="EXPANSION_DISABLED",
+                    message="Expansion mode is disabled by admin.",
+                    action="CONTACT_SUPPORT",
+                )
+
+            if (
+                not settings.fatigue_mode_enabled
+                and getattr(campaign, "ai_mode", None) == "FATIGUE"
+            ):
+                raise EnforcementError(
+                    code="FATIGUE_DISABLED",
+                    message="Fatigue mode is disabled by admin.",
+                    action="CONTACT_SUPPORT",
+                )
+
+            if (
+                not settings.auto_pause_enabled
+                and getattr(campaign, "auto_pause_enabled", False)
+            ):
+                raise EnforcementError(
+                    code="AUTO_PAUSE_DISABLED",
+                    message="Auto-pause is disabled by admin.",
+                    action="CONTACT_SUPPORT",
+                )
 
         subscription = await PlanEnforcementService._get_active_subscription(
             db=db, user_id=user_id
@@ -163,6 +198,20 @@ class PlanEnforcementService:
         admin_extra = override.extra_ai_campaigns if override else 0
 
         effective_limit = base_limit + admin_extra
+
+        # ---------------------------------
+        # CONFIDENCE GATING (PHASE P2)
+        # ---------------------------------
+        if settings:
+            if (
+                not settings.confidence_gating_enabled
+                and getattr(campaign, "requires_confidence", False)
+            ):
+                raise EnforcementError(
+                    code="CONFIDENCE_GATING_DISABLED",
+                    message="Confidence gating is disabled by admin.",
+                    action="CONTACT_SUPPORT",
+                )
 
         # ---------------------------------
         # BASE PLAN LIMIT CHECK
@@ -266,6 +315,7 @@ class PlanEnforcementService:
     @staticmethod
     async def get_ai_limit_status(db: AsyncSession, *, user_id: UUID) -> dict:
         settings = await PlanEnforcementService._get_global_settings(db)
+
         if settings and not settings.ai_globally_enabled:
             return {"allowed": False, "reason": "AI_GLOBALLY_DISABLED"}
 
@@ -291,4 +341,13 @@ class PlanEnforcementService:
             "limit": base_limit + admin_extra,
             "base_limit": base_limit,
             "admin_extra": admin_extra,
+            "max_optimizations_per_day": (
+                settings.max_optimizations_per_day if settings else None
+            ),
+            "max_expansions_per_day": (
+                settings.max_expansions_per_day if settings else None
+            ),
+            "ai_refresh_frequency_minutes": (
+                settings.ai_refresh_frequency_minutes if settings else None
+            ),
         }
