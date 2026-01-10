@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { apiFetch } from "../lib/fetcher";
 
 /**
  * SINGLE SOURCE OF TRUTH
@@ -42,25 +43,29 @@ export default function DashboardPage() {
   // LOAD SESSION CONTEXT
   // -----------------------------
   const loadSession = async () => {
-    const res = await fetch("/api/session/context", {
-      credentials: "include",
-      cache: "no-store",
-    });
+    try {
+      const res = await apiFetch("/api/session/context", {
+        cache: "no-store",
+      });
 
-    if (!res.ok) {
+      if (!res.ok) {
+        setSession(null);
+        return;
+      }
+
+      const json = await res.json();
+
+      // 🔒 ADMIN → FORCE REDIRECT
+      if (json?.user?.is_admin) {
+        router.replace("/admin/dashboard");
+        return;
+      }
+
+      setSession(json);
+    } catch (error) {
+      console.error("Session load error:", error);
       setSession(null);
-      return;
     }
-
-    const json = await res.json();
-
-    // 🔒 ADMIN → FORCE REDIRECT
-    if (json?.user?.is_admin) {
-      router.replace("/admin/dashboard");
-      return;
-    }
-
-    setSession(json);
   };
 
   // -----------------------------
@@ -72,18 +77,21 @@ export default function DashboardPage() {
       return;
     }
 
-    const res = await fetch("/api/dashboard/summary", {
-      credentials: "include",
-      cache: "no-store",
-    });
+    try {
+      const res = await apiFetch("/api/dashboard/summary", {
+        cache: "no-store",
+      });
 
-    if (!res.ok) {
-      setData(null);
-      return;
+      if (!res.ok) {
+        setData(null);
+        return;
+      }
+
+      const json = await res.json();
+      setData(json);
+    } catch (error) {
+      console.error("Dashboard summary error:", error);
     }
-
-    const json = await res.json();
-    setData(json);
   };
 
   useEffect(() => {
@@ -95,22 +103,27 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    loadSummary();
+    if (session?.ad_account?.id) {
+      loadSummary();
+    }
   }, [session?.ad_account?.id]);
 
   // -----------------------------
   // CONNECT META
   // -----------------------------
   const connectMeta = async () => {
-    const res = await fetch("/api/meta/connect", {
-      credentials: "include",
-      cache: "no-store",
-    });
-    if (!res.ok) return;
+    try {
+      const res = await apiFetch("/api/meta/connect", {
+        cache: "no-store",
+      });
+      if (!res.ok) return;
 
-    const json = await res.json();
-    if (json?.redirect_url) {
-      window.location.href = json.redirect_url;
+      const json = await res.json();
+      if (json?.redirect_url) {
+        window.location.href = json.redirect_url;
+      }
+    } catch (error) {
+      console.error("Meta connect error:", error);
     }
   };
 
@@ -122,32 +135,40 @@ export default function DashboardPage() {
     setErrorMsg(null);
 
     try {
-      const res = await fetch("/api/campaigns/sync", {
+      const res = await apiFetch("/api/campaigns/sync", {
         method: "POST",
-        credentials: "include",
         cache: "no-store",
       });
       if (!res.ok) throw new Error();
       await loadSummary();
     } catch {
-      setErrorMsg("Failed to sync campaigns");
+      setErrorMsg("Failed to sync campaigns. Please try again.");
     } finally {
       setSyncing(false);
     }
   };
 
   if (loading) {
-    return <div className="text-sm text-gray-500">Loading dashboard…</div>;
+    return (
+      <div className="flex items-center justify-center h-64 text-sm text-gray-500">
+        Loading dashboard...
+      </div>
+    );
   }
 
   if (!session?.ad_account) {
     return (
-      <div className="space-y-4 max-w-xl">
-        <h1 className="text-xl font-semibold">Dashboard</h1>
-        <p className="text-sm text-gray-600">
-          Connect Meta Ads and select an ad account.
-        </p>
-        <button onClick={connectMeta} className="btn-primary">
+      <div className="space-y-6 max-w-xl mx-auto mt-10 p-6 bg-white rounded-lg border shadow-sm">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900">Welcome to Digital Growth Studio</h1>
+          <p className="mt-2 text-sm text-gray-600">
+            To get started with AI optimization, please connect your Meta Ads account and select an ad account to manage.
+          </p>
+        </div>
+        <button
+          onClick={connectMeta}
+          className="w-full rounded-md bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+        >
           Connect Meta Ads
         </button>
       </div>
@@ -161,13 +182,17 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-xl font-semibold">Dashboard</h1>
+        <h1 className="text-xl font-semibold text-gray-900">Dashboard</h1>
         <p className="text-sm text-gray-500">
-          Active account: <strong>{session.ad_account.name}</strong>
+          Active account: <strong className="text-gray-900">{session.ad_account.name}</strong>
         </p>
       </div>
 
-      {errorMsg && <div className="text-sm text-red-600">{errorMsg}</div>}
+      {errorMsg && (
+        <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
+          {errorMsg}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <KpiCard
@@ -187,13 +212,13 @@ export default function DashboardPage() {
         />
       </div>
 
-      <div>
+      <div className="pt-4 border-t">
         <button
           onClick={syncCampaigns}
           disabled={syncing}
-          className="btn-secondary disabled:opacity-60"
+          className="rounded-md bg-white px-3.5 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {syncing ? "Syncing…" : "Sync Campaigns"}
+          {syncing ? "Syncing..." : "Sync Campaigns Now"}
         </button>
       </div>
     </div>
@@ -212,9 +237,9 @@ function KpiCard({
   hint: string;
 }) {
   return (
-    <div className="bg-white border rounded-lg p-5 space-y-1">
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="text-xl font-semibold">{value}</div>
+    <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-1 shadow-sm">
+      <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</div>
+      <div className="text-2xl font-semibold text-gray-900">{value}</div>
       <div className="text-xs text-gray-400">{hint}</div>
     </div>
   );
