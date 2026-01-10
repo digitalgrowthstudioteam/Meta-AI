@@ -6,6 +6,11 @@ import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 
+export const metadata = {
+  title: "Digital Growth Studio",
+  description: "Meta Ads AI Platform",
+};
+
 type SessionContext = {
   user: {
     id: string;
