@@ -38,17 +38,20 @@ export default function AdminBillingPage() {
   const [acting, setActing] = useState<string | null>(null);
 
   async function load() {
-    const [p, i, s] = await Promise.all([
-      fetch("/api/admin/billing/payments"),
-      fetch("/api/admin/billing/invoices"),
-      fetch("/api/admin/billing/slots"),
-    ]);
+    setLoading(true);
+    try {
+      const [p, i, s] = await Promise.all([
+        fetch("/api/admin/billing/payments"),
+        fetch("/api/admin/billing/invoices"),
+        fetch("/api/admin/billing/slots"),
+      ]);
 
-    if (p.ok) setPayments(await p.json());
-    if (i.ok) setInvoices(await i.json());
-    if (s.ok) setSlots(await s.json());
-
-    setLoading(false);
+      if (p.ok) setPayments(await p.json());
+      if (i.ok) setInvoices(await i.json());
+      if (s.ok) setSlots(await s.json());
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -143,6 +146,7 @@ export default function AdminBillingPage() {
                   <a
                     href={i.download_url}
                     className="text-blue-600 underline"
+                    target="_blank"
                   >
                     PDF
                   </a>
@@ -180,7 +184,7 @@ export default function AdminBillingPage() {
                     onClick={() =>
                       withReason(
                         () =>
-                          fetch(`/api/admin/slots/${s.id}/extend`, {
+                          fetch(`/api/admin/billing/slots/${s.id}/extend`, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ days: 30, reason: "extend" }),
@@ -198,7 +202,7 @@ export default function AdminBillingPage() {
                     onClick={() =>
                       withReason(
                         () =>
-                          fetch(`/api/admin/slots/${s.id}/expire`, {
+                          fetch(`/api/admin/billing/slots/${s.id}/expire`, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ reason: "expire" }),
@@ -218,7 +222,7 @@ export default function AdminBillingPage() {
                       if (!qty) return;
                       withReason(
                         () =>
-                          fetch(`/api/admin/slots/${s.id}/adjust`, {
+                          fetch(`/api/admin/billing/slots/${s.id}/adjust`, {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({
