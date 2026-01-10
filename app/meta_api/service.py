@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 from typing import List
 
 import httpx
@@ -14,7 +14,7 @@ from app.meta_api.models import (
 from app.campaigns.models import Campaign
 from app.core.config import settings
 from app.plans.enforcement import EnforcementError
-
+from app.admin.models import AdminAuditLog, GlobalSettings
 
 META_GRAPH_BASE = "https://graph.facebook.com/v19.0"
 META_TOKEN_URL = "https://graph.facebook.com/v19.0/oauth/access_token"
@@ -32,6 +32,9 @@ def assert_meta_sync_enabled():
         )
 
 
+# =====================================================
+# META OAUTH SERVICE
+# =====================================================
 class MetaOAuthService:
     """
     Handles Meta OAuth token exchange & storage.
@@ -102,6 +105,9 @@ class MetaOAuthService:
         return token
 
 
+# =====================================================
+# META AD ACCOUNT SERVICE
+# =====================================================
 class MetaAdAccountService:
     """
     Read-only sync of Meta Ad Accounts.
@@ -181,6 +187,9 @@ class MetaAdAccountService:
         return processed
 
 
+# =====================================================
+# META CAMPAIGN SERVICE
+# =====================================================
 class MetaCampaignService:
     """
     Read-only Meta Campaign sync.
@@ -266,3 +275,72 @@ class MetaCampaignService:
         except Exception:
             await db.rollback()
             return 0
+
+
+# =====================================================
+# PHASE 7.2 — META API SETTINGS (ADMIN ONLY)
+# =====================================================
+class MetaSettingsService:
+    """
+    Admin-editable, audited, rollback-safe Meta API settings.
+    """
+
+    @staticmethod
+    async def get_settings(db: AsyncSession) -> GlobalSettings:
+        result = await db.execute(select(GlobalSettings).limit(1))
+        settings = result.scalar_one_or_none()
+
+        if not settings:
+            settings = GlobalSettings()
+            db.add(settings)
+            await db.commit()
+            await db.refresh(settings)
+
+        return settings
+
+    @staticmethod
+    async def update_settings(
+        db: AsyncSession,
+        *,
+        admin_user_id: UUID,
+        updates: dict,
+        reason: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> GlobalSettings:
+        settings = await MetaSettingsService.get_settings(db)
+
+        before_state = {
+            "ai_globally_enabled": settings.ai_globally_enabled,
+            "meta_sync_enabled": settings.meta_sync_enabled,
+        }
+
+        # Apply updates
+        for field, value in updates.items():
+            if hasattr(settings, field):
+                setattr(settings, field, value)
+
+        after_state = {
+            "ai_globally_enabled": settings.ai_globally_enabled,
+            "meta_sync_enabled": settings.meta_sync_enabled,
+        }
+
+        # Audit log
+        audit = AdminAuditLog(
+            admin_user_id=admin_user_id,
+            target_type="system",
+            target_id=settings.id,
+            action="meta_api_settings_update",
+            before_state=before_state,
+            after_state=after_state,
+            reason=reason,
+            rollback_token=uuid4(),
+            ip_address=ip_address,
+            user_agent=user_agent,
+            created_at=datetime.utcnow(),
+        )
+
+        db.add(audit)
+        await db.commit()
+        await db.refresh(settings)
+        return settings
