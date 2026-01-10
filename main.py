@@ -32,6 +32,9 @@ from app.admin.revenue_sanity_routes import router as admin_revenue_sanity_route
 from app.admin.billing_health_routes import router as admin_billing_health_router
 from app.admin.user_billing_snapshot_routes import router as admin_user_billing_router
 from app.admin.billing_timeline_routes import router as admin_billing_timeline_router
+from app.admin.user_ai_usage_routes import router as admin_user_ai_router
+from app.admin.ai_limit_dashboard_routes import router as admin_ai_limit_router
+from app.admin.ai_force_deactivate_routes import router as admin_ai_force_router
 
 # 🔒 ADMIN IMPERSONATION
 from backend.app.admin.impersonation_routes import router as admin_router
@@ -89,6 +92,9 @@ app.include_router(admin_revenue_sanity_router, prefix="/api")
 app.include_router(admin_billing_health_router, prefix="/api")
 app.include_router(admin_user_billing_router, prefix="/api")
 app.include_router(admin_billing_timeline_router, prefix="/api")
+app.include_router(admin_user_ai_router, prefix="/api")
+app.include_router(admin_ai_limit_router, prefix="/api")
+app.include_router(admin_ai_force_router, prefix="/api")
 
 # =========================
 # HEALTH CHECK
