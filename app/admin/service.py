@@ -1,11 +1,14 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from uuid import UUID
-from datetime import datetime, date
+from uuid import UUID, uuid4
+from datetime import datetime
 
-from app.admin.models import AdminOverride, GlobalSettings
-from app.campaigns.models import Campaign, CampaignActionLog
-from app.chat.models import ChatThread, ChatMessage
+from app.admin.models import (
+    AdminOverride,
+    GlobalSettings,
+    AdminAuditLog,
+)
+from app.campaigns.models import Campaign
 from app.users.models import User
 from app.plans.subscription_models import Subscription
 
@@ -13,11 +16,11 @@ from app.plans.subscription_models import Subscription
 class AdminOverrideService:
     """
     Admin override & control business logic.
-    READ-ONLY metrics for dashboard.
+    All admin mutations MUST be audited here.
     """
 
     # =====================================================
-    # ADMIN DASHBOARD STATS (PHASE 2.1 — NORMALIZED)
+    # ADMIN DASHBOARD STATS (READ-ONLY)
     # =====================================================
     @staticmethod
     async def get_dashboard_stats(db: AsyncSession) -> dict:
@@ -42,9 +45,9 @@ class AdminOverrideService:
             .where(Campaign.is_manual.is_(True))
         )
 
-        last_activity = await db.scalar(
-            select(CampaignActionLog.created_at)
-            .order_by(CampaignActionLog.created_at.desc())
+        last_audit = await db.scalar(
+            select(AdminAuditLog.created_at)
+            .order_by(AdminAuditLog.created_at.desc())
             .limit(1)
         )
 
@@ -60,13 +63,13 @@ class AdminOverrideService:
                 "manual": campaigns_manual or 0,
             },
             "last_activity": (
-                last_activity.isoformat() if last_activity else None
+                last_audit.isoformat() if last_audit else None
             ),
             "system_status": "ok",
         }
 
     # =====================================================
-    # GLOBAL SETTINGS (UNCHANGED)
+    # GLOBAL SETTINGS (AUDITED + ROLLBACK SAFE)
     # =====================================================
     @staticmethod
     async def get_global_settings(db: AsyncSession) -> GlobalSettings:
@@ -88,6 +91,8 @@ class AdminOverrideService:
         admin_user_id: UUID,
         updates: dict,
         reason: str,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
     ) -> GlobalSettings:
         settings = await AdminOverrideService.get_global_settings(db)
 
@@ -113,18 +118,21 @@ class AdminOverrideService:
             "maintenance_mode": settings.maintenance_mode,
         }
 
-        db.add(
-            CampaignActionLog(
-                campaign_id=None,
-                user_id=admin_user_id,
-                actor_type="admin",
-                action_type="global_settings_update",
-                before_state=before_state,
-                after_state=after_state,
-                reason=reason,
-            )
+        audit = AdminAuditLog(
+            admin_user_id=admin_user_id,
+            target_type="system",
+            target_id=settings.id,
+            action="global_settings_update",
+            before_state=before_state,
+            after_state=after_state,
+            reason=reason,
+            rollback_token=uuid4(),
+            ip_address=ip_address,
+            user_agent=user_agent,
+            created_at=datetime.utcnow(),
         )
 
+        db.add(audit)
         await db.commit()
         await db.refresh(settings)
         return settings
