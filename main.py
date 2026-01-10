@@ -11,6 +11,7 @@ PHASE 1.8 — SINGLE CONTEXT SOURCE
 import app.models  # registers all SQLAlchemy models
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 
 # =========================
 # ROUTERS (API ONLY)
@@ -53,6 +54,17 @@ app = FastAPI(
     title="Digital Growth Studio",
     description="Meta Ads AI Optimization Platform",
     version="0.1.0",
+)
+
+# =========================
+# CORS MIDDLEWARE (ADDED)
+# =========================
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins for Phase 1 connectivity
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
