@@ -6,11 +6,6 @@ import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 
-export const metadata = {
-  title: "Digital Growth Studio",
-  description: "Meta Ads AI Platform",
-};
-
 type SessionContext = {
   user: {
     id: string;
@@ -67,10 +62,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     window.location.reload();
   };
 
-  // ADMIN LAYOUT — PASS THROUGH TO /app/admin/layout.tsx
+  // ADMIN LAYOUT
   if (pathname.startsWith("/admin")) {
     return (
       <html lang="en">
+        <head>
+          <title>Digital Growth Studio</title>
+          <meta name="description" content="Meta Ads AI Platform" />
+        </head>
         <body className="bg-slate-50 text-gray-900">
           <Toaster position="bottom-right" />
           {children}
@@ -79,17 +78,27 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     );
   }
 
+  // LOGIN / ROOT
   if (pathname === "/" || pathname === "/login") {
     return (
       <html lang="en">
+        <head>
+          <title>Digital Growth Studio</title>
+          <meta name="description" content="Meta Ads AI Platform" />
+        </head>
         <body className="bg-slate-50 text-gray-900">{children}</body>
       </html>
     );
   }
 
+  // LOADER
   if (!sessionLoaded) {
     return (
       <html lang="en">
+        <head>
+          <title>Digital Growth Studio</title>
+          <meta name="description" content="Meta Ads AI Platform" />
+        </head>
         <body className="bg-amber-50 text-gray-900">
           <div className="p-6 text-sm text-gray-500">Loading application…</div>
         </body>
@@ -99,6 +108,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
   return (
     <html lang="en">
+      <head>
+        <title>Digital Growth Studio</title>
+        <meta name="description" content="Meta Ads AI Platform" />
+      </head>
       <body className="bg-amber-50 text-gray-900">
         <Toaster position="bottom-right" />
 
