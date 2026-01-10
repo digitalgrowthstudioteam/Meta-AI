@@ -35,23 +35,41 @@ export default function AdminBillingPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [slots, setSlots] = useState<SlotAddon[]>([]);
   const [loading, setLoading] = useState(true);
+  const [acting, setActing] = useState<string | null>(null);
+
+  async function load() {
+    const [p, i, s] = await Promise.all([
+      fetch("/api/admin/billing/payments"),
+      fetch("/api/admin/billing/invoices"),
+      fetch("/api/admin/billing/slots"),
+    ]);
+
+    if (p.ok) setPayments(await p.json());
+    if (i.ok) setInvoices(await i.json());
+    if (s.ok) setSlots(await s.json());
+
+    setLoading(false);
+  }
 
   useEffect(() => {
-    async function load() {
-      const [p, i, s] = await Promise.all([
-        fetch("/api/admin/billing/payments"),
-        fetch("/api/admin/billing/invoices"),
-        fetch("/api/admin/billing/slots"),
-      ]);
-
-      if (p.ok) setPayments(await p.json());
-      if (i.ok) setInvoices(await i.json());
-      if (s.ok) setSlots(await s.json());
-
-      setLoading(false);
-    }
     load();
   }, []);
+
+  async function withReason(
+    action: () => Promise<Response>,
+    loadingKey: string
+  ) {
+    const reason = prompt("Reason (required):");
+    if (!reason) return;
+
+    setActing(loadingKey);
+    const res = await action().finally(() => setActing(null));
+    if (!res.ok) {
+      alert("Action failed");
+      return;
+    }
+    await load();
+  }
 
   if (loading) {
     return <div className="p-4 text-sm">Loading billing data…</div>;
@@ -62,7 +80,7 @@ export default function AdminBillingPage() {
       <div>
         <h1 className="text-xl font-semibold">Billing Overview</h1>
         <p className="text-gray-500">
-          Read-only visibility into subscriptions, payments, and slots
+          Payments, invoices, and campaign slot controls
         </p>
       </div>
 
@@ -143,9 +161,8 @@ export default function AdminBillingPage() {
             <tr>
               <th className="p-2 border">User</th>
               <th className="p-2 border">Slots</th>
-              <th className="p-2 border">Purchased</th>
               <th className="p-2 border">Expires</th>
-              <th className="p-2 border">Payment</th>
+              <th className="p-2 border">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -154,13 +171,67 @@ export default function AdminBillingPage() {
                 <td className="p-2 border">{s.user_id.slice(0, 8)}</td>
                 <td className="p-2 border">{s.extra_ai_campaigns}</td>
                 <td className="p-2 border">
-                  {new Date(s.purchased_at).toLocaleString()}
-                </td>
-                <td className="p-2 border">
                   {new Date(s.expires_at).toLocaleString()}
                 </td>
-                <td className="p-2 border">
-                  {s.payment_id ? s.payment_id.slice(0, 8) : "—"}
+                <td className="p-2 border space-x-2">
+                  <button
+                    className="px-2 py-1 text-xs border rounded"
+                    disabled={acting === s.id}
+                    onClick={() =>
+                      withReason(
+                        () =>
+                          fetch(`/api/admin/slots/${s.id}/extend`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ days: 30, reason: "extend" }),
+                          }),
+                        s.id
+                      )
+                    }
+                  >
+                    Extend +30d
+                  </button>
+
+                  <button
+                    className="px-2 py-1 text-xs border rounded"
+                    disabled={acting === s.id}
+                    onClick={() =>
+                      withReason(
+                        () =>
+                          fetch(`/api/admin/slots/${s.id}/expire`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ reason: "expire" }),
+                          }),
+                        s.id
+                      )
+                    }
+                  >
+                    Expire
+                  </button>
+
+                  <button
+                    className="px-2 py-1 text-xs border rounded"
+                    disabled={acting === s.id}
+                    onClick={() => {
+                      const qty = prompt("New slot quantity?");
+                      if (!qty) return;
+                      withReason(
+                        () =>
+                          fetch(`/api/admin/slots/${s.id}/adjust`, {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              extra_ai_campaigns: Number(qty),
+                              reason: "adjust",
+                            }),
+                          }),
+                        s.id
+                      );
+                    }}
+                  >
+                    Adjust
+                  </button>
                 </td>
               </tr>
             ))}
@@ -169,7 +240,7 @@ export default function AdminBillingPage() {
       </section>
 
       <div className="text-xs text-gray-500">
-        This view is read-only. All mutations require explicit audited actions.
+        All slot actions are audited and rollback-safe.
       </div>
     </div>
   );
