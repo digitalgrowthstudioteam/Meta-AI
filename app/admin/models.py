@@ -9,10 +9,89 @@ from sqlalchemy import (
     Text,
     ForeignKey,
     UniqueConstraint,
+    String,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 
 from app.core.database import Base
+
+
+# =====================================================
+# ADMIN AUDIT LOGS (PHASE 6 — IMMUTABLE)
+# =====================================================
+class AdminAuditLog(Base):
+    """
+    Immutable admin/system audit log.
+    Used for compliance, rollback, and traceability.
+    """
+
+    __tablename__ = "admin_audit_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    admin_user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    target_type = Column(
+        String(64),
+        nullable=False,
+        index=True,
+        doc="user | campaign | subscription | billing | system | feature_flag",
+    )
+
+    target_id = Column(
+        UUID(as_uuid=True),
+        nullable=True,
+        index=True,
+    )
+
+    action = Column(
+        String(128),
+        nullable=False,
+        index=True,
+    )
+
+    before_state = Column(
+        JSONB,
+        nullable=False,
+    )
+
+    after_state = Column(
+        JSONB,
+        nullable=False,
+    )
+
+    reason = Column(
+        Text,
+        nullable=False,
+    )
+
+    rollback_token = Column(
+        UUID(as_uuid=True),
+        nullable=True,
+        unique=True,
+        index=True,
+    )
+
+    ip_address = Column(
+        String(64),
+        nullable=True,
+    )
+
+    user_agent = Column(
+        Text,
+        nullable=True,
+    )
+
+    created_at = Column(
+        DateTime(timezone=True),
+        default=datetime.utcnow,
+        nullable=False,
+    )
 
 
 # =====================================================
@@ -51,16 +130,11 @@ class AdminOverride(Base):
 
 
 # =====================================================
-# PHASE 14.4 — GLOBAL SYSTEM SETTINGS (SINGLE ROW)
+# GLOBAL SYSTEM SETTINGS (SINGLE ROW)
 # =====================================================
 class GlobalSettings(Base):
     """
     Global, system-wide admin-controlled settings.
-
-    🔒 RULES:
-    - Exactly ONE row exists
-    - All changes must be audited (via CampaignActionLog or future SystemLog)
-    - No environment dependence
     """
 
     __tablename__ = "global_settings"
@@ -70,16 +144,12 @@ class GlobalSettings(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
-    # Enforces single-row pattern
     singleton_key = Column(
         Integer,
         nullable=False,
         default=1,
     )
 
-    # -------------------------
-    # BRANDING
-    # -------------------------
     site_name = Column(
         Text,
         nullable=False,
@@ -95,36 +165,26 @@ class GlobalSettings(Base):
     logo_url = Column(
         Text,
         nullable=True,
-        doc="Public URL to logo asset",
     )
 
-    # -------------------------
-    # GLOBAL KILL SWITCHES
-    # -------------------------
     ai_globally_enabled = Column(
         Boolean,
         default=True,
         nullable=False,
-        doc="Master AI enable/disable switch",
     )
 
     meta_sync_enabled = Column(
         Boolean,
         default=True,
         nullable=False,
-        doc="Disables all Meta fetch/sync when false",
     )
 
     maintenance_mode = Column(
         Boolean,
         default=False,
         nullable=False,
-        doc="When enabled, non-admin users are blocked",
     )
 
-    # -------------------------
-    # AUDIT
-    # -------------------------
     updated_at = Column(
         DateTime(timezone=True),
         default=datetime.utcnow,
