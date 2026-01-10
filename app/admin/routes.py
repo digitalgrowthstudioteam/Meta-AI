@@ -20,9 +20,7 @@ from app.meta_insights.services.campaign_daily_metrics_sync_service import (
 
 from app.admin.metrics_sync_routes import router as metrics_sync_router
 
-
 router = APIRouter(prefix="/admin", tags=["Admin"])
-
 
 # =========================
 # ADMIN GUARD
@@ -31,7 +29,6 @@ def require_admin(user: User):
     if user.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
-
 
 # =========================
 # ADMIN DASHBOARD
@@ -44,7 +41,6 @@ async def get_admin_dashboard(
     require_admin(current_user)
     return await AdminOverrideService.get_dashboard_stats(db=db)
 
-
 # =========================
 # ADMIN USERS (READ ONLY)
 # =========================
@@ -54,10 +50,8 @@ async def list_users(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
-
     result = await db.execute(select(User).order_by(User.created_at.desc()))
     users = result.scalars().all()
-
     response = []
 
     for u in users:
@@ -95,6 +89,64 @@ async def list_users(
 
     return response
 
+# ==========================================================
+# PHASE 7.2 — META API SETTINGS (AUDITED)
+# ==========================================================
+@router.get("/meta-settings")
+async def get_meta_settings(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    settings = await AdminOverrideService.get_global_settings(db)
+    return {
+        "meta_sync_enabled": settings.meta_sync_enabled,
+        "ai_globally_enabled": settings.ai_globally_enabled,
+        "maintenance_mode": settings.maintenance_mode,
+        "site_name": settings.site_name,
+        "dashboard_title": settings.dashboard_title,
+        "logo_url": settings.logo_url,
+    }
+
+@router.post("/meta-settings")
+async def update_meta_settings(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    forbid_impersonated_writes(current_user)
+
+    allowed_fields = [
+        "meta_sync_enabled",
+        "ai_globally_enabled",
+        "maintenance_mode",
+        "site_name",
+        "dashboard_title",
+        "logo_url",
+    ]
+
+    updates = {k: v for k, v in payload.items() if k in allowed_fields}
+    reason = payload.get("reason")
+    if not updates or not reason:
+        raise HTTPException(400, "Updates and reason are required")
+
+    updated_settings = await AdminOverrideService.update_global_settings(
+        db=db,
+        admin_user_id=current_user.id,
+        updates=updates,
+        reason=reason,
+    )
+
+    return {
+        "status": "updated",
+        "meta_sync_enabled": updated_settings.meta_sync_enabled,
+        "ai_globally_enabled": updated_settings.ai_globally_enabled,
+        "maintenance_mode": updated_settings.maintenance_mode,
+        "site_name": updated_settings.site_name,
+        "dashboard_title": updated_settings.dashboard_title,
+        "logo_url": updated_settings.logo_url,
+    }
 
 # ==========================================================
 # PHASE 7.13 — ADMIN SLOT CONTROLS (AUDITED)
@@ -111,7 +163,6 @@ async def admin_extend_slot_expiry(
 
     days = payload.get("days")
     reason = payload.get("reason")
-
     if not days or not reason:
         raise HTTPException(400, "days and reason required")
 
@@ -120,9 +171,7 @@ async def admin_extend_slot_expiry(
         raise HTTPException(404, "Slot addon not found")
 
     before_state = {"expires_at": addon.expires_at.isoformat()}
-
     addon.expires_at = addon.expires_at + timedelta(days=int(days))
-
     after_state = {"expires_at": addon.expires_at.isoformat()}
 
     db.add(
@@ -151,19 +200,15 @@ async def admin_force_expire_slot(
 ):
     require_admin(current_user)
     forbid_impersonated_writes(current_user)
-
     reason = payload.get("reason")
     if not reason:
         raise HTTPException(400, "reason required")
-
     addon = await db.get(SubscriptionAddon, addon_id)
     if not addon:
         raise HTTPException(404, "Slot addon not found")
 
     before_state = {"expires_at": addon.expires_at.isoformat()}
-
     addon.expires_at = datetime.utcnow()
-
     after_state = {"expires_at": addon.expires_at.isoformat()}
 
     db.add(
@@ -195,7 +240,6 @@ async def admin_adjust_slot_quantity(
 
     new_quantity = payload.get("extra_ai_campaigns")
     reason = payload.get("reason")
-
     if new_quantity is None or not reason:
         raise HTTPException(400, "extra_ai_campaigns and reason required")
 
@@ -204,9 +248,7 @@ async def admin_adjust_slot_quantity(
         raise HTTPException(404, "Slot addon not found")
 
     before_state = {"extra_ai_campaigns": addon.extra_ai_campaigns}
-
     addon.extra_ai_campaigns = int(new_quantity)
-
     after_state = {"extra_ai_campaigns": addon.extra_ai_campaigns}
 
     db.add(
@@ -224,7 +266,6 @@ async def admin_adjust_slot_quantity(
 
     await db.commit()
     return {"status": "adjusted", "extra_ai_campaigns": addon.extra_ai_campaigns}
-
 
 # ==========================================================
 # PHASE 7 — PRICING CONFIG (ADMIN ONLY)
@@ -306,7 +347,6 @@ async def activate_pricing_config(
 
     return {"status": "activated"}
 
-
 # ==========================================================
 # PHASE 6 — ADMIN AUDIT LOG VIEWER
 # ==========================================================
@@ -320,19 +360,15 @@ async def list_admin_audit_logs(
     limit: int = Query(50, le=200),
 ):
     require_admin(current_user)
-
     stmt = select(AdminAuditLog)
-
     if target_type:
         stmt = stmt.where(AdminAuditLog.target_type == target_type)
-
     if action:
         stmt = stmt.where(AdminAuditLog.action == action)
 
     result = await db.execute(
         stmt.order_by(AdminAuditLog.created_at.desc()).limit(limit)
     )
-
     logs = result.scalars().all()
 
     return [
@@ -351,7 +387,6 @@ async def list_admin_audit_logs(
         for l in logs
     ]
 
-
 # ==========================================================
 # PHASE 6.5 — ROLLBACK EXECUTION
 # ==========================================================
@@ -363,10 +398,8 @@ async def rollback_by_token(
 ):
     require_admin(current_user)
     forbid_impersonated_writes(current_user)
-
     rollback_token = payload.get("rollback_token")
     reason = payload.get("reason")
-
     if not rollback_token or not reason:
         raise HTTPException(400, "rollback_token and reason required")
 
@@ -376,9 +409,7 @@ async def rollback_by_token(
         rollback_token=UUID(rollback_token),
         reason=reason,
     )
-
     return {"status": "rolled_back"}
-
 
 # ==========================================================
 # PHASE 3.2 — SUPPORT TOOLS
@@ -433,7 +464,6 @@ async def force_meta_resync(
     )
 
     return {"status": "ok"}
-
 
 # =========================
 # METRICS SYNC ROUTES
