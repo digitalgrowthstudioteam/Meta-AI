@@ -30,7 +30,7 @@ export default function AdminCampaignsPage() {
     setError(null);
 
     try {
-      let url = "/admin/campaigns";
+      let url = "/api/campaigns/admin"
       if (aiFilter !== "all") {
         url += `?ai_active=${aiFilter === "true" ? true : false}`;
       }
@@ -66,7 +66,7 @@ export default function AdminCampaignsPage() {
     );
     if (!reason) return;
 
-    await fetch(`/api/admin/campaigns/${campaignId}/force-ai`, {
+    await fetch(`/api/campaigns/admin/${campaignId}/force-ai`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
