@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from uuid import UUID
 
 from app.core.db_session import get_db
 from app.auth.dependencies import require_user
@@ -24,7 +23,6 @@ current_user: User = Depends(require_user),
 ):
 require_admin(current_user)
 
-```
 result = await db.execute(
     select(Payment).order_by(Payment.created_at.desc())
 )
@@ -42,7 +40,7 @@ return [
     }
     for p in payments
 ]
-```
+
 
 @router.get("/invoices")
 async def list_all_invoices(
@@ -51,7 +49,6 @@ current_user: User = Depends(require_user),
 ):
 require_admin(current_user)
 
-```
 result = await db.execute(
     select(Invoice).order_by(Invoice.created_at.desc())
 )
@@ -70,7 +67,7 @@ return [
     }
     for i in invoices
 ]
-```
+
 
 @router.get("/slots")
 async def list_all_slot_addons(
@@ -79,7 +76,6 @@ current_user: User = Depends(require_user),
 ):
 require_admin(current_user)
 
-```
 result = await db.execute(
     select(SubscriptionAddon).order_by(SubscriptionAddon.created_at.desc())
 )
