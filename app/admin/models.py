@@ -10,6 +10,8 @@ from sqlalchemy import (
     ForeignKey,
     UniqueConstraint,
     String,
+    JSON,
+    ARRAY,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 
@@ -135,6 +137,7 @@ class AdminOverride(Base):
 class GlobalSettings(Base):
     """
     Global, system-wide admin-controlled settings.
+    Includes Meta API configuration.
     """
 
     __tablename__ = "global_settings"
@@ -183,6 +186,44 @@ class GlobalSettings(Base):
         Boolean,
         default=False,
         nullable=False,
+    )
+
+    # =================================================
+    # Meta API Settings (Phase 7.2)
+    # =================================================
+    meta_sync_lookback_days = Column(
+        Integer,
+        default=30,
+        nullable=False,
+        doc="Number of days to look back when syncing Meta campaigns",
+    )
+
+    allowed_objectives = Column(
+        ARRAY(String),
+        default=["LEAD_GENERATION", "CONVERSIONS", "TRAFFIC"],
+        nullable=False,
+        doc="Allowed campaign objectives for Meta sync",
+    )
+
+    whitelisted_ad_accounts = Column(
+        ARRAY(String),
+        default=[],
+        nullable=False,
+        doc="Meta Ad Accounts that are allowed for sync",
+    )
+
+    token_refresh_mode = Column(
+        String,
+        default="auto",
+        nullable=False,
+        doc="Token refresh logic: auto | manual",
+    )
+
+    webhook_validation_mode = Column(
+        String,
+        default="strict",
+        nullable=False,
+        doc="Webhook validation: strict | permissive",
     )
 
     updated_at = Column(
