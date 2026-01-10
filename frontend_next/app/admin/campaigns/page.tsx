@@ -30,7 +30,7 @@ export default function AdminCampaignsPage() {
     setError(null);
 
     try {
-      let url = "/api/campaigns/admin"
+      let url = "/api/admin/campaigns";
       if (aiFilter !== "all") {
         url += `?ai_active=${aiFilter === "true" ? true : false}`;
       }
@@ -42,7 +42,6 @@ export default function AdminCampaignsPage() {
 
       const data = await res.json();
 
-      // ✅ HARD GUARD — THIS FIXES THE CRASH
       if (!Array.isArray(data)) {
         console.error("Invalid campaigns response:", data);
         setCampaigns([]);
@@ -66,7 +65,7 @@ export default function AdminCampaignsPage() {
     );
     if (!reason) return;
 
-    await fetch(`/api/campaigns/admin/${campaignId}/force-ai`, {
+    await fetch(`/api/admin/campaigns/${campaignId}/force-ai`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
