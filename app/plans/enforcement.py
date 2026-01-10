@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 from typing import Optional
 
@@ -83,6 +83,45 @@ class PlanEnforcementService:
         return result.scalar_one()
 
     # =========================
+    # USAGE COUNTERS (PHASE P2)
+    # =========================
+    @staticmethod
+    async def _count_actions_today(
+        db: AsyncSession,
+        *,
+        user_id: UUID,
+        action_type: str,
+    ) -> int:
+        start = datetime.utcnow().replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        result = await db.execute(
+            select(func.count(CampaignActionLog.id)).where(
+                CampaignActionLog.user_id == user_id,
+                CampaignActionLog.action_type == action_type,
+                CampaignActionLog.created_at >= start,
+            )
+        )
+        return result.scalar_one()
+
+    @staticmethod
+    async def _get_last_ai_action_time(
+        db: AsyncSession,
+        *,
+        campaign_id: UUID,
+    ) -> Optional[datetime]:
+        result = await db.execute(
+            select(CampaignActionLog.created_at)
+            .where(
+                CampaignActionLog.campaign_id == campaign_id,
+                CampaignActionLog.actor_type == "ai",
+            )
+            .order_by(CampaignActionLog.created_at.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    # =========================
     # SLOT RESERVATION
     # =========================
     @staticmethod
@@ -92,9 +131,6 @@ class PlanEnforcementService:
         subscription: Subscription,
         campaign: Campaign,
     ) -> Optional[SubscriptionAddon]:
-        """
-        Atomically reserve ONE available addon slot and bind it to campaign.
-        """
         now = datetime.utcnow()
 
         result = await db.execute(
@@ -131,12 +167,12 @@ class PlanEnforcementService:
         if settings and not settings.ai_globally_enabled:
             raise EnforcementError(
                 code="AI_GLOBALLY_DISABLED",
-                message="AI is temporarily disabled by admin.",
+                message="AI is disabled by admin.",
                 action="CONTACT_SUPPORT",
             )
 
         # ---------------------------------
-        # PHASE P2 — GLOBAL AI FEATURE GATES
+        # GLOBAL FEATURE TOGGLES (P2.1)
         # ---------------------------------
         if settings:
             if (
@@ -145,7 +181,7 @@ class PlanEnforcementService:
             ):
                 raise EnforcementError(
                     code="EXPANSION_DISABLED",
-                    message="Expansion mode is disabled by admin.",
+                    message="Expansion mode disabled by admin.",
                     action="CONTACT_SUPPORT",
                 )
 
@@ -155,7 +191,7 @@ class PlanEnforcementService:
             ):
                 raise EnforcementError(
                     code="FATIGUE_DISABLED",
-                    message="Fatigue mode is disabled by admin.",
+                    message="Fatigue mode disabled by admin.",
                     action="CONTACT_SUPPORT",
                 )
 
@@ -165,26 +201,79 @@ class PlanEnforcementService:
             ):
                 raise EnforcementError(
                     code="AUTO_PAUSE_DISABLED",
-                    message="Auto-pause is disabled by admin.",
+                    message="Auto-pause disabled by admin.",
                     action="CONTACT_SUPPORT",
                 )
 
+            if (
+                not settings.confidence_gating_enabled
+                and getattr(campaign, "requires_confidence", False)
+            ):
+                raise EnforcementError(
+                    code="CONFIDENCE_GATING_DISABLED",
+                    message="Confidence gating disabled by admin.",
+                    action="CONTACT_SUPPORT",
+                )
+
+        # ---------------------------------
+        # AI THROTTLING (P2.2)
+        # ---------------------------------
+        if settings:
+            if settings.max_optimizations_per_day:
+                used = await PlanEnforcementService._count_actions_today(
+                    db=db,
+                    user_id=user_id,
+                    action_type="optimization",
+                )
+                if used >= settings.max_optimizations_per_day:
+                    raise EnforcementError(
+                        code="OPTIMIZATION_LIMIT_REACHED",
+                        message="Daily optimization limit reached.",
+                        action="WAIT",
+                    )
+
+            if settings.max_expansions_per_day:
+                used = await PlanEnforcementService._count_actions_today(
+                    db=db,
+                    user_id=user_id,
+                    action_type="expansion",
+                )
+                if used >= settings.max_expansions_per_day:
+                    raise EnforcementError(
+                        code="EXPANSION_LIMIT_REACHED",
+                        message="Daily expansion limit reached.",
+                        action="WAIT",
+                    )
+
+            if settings.ai_refresh_frequency_minutes:
+                last_run = (
+                    await PlanEnforcementService._get_last_ai_action_time(
+                        db=db,
+                        campaign_id=campaign.id,
+                    )
+                )
+                if last_run:
+                    next_allowed = last_run + timedelta(
+                        minutes=settings.ai_refresh_frequency_minutes
+                    )
+                    if datetime.utcnow() < next_allowed:
+                        raise EnforcementError(
+                            code="AI_REFRESH_COOLDOWN",
+                            message="AI refresh cooldown active.",
+                            action="WAIT",
+                        )
+
+        # ---------------------------------
+        # SUBSCRIPTION CHECK
+        # ---------------------------------
         subscription = await PlanEnforcementService._get_active_subscription(
             db=db, user_id=user_id
         )
         if not subscription:
             raise EnforcementError(
                 code="NO_SUBSCRIPTION",
-                message="No active plan found.",
+                message="No active plan.",
                 action="UPGRADE_PLAN",
-            )
-
-        now = datetime.utcnow()
-        if subscription.ends_at and now > subscription.ends_at:
-            raise EnforcementError(
-                code="SUBSCRIPTION_EXPIRED",
-                message="Your subscription has expired.",
-                action="RENEW_PLAN",
             )
 
         base_limit = subscription.ai_campaign_limit_snapshot or 0
@@ -196,31 +285,13 @@ class PlanEnforcementService:
             db=db, user_id=user_id
         )
         admin_extra = override.extra_ai_campaigns if override else 0
-
         effective_limit = base_limit + admin_extra
 
-        # ---------------------------------
-        # CONFIDENCE GATING (PHASE P2)
-        # ---------------------------------
-        if settings:
-            if (
-                not settings.confidence_gating_enabled
-                and getattr(campaign, "requires_confidence", False)
-            ):
-                raise EnforcementError(
-                    code="CONFIDENCE_GATING_DISABLED",
-                    message="Confidence gating is disabled by admin.",
-                    action="CONTACT_SUPPORT",
-                )
-
-        # ---------------------------------
-        # BASE PLAN LIMIT CHECK
-        # ---------------------------------
         if active_count < effective_limit:
             return
 
         # ---------------------------------
-        # TRY SLOT ADDON CONSUMPTION
+        # SLOT CONSUMPTION
         # ---------------------------------
         addon = await PlanEnforcementService._reserve_addon_slot(
             db=db,
@@ -236,17 +307,12 @@ class PlanEnforcementService:
                     actor_type="system",
                     action_type="slot_consumed",
                     before_state={},
-                    after_state={
-                        "subscription_addon_id": str(addon.id)
-                    },
-                    reason="AI slot consumed",
+                    after_state={"addon_id": str(addon.id)},
+                    reason="Addon slot consumed",
                 )
             )
             return
 
-        # ---------------------------------
-        # HARD STOP
-        # ---------------------------------
         raise EnforcementError(
             code="AI_LIMIT_REACHED",
             message="AI campaign limit reached.",
@@ -254,100 +320,32 @@ class PlanEnforcementService:
         )
 
     # =========================
-    # SUBSCRIPTION EXPIRY
-    # =========================
-    @staticmethod
-    async def enforce_subscription_expiry(db: AsyncSession) -> int:
-        now = datetime.utcnow()
-        result = await db.execute(
-            select(Subscription).where(
-                Subscription.status.in_(["trial", "active"]),
-                Subscription.ends_at.is_not(None),
-                Subscription.ends_at < now,
-            )
-        )
-        expired_subs = result.scalars().all()
-        affected = 0
-
-        for sub in expired_subs:
-            sub.status = "expired"
-            sub.is_active = False
-
-            camp_result = await db.execute(
-                select(Campaign)
-                .join(MetaAdAccount, Campaign.ad_account_id == MetaAdAccount.id)
-                .join(
-                    UserMetaAdAccount,
-                    UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id,
-                )
-                .where(
-                    UserMetaAdAccount.user_id == sub.user_id,
-                    Campaign.ai_active.is_(True),
-                )
-            )
-            campaigns = camp_result.scalars().all()
-
-            for campaign in campaigns:
-                before_state = {"ai_active": True}
-                campaign.ai_active = False
-                campaign.ai_deactivated_at = now
-                after_state = {"ai_active": False}
-
-                db.add(
-                    CampaignActionLog(
-                        campaign_id=campaign.id,
-                        user_id=sub.user_id,
-                        actor_type="system",
-                        action_type="subscription_expiry",
-                        before_state=before_state,
-                        after_state=after_state,
-                        reason="Subscription expired",
-                    )
-                )
-                affected += 1
-
-        await db.commit()
-        return affected
-
-    # =========================
-    # STATUS HELPERS
+    # STATUS HELPERS (UI)
     # =========================
     @staticmethod
     async def get_ai_limit_status(db: AsyncSession, *, user_id: UUID) -> dict:
         settings = await PlanEnforcementService._get_global_settings(db)
 
-        if settings and not settings.ai_globally_enabled:
-            return {"allowed": False, "reason": "AI_GLOBALLY_DISABLED"}
-
         subscription = await PlanEnforcementService._get_active_subscription(
             db=db, user_id=user_id
         )
-        if not subscription:
-            return {"allowed": False, "reason": "NO_SUBSCRIPTION"}
 
-        base_limit = subscription.ai_campaign_limit_snapshot or 0
-        active_count = await PlanEnforcementService._count_active_ai_campaigns(
-            db=db, user_id=user_id
+        active = (
+            await PlanEnforcementService._count_active_ai_campaigns(
+                db=db, user_id=user_id
+            )
+            if subscription
+            else 0
         )
-
-        override = await PlanEnforcementService._get_active_admin_override(
-            db=db, user_id=user_id
-        )
-        admin_extra = override.extra_ai_campaigns if override else 0
 
         return {
-            "allowed": active_count < (base_limit + admin_extra),
-            "active": active_count,
-            "limit": base_limit + admin_extra,
-            "base_limit": base_limit,
-            "admin_extra": admin_extra,
-            "max_optimizations_per_day": (
-                settings.max_optimizations_per_day if settings else None
-            ),
-            "max_expansions_per_day": (
-                settings.max_expansions_per_day if settings else None
-            ),
-            "ai_refresh_frequency_minutes": (
-                settings.ai_refresh_frequency_minutes if settings else None
-            ),
+            "ai_enabled": settings.ai_globally_enabled if settings else True,
+            "expansion_mode": settings.expansion_mode_enabled if settings else True,
+            "fatigue_mode": settings.fatigue_mode_enabled if settings else True,
+            "auto_pause": settings.auto_pause_enabled if settings else True,
+            "confidence_gating": settings.confidence_gating_enabled if settings else True,
+            "active_campaigns": active,
+            "max_optimizations_per_day": settings.max_optimizations_per_day if settings else None,
+            "max_expansions_per_day": settings.max_expansions_per_day if settings else None,
+            "ai_refresh_frequency_minutes": settings.ai_refresh_frequency_minutes if settings else None,
         }
