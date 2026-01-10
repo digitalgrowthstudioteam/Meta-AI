@@ -25,6 +25,10 @@ from app.ai_engine.routes import router as ai_router
 from backend.app.admin.dashboard_routes import router as admin_dashboard_router
 from backend.app.admin.users_routes import router as admin_users_router
 from app.admin.revenue_routes import router as admin_revenue_router
+from app.admin.revenue_routes import router as admin_revenue_router
+from app.admin.revenue_breakdown_routes import router as admin_revenue_breakdown_router
+from app.admin.revenue_monthly_routes import router as admin_revenue_monthly_router
+from app.admin.revenue_sanity_routes import router as admin_revenue_sanity_router
 
 # 🔒 ADMIN IMPERSONATION
 from backend.app.admin.impersonation_routes import router as admin_router
@@ -75,6 +79,10 @@ app.include_router(admin_users_router, prefix="/api")
 app.include_router(admin_campaigns_router, prefix="/api")
 app.include_router(admin_billing_router, prefix="/api")
 app.include_router(admin_revenue_router, prefix="/api")
+app.include_router(admin_revenue_router, prefix="/api")
+app.include_router(admin_revenue_breakdown_router, prefix="/api")
+app.include_router(admin_revenue_monthly_router, prefix="/api")
+app.include_router(admin_revenue_sanity_router, prefix="/api")
 
 # =========================
 # HEALTH CHECK
