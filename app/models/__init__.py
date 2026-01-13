@@ -9,7 +9,7 @@ from app.billing.invoice_models import Invoice
 from app.plans.models import Plan
 from app.plans.subscription_models import Subscription
 
-# 3. User (likely depends on Subscription/Payment)
+# 3. User (Depends on Subscription, so it must be AFTER)
 from app.users.models import User
 
 # 4. Auth models
