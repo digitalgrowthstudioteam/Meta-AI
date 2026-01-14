@@ -9,6 +9,7 @@ from app.auth.dependencies import require_user, forbid_impersonated_writes
 from app.users.models import User
 from app.campaigns.models import Campaign, CampaignActionLog
 from app.plans.subscription_models import Subscription, SubscriptionAddon
+from app.billing.invoice_models import Invoice  # <--- ADDED IMPORT
 
 from app.admin.models import AdminAuditLog
 from app.admin.service import AdminOverrideService
@@ -91,6 +92,40 @@ async def list_users(
         )
 
     return response
+
+# =========================
+# ADMIN INVOICES (READ ONLY)
+# =========================
+@router.get("/invoices")
+async def list_admin_invoices(
+    limit: int = 50,
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    """
+    List all invoices in the system for admin review.
+    """
+    require_admin(current_user)
+    assert_admin_permission(current_user, "billing:read")
+    
+    stmt = select(Invoice).order_by(Invoice.created_at.desc()).limit(limit).offset(offset)
+    result = await db.execute(stmt)
+    invoices = result.scalars().all()
+    
+    return [
+        {
+            "id": str(inv.id),
+            "user_id": str(inv.user_id),
+            "amount": inv.amount,
+            "currency": inv.currency,
+            "status": inv.status,
+            "invoice_number": inv.invoice_number,
+            "pdf_url": inv.pdf_url,
+            "created_at": inv.created_at.isoformat(),
+        }
+        for inv in invoices
+    ]
 
 # ==========================================================
 # PHASE 7.2 — META API SETTINGS (AUDITED)
