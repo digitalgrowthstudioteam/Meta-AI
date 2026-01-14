@@ -63,13 +63,22 @@ class Settings:
     META_REDIRECT_URI: str = os.getenv("META_REDIRECT_URI", "")
 
     # =================================================
-    # SMTP (OPTIONAL)
+    # SMTP (UPDATED FOR VPS COMPATIBILITY)
     # =================================================
     SMTP_HOST: Optional[str] = os.getenv("SMTP_HOST")
     SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
-    SMTP_USER: Optional[str] = os.getenv("SMTP_USER")
+    
+    # 🔥 FIX: Checks for 'SMTP_USER' OR 'SMTP_USERNAME' (Your VPS uses SMTP_USERNAME)
+    SMTP_USER: Optional[str] = os.getenv("SMTP_USER") or os.getenv("SMTP_USERNAME")
+    
     SMTP_PASSWORD: Optional[str] = os.getenv("SMTP_PASSWORD")
-    SMTP_FROM_EMAIL: Optional[str] = os.getenv("SMTP_FROM_EMAIL")
+    
+    # 🔥 FIX: Checks for all common name variations for the sender email
+    SMTP_FROM_EMAIL: Optional[str] = (
+        os.getenv("SMTP_FROM_EMAIL") 
+        or os.getenv("EMAIL_FROM") 
+        or os.getenv("EMAILS_FROM_EMAIL")
+    )
 
     # =================================================
     # SYSTEM METADATA
