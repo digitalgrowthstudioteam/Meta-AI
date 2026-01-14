@@ -14,6 +14,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 # =========================
+# NEW IMPORTS FOR AUTO-ADMIN
+# =========================
+from sqlalchemy import select
+from app.users.models import User
+from app.core.db_session import async_session_factory
+
+# =========================
 # ROUTERS (API ONLY)
 # =========================
 from app.auth.routes import router as auth_router
@@ -108,6 +115,39 @@ app.include_router(admin_billing_timeline_router, prefix="/api")
 app.include_router(admin_user_ai_router, prefix="/api")
 app.include_router(admin_ai_limit_router, prefix="/api")
 app.include_router(admin_ai_force_router, prefix="/api")
+
+# =========================
+# AUTO-ADMIN PROMOTION LOGIC
+# =========================
+async def ensure_default_admin():
+    """
+    Automatically promotes the main email to Admin on startup.
+    """
+    target_email = "digitalgrowthstudioteam@gmail.com"
+    
+    try:
+        async with async_session_factory() as db:
+            # Check if user exists
+            result = await db.execute(select(User).where(User.email == target_email))
+            user = result.scalar_one_or_none()
+            
+            if user:
+                if user.role != "admin":
+                    print(f"🚀 Promoting {target_email} to ADMIN...")
+                    user.role = "admin"
+                    await db.commit()
+                    print(f"✅ {target_email} is now an ADMIN.")
+                else:
+                    print(f"ℹ️ {target_email} is already an Admin.")
+            else:
+                print(f"⚠️ Admin Check: User {target_email} not found. Please Sign Up first.")
+                
+    except Exception as e:
+        print(f"❌ Failed to ensure admin: {e}")
+
+@app.on_event("startup")
+async def startup_event():
+    await ensure_default_admin()
 
 # =========================
 # HEALTH CHECK
