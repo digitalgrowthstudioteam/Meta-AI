@@ -1,10 +1,9 @@
-mkdir -p frontend_next/app/admin/ai-actions
-
-cat > frontend_next/app/admin/ai-actions/page.tsx <<EOF
 'use client';
 
 import useSWR from 'swr';
-import { fetcher } from '@/lib/fetcher';
+
+// Simple fetcher to avoid import path issues
+const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 export default function AdminAiActionsLogPage() {
   // ADMIN API: Fetches system-wide log of AI actions
@@ -37,24 +36,24 @@ export default function AdminAiActionsLogPage() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {actions?.length === 0 ? (
+            {(!actions || actions.length === 0) ? (
               <tr>
                 <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
                   No AI actions found in system logs.
                 </td>
               </tr>
             ) : (
-              actions?.map((action: any) => (
+              actions.map((action: any) => (
                 <tr key={action.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                     {action.action_type}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <span className={\`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                      \${action.status === 'executed' ? 'bg-green-100 text-green-800' : 
+                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                      ${action.status === 'executed' ? 'bg-green-100 text-green-800' : 
                         action.status === 'failed' ? 'bg-red-100 text-red-800' : 
                         action.status === 'pending' ? 'bg-blue-100 text-blue-800' : 
-                        'bg-gray-100 text-gray-800'}\`}>
+                        'bg-gray-100 text-gray-800'}`}>
                       {action.status?.toUpperCase()}
                     </span>
                   </td>
@@ -76,4 +75,3 @@ export default function AdminAiActionsLogPage() {
     </div>
   );
 }
-EOF
