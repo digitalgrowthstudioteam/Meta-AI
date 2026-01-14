@@ -1,75 +1,117 @@
 'use client';
 
-import useSWR from 'swr';
-import { fetcher } from '@/lib/fetcher';
+import { useEffect, useState } from "react";
+import { 
+  TrendingUp, 
+  TrendingDown, 
+  PauseCircle, 
+  PlayCircle, 
+  AlertCircle, 
+  CheckCircle 
+} from "lucide-react";
+import toast from "react-hot-toast";
+// FIXED: Changed from "@/lib/fetcher" to relative path
+import { apiFetch } from "../lib/fetcher";
 
-export default function AdminAiActionsLogPage() {
-  // ADMIN API: Fetches system-wide log of AI actions
-  const { data: actions, error, isLoading } = useSWR('/api/admin/ai-actions', fetcher);
+// ... (Keep the rest of the file exactly as it is, just change the import at the top) ...
 
-  if (error) return <div className="p-6 text-red-500">Error loading System Logs: {error.message}</div>;
-  if (isLoading) return <div className="p-6 text-gray-500">Loading Global AI Queue...</div>;
+type AIAction = {
+  id: string;
+  campaign_id: string;
+  campaign_name: string;
+  action_type: "SCALE_BUDGET" | "REDUCE_BUDGET" | "PAUSE_ADS" | "ENABLE_ADS";
+  reason: string;
+  confidence_score: number;
+  suggested_value?: string;
+  status: "PENDING" | "APPLIED" | "DISMISSED";
+  created_at: string;
+};
+
+export default function AiActionsPage() {
+  const [actions, setActions] = useState<AIAction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+
+  const loadActions = async () => {
+    try {
+      setLoading(true);
+      const res = await apiFetch("/api/ai/actions/pending", {
+        cache: "no-store",
+      });
+      
+      if (res.ok) {
+        const json = await res.json();
+        setActions(json || []);
+      } else {
+        setActions([]);
+      }
+    } catch (e) {
+      console.error("Failed to load actions", e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadActions();
+  }, []);
+
+  const handleAction = async (actionId: string, decision: "APPLY" | "DISMISS") => {
+    setProcessingId(actionId);
+    try {
+      const endpoint = decision === "APPLY" 
+        ? `/api/ai/actions/${actionId}/apply` 
+        : `/api/ai/actions/${actionId}/dismiss`;
+
+      await apiFetch(endpoint, { method: "POST" });
+      toast.success(decision === "APPLY" ? "Action applied" : "Action dismissed");
+      setActions((prev) => prev.filter((a) => a.id !== actionId));
+    } catch (error) {
+      toast.error("Failed to process action");
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const getActionIcon = (type: string) => {
+    switch (type) {
+      case "SCALE_BUDGET": return <TrendingUp className="h-5 w-5 text-green-600" />;
+      case "REDUCE_BUDGET": return <TrendingDown className="h-5 w-5 text-orange-600" />;
+      case "PAUSE_ADS": return <PauseCircle className="h-5 w-5 text-red-600" />;
+      case "ENABLE_ADS": return <PlayCircle className="h-5 w-5 text-blue-600" />;
+      default: return <AlertCircle className="h-5 w-5 text-gray-600" />;
+    }
+  };
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Global AI Action Queue</h1>
-          <p className="text-sm text-gray-500">System-wide log of all AI decisions and executions.</p>
+    <div className="space-y-6">
+      <h1 className="text-xl font-semibold">AI Recommendations</h1>
+      {loading ? (
+        <div className="text-center py-12">Loading...</div>
+      ) : actions.length === 0 ? (
+        <div className="text-center py-12 border rounded-lg">
+          <CheckCircle className="mx-auto h-10 w-10 text-green-500 mb-2" />
+          <h3>All caught up!</h3>
         </div>
-        <span className="bg-purple-100 text-purple-800 text-xs font-medium px-2.5 py-0.5 rounded">
-          {actions?.length || 0} Records Found
-        </span>
-      </div>
-
-      <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action Type</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Campaign ID</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reasoning</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Timestamp</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {actions?.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
-                  No AI actions found in system logs.
-                </td>
-              </tr>
-            ) : (
-              actions?.map((action: any) => (
-                <tr key={action.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {action.action_type}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                      ${action.status === 'executed' ? 'bg-green-100 text-green-800' : 
-                        action.status === 'failed' ? 'bg-red-100 text-red-800' : 
-                        action.status === 'pending' ? 'bg-blue-100 text-blue-800' : 
-                        'bg-gray-100 text-gray-800'}`}>
-                      {action.status?.toUpperCase()}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-500 font-mono">
-                    {action.campaign_id}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-gray-500 max-w-sm truncate" title={action.reason}>
-                    {action.reason || 'No specific reason logged'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {action.created_at ? new Date(action.created_at).toLocaleString() : '-'}
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      ) : (
+        <div className="grid gap-4">
+          {actions.map((action) => (
+            <div key={action.id} className="bg-white border p-4 rounded-lg flex justify-between items-center">
+              <div className="flex gap-4">
+                <div className="p-2 bg-gray-50 rounded">{getActionIcon(action.action_type)}</div>
+                <div>
+                  <h3 className="font-medium">{action.action_type}</h3>
+                  <p className="text-sm text-gray-500">{action.reason}</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => handleAction(action.id, "DISMISS")} disabled={!!processingId} className="px-3 py-1 border rounded text-sm">Dismiss</button>
+                <button onClick={() => handleAction(action.id, "APPLY")} disabled={!!processingId} className="px-3 py-1 bg-indigo-600 text-white rounded text-sm">Apply</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
