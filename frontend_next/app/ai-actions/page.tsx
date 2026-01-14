@@ -47,11 +47,11 @@ export default function AdminAiActionsLogPage() {
                     {action.action_type}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <span className={\`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
-                      \${action.status === 'executed' ? 'bg-green-100 text-green-800' : 
+                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                      ${action.status === 'executed' ? 'bg-green-100 text-green-800' : 
                         action.status === 'failed' ? 'bg-red-100 text-red-800' : 
                         action.status === 'pending' ? 'bg-blue-100 text-blue-800' : 
-                        'bg-gray-100 text-gray-800'}\`}>
+                        'bg-gray-100 text-gray-800'}`}>
                       {action.status?.toUpperCase()}
                     </span>
                   </td>
@@ -73,4 +73,3 @@ export default function AdminAiActionsLogPage() {
     </div>
   );
 }
-EOF
