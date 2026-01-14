@@ -5,7 +5,7 @@ from typing import Optional
 
 from app.core.db_session import get_db
 from app.campaigns.models import Campaign
-from app.meta_api.models import MetaAdAccount
+from app.meta_api.models import MetaAdAccount, UserMetaAdAccount
 from app.auth.dependencies import require_admin
 
 router = APIRouter(prefix="/admin/campaigns", tags=["Admin Campaigns"])
@@ -17,17 +17,20 @@ async def list_campaigns(
     user_id: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
-    # Base query with JOIN to access user_id through ad accounts
+    # FIXED: Join UserMetaAdAccount to get the real user_id
+    # Campaign -> MetaAdAccount -> UserMetaAdAccount (Owner)
     stmt = (
-        select(Campaign, MetaAdAccount.user_id)
+        select(Campaign, UserMetaAdAccount.user_id)
         .join(MetaAdAccount, Campaign.ad_account_id == MetaAdAccount.id)
+        .join(UserMetaAdAccount, MetaAdAccount.id == UserMetaAdAccount.meta_ad_account_id)
     )
 
     if ai_active is not None:
         stmt = stmt.where(Campaign.ai_active == ai_active)
 
     if user_id:
-        stmt = stmt.where(MetaAdAccount.user_id == user_id)
+        # FIXED: Filter using the correct table
+        stmt = stmt.where(UserMetaAdAccount.user_id == user_id)
 
     result = await db.execute(
         stmt.order_by(Campaign.created_at.desc())
