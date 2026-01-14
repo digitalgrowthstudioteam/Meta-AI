@@ -1,4 +1,3 @@
-cat > app/admin/rbac.py <<EOF
 from fastapi import HTTPException
 from app.users.models import User
 
@@ -15,8 +14,7 @@ def assert_admin_permission(user: User, required_permission: str):
             status_code=403, 
             detail=f"Missing permission: {required_permission}"
         )
-    
+
     # In the future, we can add granular permission checks here.
     # For now, being an 'admin' grants everything.
     return True
-EOF
