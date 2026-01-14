@@ -32,20 +32,12 @@ if config.config_file_name:
     fileConfig(config.config_file_name)
 
 # =========================================================
-# Import ONLY real models
+# Import ALL models via the central init file
 # =========================================================
 from app.core.database import Base
 
-import app.auth.models
-import app.users.models
-import app.plans.models
-import app.plans.subscription_models
-import app.meta_api.models
-import app.campaigns.models
-import app.meta_insights.models.campaign_daily_metrics
-import app.meta_insights.models.campaign_breakdown_daily_metrics
-import app.admin.models
-import app.ai_engine.models.action_models
+# This single line imports everything in the correct order (Payment -> Subscription -> User)
+import app.models 
 
 target_metadata = Base.metadata
 
