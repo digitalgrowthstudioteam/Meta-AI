@@ -23,9 +23,14 @@ from app.meta_insights.routes import router as meta_insights_router
 from app.reports.routes import router as reports_router
 from app.dashboard.routes import router as dashboard_router
 from app.ai_engine.routes import router as ai_router
-from backend.app.admin.dashboard_routes import router as admin_dashboard_router
-from backend.app.admin.users_routes import router as admin_users_router
-from app.admin.revenue_routes import router as admin_revenue_router
+
+# 🔥 FIXED: Use the REAL admin router (Contains Dashboard, Users, Invoices, Audit)
+from app.admin.routes import router as admin_main_router
+
+# 🆕 ADMIN CAMPAIGN EXPLORER
+from app.admin.campaign_routes import router as admin_campaigns_router
+
+# SPECIFIC ADMIN SUB-ROUTERS
 from app.admin.revenue_routes import router as admin_revenue_router
 from app.admin.revenue_breakdown_routes import router as admin_revenue_breakdown_router
 from app.admin.revenue_monthly_routes import router as admin_revenue_monthly_router
@@ -37,14 +42,9 @@ from app.admin.user_ai_usage_routes import router as admin_user_ai_router
 from app.admin.ai_limit_dashboard_routes import router as admin_ai_limit_router
 from app.admin.ai_force_deactivate_routes import router as admin_ai_force_router
 
-# 🔒 ADMIN IMPERSONATION
-from backend.app.admin.impersonation_routes import router as admin_router
-
 # 🌍 SESSION CONTEXT
 from app.auth.session_routes import router as session_router
-
-# 🆕 ADMIN CAMPAIGN EXPLORER
-from app.admin.campaign_routes import router as admin_campaigns_router
+from app.billing.routes import router as billing_router 
 
 
 # =========================
@@ -84,25 +84,26 @@ app.mount(
 app.include_router(auth_router, prefix="/api")
 app.include_router(session_router, prefix="/api")
 app.include_router(campaigns_router, prefix="/api")
-app.include_router(admin_router, prefix="/api")
+app.include_router(billing_router, prefix="/api")  # User Billing
+
+# 🔥 ADMIN ROUTERS (FIXED ORDER)
+app.include_router(admin_main_router, prefix="/api") # Main Admin (Dashboard, Users, Invoices)
+app.include_router(admin_campaigns_router, prefix="/api") # Campaigns
+
+# Feature Admin Routers
 app.include_router(meta_router, prefix="/api")
 app.include_router(meta_insights_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(ai_router, prefix="/api")
-app.include_router(admin_dashboard_router, prefix="/api")
-app.include_router(admin_users_router, prefix="/api")
 
-# 🆕 ADMIN CAMPAIGN ROUTES
-app.include_router(admin_campaigns_router, prefix="/api")
+# Analytics Admin Routers
 app.include_router(admin_user_billing_router, prefix="/api")
-app.include_router(admin_revenue_router, prefix="/api")
 app.include_router(admin_revenue_router, prefix="/api")
 app.include_router(admin_revenue_breakdown_router, prefix="/api")
 app.include_router(admin_revenue_monthly_router, prefix="/api")
 app.include_router(admin_revenue_sanity_router, prefix="/api")
 app.include_router(admin_billing_health_router, prefix="/api")
-app.include_router(admin_user_billing_router, prefix="/api")
 app.include_router(admin_billing_timeline_router, prefix="/api")
 app.include_router(admin_user_ai_router, prefix="/api")
 app.include_router(admin_ai_limit_router, prefix="/api")
