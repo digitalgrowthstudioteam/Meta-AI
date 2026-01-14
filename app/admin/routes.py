@@ -7,19 +7,16 @@ from datetime import datetime, timedelta
 from app.core.db_session import get_db
 from app.auth.dependencies import require_user, forbid_impersonated_writes
 from app.users.models import User
-from app.campaigns.models import Campaign, CampaignActionLog
+from app.campaigns.models import Campaign
 from app.plans.subscription_models import Subscription, SubscriptionAddon
-from app.billing.invoice_models import Invoice  # <--- ADDED IMPORT
-
+from app.billing.invoice_models import Invoice
 from app.admin.models import AdminAuditLog
 from app.admin.service import AdminOverrideService
 from app.admin.pricing_service import AdminPricingConfigService
 from app.admin.rbac import assert_admin_permission
-
 from app.meta_insights.services.campaign_daily_metrics_sync_service import (
     CampaignDailyMetricsSyncService,
 )
-
 from app.admin.metrics_sync_routes import router as metrics_sync_router
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -128,7 +125,7 @@ async def list_admin_invoices(
     ]
 
 # ==========================================================
-# PHASE 7.2 — META API SETTINGS (AUDITED)
+# PHASE 7.2 — META API SETTINGS
 # ==========================================================
 @router.get("/meta-settings")
 async def get_meta_settings(
@@ -195,22 +192,10 @@ async def update_meta_settings(
     return {
         "status": "updated",
         "meta_sync_enabled": updated_settings.meta_sync_enabled,
-        "ai_globally_enabled": updated_settings.ai_globally_enabled,
-        "maintenance_mode": updated_settings.maintenance_mode,
-        "site_name": updated_settings.site_name,
-        "dashboard_title": updated_settings.dashboard_title,
-        "logo_url": updated_settings.logo_url,
-        "expansion_mode_enabled": updated_settings.expansion_mode_enabled,
-        "fatigue_mode_enabled": updated_settings.fatigue_mode_enabled,
-        "auto_pause_enabled": updated_settings.auto_pause_enabled,
-        "confidence_gating_enabled": updated_settings.confidence_gating_enabled,
-        "max_optimizations_per_day": updated_settings.max_optimizations_per_day,
-        "max_expansions_per_day": updated_settings.max_expansions_per_day,
-        "ai_refresh_frequency_minutes": updated_settings.ai_refresh_frequency_minutes,        
     }
 
 # ==========================================================
-# PHASE 7.13 — ADMIN SLOT CONTROLS (AUDITED)
+# PHASE 7.13 — ADMIN SLOT CONTROLS
 # ==========================================================
 @router.post("/slots/{addon_id}/extend")
 async def admin_extend_slot_expiry(
@@ -329,7 +314,7 @@ async def admin_adjust_slot_quantity(
     return {"status": "adjusted", "extra_ai_campaigns": addon.extra_ai_campaigns}
 
 # ==========================================================
-# PHASE 7 — PRICING CONFIG (ADMIN ONLY)
+# PHASE 7 — PRICING CONFIG
 # ==========================================================
 @router.get("/pricing-config/active")
 async def get_active_pricing_config(
@@ -413,9 +398,10 @@ async def activate_pricing_config(
     return {"status": "activated"}
 
 # ==========================================================
-# PHASE 6 — ADMIN AUDIT LOG VIEWER
+# PHASE 6 — ADMIN AUDIT LOG VIEWER (RENAMED TO MATCH FRONTEND)
 # ==========================================================
-@router.get("/audit-logs")
+# 🔥 FIXED: Changed from /audit-logs to /audit/actions to match frontend
+@router.get("/audit/actions")
 async def list_admin_audit_logs(
     *,
     db: AsyncSession = Depends(get_db),
@@ -538,7 +524,7 @@ async def force_meta_resync(
 router.include_router(metrics_sync_router)
 
 # ==========================================================
-# PHASE 8.3 — RISK ACTIONS (ADMIN ONLY)
+# RISK ACTIONS
 # ==========================================================
 @router.post("/risk/freeze-user")
 async def risk_freeze_user(
