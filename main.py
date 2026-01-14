@@ -18,7 +18,8 @@ from fastapi.middleware.cors import CORSMiddleware
 # =========================
 from sqlalchemy import select
 from app.users.models import User
-from app.core.db_session import async_session_factory
+# 🔥 FIXED: Changed 'async_session_factory' to 'AsyncSessionLocal'
+from app.core.db_session import AsyncSessionLocal
 
 # =========================
 # ROUTERS (API ONLY)
@@ -80,7 +81,7 @@ app.add_middleware(
 # =========================
 app.mount(
     "/static",
-    StaticFiles(directory="frontend", check_dir=False),
+    StaticFiles(directory="frontend_next", check_dir=False), 
     name="static",
 )
 
@@ -126,7 +127,8 @@ async def ensure_default_admin():
     target_email = "digitalgrowthstudioteam@gmail.com"
     
     try:
-        async with async_session_factory() as db:
+        # 🔥 FIXED: Using the correct session factory name
+        async with AsyncSessionLocal() as db:
             # Check if user exists
             result = await db.execute(select(User).where(User.email == target_email))
             user = result.scalar_one_or_none()
