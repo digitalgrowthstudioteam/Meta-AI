@@ -53,7 +53,7 @@ def build_magic_link_subject() -> str:
 
 
 # =========================================================
-# EMAIL SENDER (STRICT)
+# EMAIL SENDER
 # =========================================================
 def send_magic_link_email(
     to_email: str,
@@ -81,8 +81,6 @@ def send_magic_link_email(
     </html>
     """
 
-    # IMPORTANT:
-    # Do NOT swallow errors here.
     send_email(
         to_email=to_email,
         subject=subject,
@@ -100,12 +98,14 @@ async def request_magic_login(
 ) -> bool:
     """
     Returns:
-        True  -> email sent
-        False -> blocked / failed
+        True  -> email triggered
+        False -> rate-limited / blocked
     """
 
-    cutoff = datetime.utcnow() - timedelta(minutes=TOKEN_COOLDOWN_MINUTES)
+    now = datetime.utcnow()
+    cutoff = now - timedelta(minutes=TOKEN_COOLDOWN_MINUTES)
 
+    # 🔥 Remove expired or old unused tokens
     await db.execute(
         delete(MagicLoginToken).where(
             MagicLoginToken.email == email,
@@ -115,15 +115,17 @@ async def request_magic_login(
     )
     await db.commit()
 
+    # 🔒 Count ONLY recent tokens (cooldown window)
     result = await db.execute(
         select(MagicLoginToken).where(
             MagicLoginToken.email == email,
             MagicLoginToken.is_used.is_(False),
+            MagicLoginToken.created_at >= cutoff,
         )
     )
-    active_tokens = result.scalars().all()
+    recent_tokens = result.scalars().all()
 
-    if len(active_tokens) >= MAX_ACTIVE_TOKENS_PER_EMAIL:
+    if len(recent_tokens) >= MAX_ACTIVE_TOKENS_PER_EMAIL:
         return False
 
     raw_token, token_hash = create_magic_token_pair()
@@ -139,25 +141,15 @@ async def request_magic_login(
     await db.commit()
 
     subject = build_magic_link_subject()
-
     base_url = settings.PUBLIC_APP_URL.rstrip("/")
     magic_link = f"{base_url}/api/auth/verify?token={raw_token}"
 
-    try:
-        send_magic_link_email(
-            to_email=email,
-            magic_link=magic_link,
-            subject=subject,
-        )
-    except Exception:
-        # HARD FAIL — rollback token
-        await db.execute(
-            delete(MagicLoginToken).where(
-                MagicLoginToken.token_hash == token_hash
-            )
-        )
-        await db.commit()
-        return False
+    # send_email NEVER raises — this will not fail silently anymore
+    send_magic_link_email(
+        to_email=email,
+        magic_link=magic_link,
+        subject=subject,
+    )
 
     return True
 
@@ -187,7 +179,6 @@ async def verify_magic_login(
     await db.commit()
 
     user = await _get_or_create_user(db, magic_token.email)
-
     session = await create_session(db, user)
 
     user.last_login_at = datetime.utcnow()
