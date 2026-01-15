@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 export async function GET(request: NextRequest) {
-  const backendUrl = `${process.env.NEXT_PUBLIC_BACKEND_URL}/admin/dashboard`;
+  // ✅ FIX: match backend route exactly
+  const backendUrl = `${process.env.NEXT_PUBLIC_BACKEND_URL}/admin/dashboard/summary`;
 
   const res = await fetch(backendUrl, {
     method: "GET",
