@@ -1,5 +1,14 @@
 const BACKEND_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "") ||
+  "http://127.0.0.1:8000";
+
+/**
+ * Ensure a leading slash, no double-slash
+ */
+function normalize(path: string) {
+  if (!path.startsWith("/")) return `/${path}`;
+  return path;
+}
 
 export async function apiFetch(endpoint: string, options: RequestInit = {}) {
   const impersonate =
@@ -17,16 +26,17 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
     headers.set("Content-Type", "application/json");
   }
 
+  const _path = normalize(endpoint);
+
   /**
-   * 🔒 ROUTING RULE (CRITICAL)
-   * - /api/*  → Next.js API routes (same origin)
-   * - others  → Backend API
+   * RULES:
+   * /api/*         → Next.js internal API
+   * /backend/*     → Maps to backend, strips /backend
+   * everything else → calls backend
    */
-  const url = endpoint.startsWith("/api")
-    ? endpoint
-    : endpoint.startsWith("http")
-    ? endpoint
-    : `${BACKEND_URL}${endpoint}`;
+  const url = _path.startsWith("/api/")
+    ? _path // Next.js API
+    : `${BACKEND_URL}${_path}`; // Backend API
 
   return fetch(url, {
     ...options,
