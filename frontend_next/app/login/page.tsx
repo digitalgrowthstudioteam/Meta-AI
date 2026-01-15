@@ -25,9 +25,9 @@ export default function LoginPage() {
       const res = await apiFetch("/api/auth/login", {
         method: "POST",
         headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
+          "Content-Type": "application/json",
         },
-        body: new URLSearchParams({ email }),
+        body: JSON.stringify({ email }),
       });
 
       if (!res.ok) {
@@ -37,7 +37,7 @@ export default function LoginPage() {
 
       setSent(true);
       setCooldown(60);
-    } catch (err: any) {
+    } catch (err) {
       console.error("Login error:", err);
       setError("Failed to send login link. Please try again.");
     } finally {
