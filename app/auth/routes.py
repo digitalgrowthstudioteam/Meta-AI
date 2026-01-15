@@ -23,7 +23,7 @@ router = APIRouter(tags=["auth"])
 
 
 # =========================================================
-# REQUEST MAGIC LINK (JSON BODY)
+# REQUEST MAGIC LINK
 # =========================================================
 @router.post("/auth/login")
 async def login_request(
@@ -50,7 +50,7 @@ async def login_request(
 
 
 # =========================================================
-# VERIFY MAGIC LINK (SET COOKIES + REDIRECT)
+# VERIFY MAGIC LINK (SET COOKIE + REDIRECT)
 # =========================================================
 @router.get("/auth/verify")
 async def verify_login(
@@ -66,18 +66,12 @@ async def verify_login(
             detail="Invalid or expired login link",
         )
 
-    # 🔐 Resolve user to determine role
-    user = await require_user(
-        request=None,  # not used inside dependency
-        db=db,
-    )
-
     response = RedirectResponse(
         url=next,
         status_code=status.HTTP_302_FOUND,
     )
 
-    # 🔑 SESSION COOKIE
+    # 🔑 SESSION COOKIE (ONLY SOURCE OF AUTH)
     response.set_cookie(
         key="meta_ai_session",
         value=session_token,
@@ -88,16 +82,8 @@ async def verify_login(
         max_age=60 * 60 * 24 * 3,  # 3 days
     )
 
-    # 🔒 ROLE COOKIE (CRITICAL FOR MIDDLEWARE)
-    response.set_cookie(
-        key="meta_ai_role",
-        value=user.role,          # "admin" | "user"
-        httponly=False,           # middleware must read
-        secure=True,
-        samesite="none",
-        path="/",
-        max_age=60 * 60 * 24 * 3,
-    )
+    # ❗ DO NOT SET ROLE COOKIE HERE
+    # Role is resolved server-side from session every request
 
     return response
 
@@ -129,7 +115,6 @@ async def logout(
     )
 
     response.delete_cookie(key="meta_ai_session", path="/")
-    response.delete_cookie(key="meta_ai_role", path="/")
 
     return response
 
