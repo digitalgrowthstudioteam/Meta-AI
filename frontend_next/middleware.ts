@@ -18,7 +18,7 @@ export function middleware(request: NextRequest) {
 
   const session = request.cookies.get("meta_ai_session")?.value;
 
-  // Block unauthenticated users
+  // 🔒 Block unauthenticated users
   if (!session && !PUBLIC_PATHS.includes(pathname)) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
@@ -27,13 +27,13 @@ export function middleware(request: NextRequest) {
   }
 
   /**
-   * IMPORTANT:
-   * Do NOT role-block admin routes in middleware.
-   * Backend already enforces admin permissions.
-   * Cookie-based role check is unreliable here.
+   * ❗ IMPORTANT (DO NOT CHANGE)
+   * - NO admin role checks in middleware
+   * - Backend (FastAPI) is the single authority for admin permissions
+   * - Middleware must stay auth-only
    */
 
-  // Logged-in users hitting root/login → user dashboard
+  // Logged-in users hitting root or login → dashboard
   if (session && (pathname === "/" || pathname === "/login")) {
     const dashboard = request.nextUrl.clone();
     dashboard.pathname = "/dashboard";
