@@ -1,7 +1,11 @@
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 export async function apiFetch(endpoint: string, options: RequestInit = {}) {
-  const impersonate = typeof window !== "undefined" ? sessionStorage.getItem("impersonate_user") : null;
+  const impersonate =
+    typeof window !== "undefined"
+      ? sessionStorage.getItem("impersonate_user")
+      : null;
 
   const headers = new Headers(options.headers || {});
 
@@ -14,8 +18,14 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
     headers.set("Content-Type", "application/json");
   }
 
-  // Construct full URL if it's a relative path
-  const url = endpoint.startsWith("http") ? endpoint : `${BASE_URL}${endpoint}`;
+  // 🔒 CRITICAL FIX:
+  // /api/* → Next.js
+  // everything else → backend
+  const url = endpoint.startsWith("/api/")
+    ? endpoint
+    : endpoint.startsWith("http")
+    ? endpoint
+    : `${BACKEND_URL}${endpoint}`;
 
   return fetch(url, {
     ...options,
