@@ -6,7 +6,7 @@ const PUBLIC_PATHS = ["/", "/login", "/verify"];
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow Next internals & APIs
+  // Allow Next internals & assets
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
@@ -17,7 +17,6 @@ export function middleware(request: NextRequest) {
   }
 
   const session = request.cookies.get("meta_ai_session")?.value;
-  const role = request.cookies.get("meta_ai_role")?.value; // admin | user
 
   // Block unauthenticated users
   if (!session && !PUBLIC_PATHS.includes(pathname)) {
@@ -27,14 +26,14 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // HARD admin protection
-  if (pathname.startsWith("/admin") && role !== "admin") {
-    const dashboard = request.nextUrl.clone();
-    dashboard.pathname = "/dashboard";
-    return NextResponse.redirect(dashboard);
-  }
+  /**
+   * IMPORTANT:
+   * Do NOT role-block admin routes in middleware.
+   * Backend already enforces admin permissions.
+   * Cookie-based role check is unreliable here.
+   */
 
-  // Logged-in users should land on USER dashboard (not forced admin)
+  // Logged-in users hitting root/login → user dashboard
   if (session && (pathname === "/" || pathname === "/login")) {
     const dashboard = request.nextUrl.clone();
     dashboard.pathname = "/dashboard";
