@@ -6,9 +6,11 @@ import { Menu, X, ChevronRight, ChevronDown } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 
 type SessionContext = {
-  user: {
-    email: string;
-    is_admin: boolean;
+  is_admin?: boolean;
+  user?: {
+    email?: string;
+    role?: string;
+    is_admin?: boolean;
     is_impersonated?: boolean;
     impersonated_by?: string | null;
     impersonation_mode?: string | null;
@@ -63,7 +65,14 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     return <div className="p-6 text-sm text-gray-500">Loading admin…</div>;
   }
 
-  if (!session?.user.is_admin) {
+  /**
+   * 🔒 ADMIN CHECK — SINGLE SOURCE OF TRUTH
+   * Trust root-level is_admin (backend enforced)
+   */
+  const isAdmin =
+    session?.is_admin === true || session?.user?.role === "admin";
+
+  if (!isAdmin) {
     return (
       <div className="p-6 text-sm text-red-600">
         Access denied — Admin only.
@@ -71,14 +80,13 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  const isImpersonating = !!session.user.is_impersonated;
-  const writeBlocked = !!session.user.write_blocked;
+  const isImpersonating = !!session?.user?.is_impersonated;
+  const writeBlocked = !!session?.user?.write_blocked;
 
   return (
     <div className="flex h-screen w-screen bg-slate-50 overflow-hidden text-gray-900">
       <Toaster position="bottom-right" />
 
-      {/* 🔴 IMPERSONATION BANNER (HARD) */}
       {isImpersonating && (
         <div className="fixed top-0 inset-x-0 z-50 bg-red-600 text-white text-sm px-4 py-2 flex items-center justify-between">
           <div>
@@ -101,12 +109,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       )}
 
       <aside
-        className={`
-          fixed md:static z-40 inset-y-0 left-0 w-64 bg-white border-r
-          flex flex-col transform transition-transform duration-200
-          ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
-          md:translate-x-0
-        `}
+        className={`fixed md:static z-40 inset-y-0 left-0 w-64 bg-white border-r
+        flex flex-col transform transition-transform duration-200
+        ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+        md:translate-x-0`}
         style={{ marginTop: isImpersonating ? 40 : 0 }}
       >
         <div className="px-5 py-4 border-b flex items-center justify-between">
@@ -151,39 +157,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             </NavItem>
           </SidebarGroup>
 
-          <SidebarGroup label="Billing">
-            <NavItem href="/admin/billing" pathname={pathname}>
-              Subscriptions
-            </NavItem>
-            <NavItem href="/admin/invoices" pathname={pathname}>
-              Invoices
-            </NavItem>
-            <NavItem href="/admin/razorpay" pathname={pathname}>
-              Razorpay Logs
-            </NavItem>
-          </SidebarGroup>
-
           <SidebarGroup label="Audit & Compliance">
             <NavItem href="/admin/audit" pathname={pathname}>
               Audit Logs
             </NavItem>
             <NavItem href="/admin/reports" pathname={pathname}>
               Reports
-            </NavItem>
-          </SidebarGroup>
-
-          <SidebarGroup label="System">
-            <NavItem href="/admin/settings" pathname={pathname}>
-              Global Settings
-            </NavItem>
-            <NavItem href="/admin/metrics" pathname={pathname}>
-              Metrics Sync
-            </NavItem>
-            <NavItem href="/admin/feature-flags" pathname={pathname}>
-              Feature Flags
-            </NavItem>
-            <NavItem href="/admin/risk" pathname={pathname}>
-              Risk & Safety
             </NavItem>
           </SidebarGroup>
         </nav>
