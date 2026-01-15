@@ -26,7 +26,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<SessionContext | null>(null);
   const [loaded, setLoaded] = useState(false);
 
-  // Load session
+  // Load session context
   useEffect(() => {
     (async () => {
       try {
@@ -65,10 +65,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     return <div className="p-6 text-sm text-gray-500">Loading admin…</div>;
   }
 
-  /**
-   * 🔒 ADMIN CHECK — SINGLE SOURCE OF TRUTH
-   * Trust root-level is_admin (backend enforced)
-   */
   const isAdmin =
     session?.is_admin === true || session?.user?.role === "admin";
 
@@ -157,12 +153,39 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             </NavItem>
           </SidebarGroup>
 
+          <SidebarGroup label="Billing">
+            <NavItem href="/admin/billing" pathname={pathname}>
+              Subscriptions
+            </NavItem>
+            <NavItem href="/admin/invoices" pathname={pathname}>
+              Invoices
+            </NavItem>
+            <NavItem href="/admin/razorpay" pathname={pathname}>
+              Razorpay Logs
+            </NavItem>
+          </SidebarGroup>
+
           <SidebarGroup label="Audit & Compliance">
             <NavItem href="/admin/audit" pathname={pathname}>
               Audit Logs
             </NavItem>
             <NavItem href="/admin/reports" pathname={pathname}>
               Reports
+            </NavItem>
+          </SidebarGroup>
+
+          <SidebarGroup label="System">
+            <NavItem href="/admin/settings" pathname={pathname}>
+              Global Settings
+            </NavItem>
+            <NavItem href="/admin/metrics" pathname={pathname}>
+              Metrics Sync
+            </NavItem>
+            <NavItem href="/admin/feature-flags" pathname={pathname}>
+              Feature Flags
+            </NavItem>
+            <NavItem href="/admin/risk" pathname={pathname}>
+              Risk & Safety
             </NavItem>
           </SidebarGroup>
         </nav>
