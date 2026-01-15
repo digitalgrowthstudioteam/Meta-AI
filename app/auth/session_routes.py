@@ -1,5 +1,5 @@
 """
-Session Context Routes — COOKIE MODE (NO DB is_selected)
+Session Context Routes — COOKIE MODE (NO DB writes)
 SINGLE SOURCE OF TRUTH for frontend state
 
 Exposes:
@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.db_session import get_db
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user_optional
 from app.users.models import User
 from app.meta_api.models import MetaAdAccount, UserMetaAdAccount
 
@@ -34,11 +34,23 @@ async def session_context(
     request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User | None = Depends(get_current_user_optional),
 ):
     """
     GLOBAL SESSION CONTEXT
     """
+
+    # If user not logged in → return safe JSON (avoid redirect loops)
+    if not user:
+        return {
+            "is_logged_in": False,
+            "is_admin": False,
+            "admin_view": False,
+            "ad_accounts": [],
+            "active_ad_account_id": None,
+            "ad_account": None,
+            "user": None,
+        }
 
     # -----------------------------
     # ADMIN / USER VIEW MODE
@@ -105,6 +117,7 @@ async def session_context(
     # RESPONSE
     # -----------------------------
     return {
+        "is_logged_in": True,
         "user": {
             "id": str(user.id),
             "email": user.email,
@@ -126,11 +139,14 @@ async def set_active_ad_account(
     payload: dict,
     response: Response,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_current_user_optional),
 ):
     """
     Switch active account using cookie (NO DB writes)
     """
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Not logged in")
 
     account_id = payload.get("account_id")
     if not account_id:
