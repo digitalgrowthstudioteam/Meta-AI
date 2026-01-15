@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { apiFetch } from "../../../lib/fetcher";
+import { apiFetch } from "../../lib/fetcher";
 
 type AdminUser = {
   id: string;
@@ -158,9 +158,7 @@ export default function AdminUserDetailPage() {
               <div>Invoice #{i.id}</div>
               <div>Amount: ₹{i.total_amount}</div>
               <div>Status: {i.status}</div>
-              <div>
-                Date: {new Date(i.created_at).toLocaleDateString()}
-              </div>
+              <div>Date: {new Date(i.created_at).toLocaleDateString()}</div>
             </div>
           ))}
         </Card>
