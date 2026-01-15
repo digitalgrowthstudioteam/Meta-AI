@@ -34,11 +34,16 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(dashboard);
   }
 
-  // Logged-in users should NOT be auto-forced to admin
+  // Logged-in users should land on USER dashboard (not forced admin)
   if (session && (pathname === "/" || pathname === "/login")) {
     const dashboard = request.nextUrl.clone();
     dashboard.pathname = "/dashboard";
     return NextResponse.redirect(dashboard);
   }
 
-  return NextResponse.next(
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+};
