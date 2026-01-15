@@ -45,6 +45,30 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   }
 
   /**
+   * 🛑 ADMIN SHOULD NEVER ENTER USER ROUTES
+   */
+  if (
+    pathname === "/dashboard" ||
+    pathname.startsWith("/campaigns") ||
+    pathname.startsWith("/ai-actions") ||
+    pathname.startsWith("/billing") ||
+    pathname.startsWith("/settings") ||
+    pathname.startsWith("/reports")
+  ) {
+    return (
+      <html lang="en">
+        <body>
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `window.location.href='/admin/dashboard'`,
+            }}
+          />
+        </body>
+      </html>
+    );
+  }
+
+  /**
    * PUBLIC ROUTES
    */
   if (pathname === "/" || pathname === "/login") {
@@ -176,9 +200,7 @@ function UserShell({ children }: { children: ReactNode }) {
               <button onClick={() => setSidebarOpen(true)}>
                 <Menu size={22} />
               </button>
-              <span className="text-sm font-medium">
-                Digital Growth Studio
-              </span>
+              <span className="text-sm font-medium">Digital Growth Studio</span>
             </header>
 
             <main className="flex-1 overflow-y-auto p-4 md:p-8">
