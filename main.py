@@ -18,7 +18,6 @@ from fastapi.middleware.cors import CORSMiddleware
 # =========================
 from sqlalchemy import select
 from app.users.models import User
-# 🔥 FIXED: Changed 'async_session_factory' to 'AsyncSessionLocal'
 from app.core.db_session import AsyncSessionLocal
 
 # =========================
@@ -32,13 +31,11 @@ from app.reports.routes import router as reports_router
 from app.dashboard.routes import router as dashboard_router
 from app.ai_engine.routes import router as ai_router
 
-# 🔥 FIXED: Use the REAL admin router (Contains Dashboard, Users, Invoices, Audit)
+# 🔥 REAL admin router
 from app.admin.routes import router as admin_main_router
 
-# 🆕 ADMIN CAMPAIGN EXPLORER
+# Admin extra routers
 from app.admin.campaign_routes import router as admin_campaigns_router
-
-# SPECIFIC ADMIN SUB-ROUTERS
 from app.admin.revenue_routes import router as admin_revenue_router
 from app.admin.revenue_breakdown_routes import router as admin_revenue_breakdown_router
 from app.admin.revenue_monthly_routes import router as admin_revenue_monthly_router
@@ -52,8 +49,8 @@ from app.admin.ai_force_deactivate_routes import router as admin_ai_force_router
 
 # 🌍 SESSION CONTEXT
 from app.auth.session_routes import router as session_router
-from app.billing.routes import router as billing_router 
-
+from app.auth.session_routes import api_router as session_api_router
+from app.billing.routes import router as billing_router
 
 # =========================
 # APP INITIALIZATION
@@ -65,47 +62,48 @@ app = FastAPI(
 )
 
 # =========================
-# CORS MIDDLEWARE (ADDED)
+# CORS MIDDLEWARE
 # =========================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins for Phase 1 connectivity
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
 # =========================
-# STATIC FILES (KEEP — UNUSED)
+# STATIC FILES (UNUSED)
 # =========================
 app.mount(
     "/static",
-    StaticFiles(directory="frontend_next", check_dir=False), 
+    StaticFiles(directory="frontend_next", check_dir=False),
     name="static",
 )
-
 
 # =========================
 # API ROUTERS — SINGLE SOURCE
 # =========================
+
+# Auth / Session
 app.include_router(auth_router, prefix="/api")
 app.include_router(session_router, prefix="/api")
+app.include_router(session_api_router)  # <-- FIX: Enables /api/session/context
 app.include_router(campaigns_router, prefix="/api")
-app.include_router(billing_router, prefix="/api")  # User Billing
+app.include_router(billing_router, prefix="/api")
 
-# 🔥 ADMIN ROUTERS (FIXED ORDER)
-app.include_router(admin_main_router, prefix="/api") # Main Admin (Dashboard, Users, Invoices)
-app.include_router(admin_campaigns_router, prefix="/api") # Campaigns
+# Admin Core
+app.include_router(admin_main_router, prefix="/api")
+app.include_router(admin_campaigns_router, prefix="/api")
 
-# Feature Admin Routers
+# Meta / Insights / Reporting
 app.include_router(meta_router, prefix="/api")
 app.include_router(meta_insights_router, prefix="/api")
 app.include_router(reports_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(ai_router, prefix="/api")
 
-# Analytics Admin Routers
+# Admin Analytics Layer
 app.include_router(admin_user_billing_router, prefix="/api")
 app.include_router(admin_revenue_router, prefix="/api")
 app.include_router(admin_revenue_breakdown_router, prefix="/api")
@@ -125,14 +123,12 @@ async def ensure_default_admin():
     Automatically promotes the main email to Admin on startup.
     """
     target_email = "digitalgrowthstudioteam@gmail.com"
-    
+
     try:
-        # 🔥 FIXED: Using the correct session factory name
         async with AsyncSessionLocal() as db:
-            # Check if user exists
             result = await db.execute(select(User).where(User.email == target_email))
             user = result.scalar_one_or_none()
-            
+
             if user:
                 if user.role != "admin":
                     print(f"🚀 Promoting {target_email} to ADMIN...")
@@ -143,9 +139,9 @@ async def ensure_default_admin():
                     print(f"ℹ️ {target_email} is already an Admin.")
             else:
                 print(f"⚠️ Admin Check: User {target_email} not found. Please Sign Up first.")
-                
     except Exception as e:
         print(f"❌ Failed to ensure admin: {e}")
+
 
 @app.on_event("startup")
 async def startup_event():
