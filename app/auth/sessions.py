@@ -53,7 +53,7 @@ async def create_session(
     Old sessions are revoked to avoid conflicts.
     """
 
-    # 🔒 Revoke all existing active sessions
+    # 🔒 Revoke all existing active sessions (NO revoked_at)
     await db.execute(
         update(Session)
         .where(
@@ -62,7 +62,6 @@ async def create_session(
         )
         .values(
             is_active=False,
-            revoked_at=datetime.now(timezone.utc),
         )
     )
 
@@ -117,7 +116,6 @@ async def revoke_session(
         .where(Session.session_token == session_token)
         .values(
             is_active=False,
-            revoked_at=datetime.now(timezone.utc),
         )
     )
     await db.commit()
@@ -135,7 +133,6 @@ async def revoke_all_sessions_for_user(
         )
         .values(
             is_active=False,
-            revoked_at=datetime.now(timezone.utc),
         )
     )
     await db.commit()
