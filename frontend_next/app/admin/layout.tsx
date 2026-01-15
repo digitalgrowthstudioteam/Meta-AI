@@ -31,7 +31,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     (async () => {
       try {
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_BACKEND_URL}/session/context`,
+          `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/session/context`,
           {
             credentials: "include",
             cache: "no-store",
@@ -55,7 +55,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   const exitImpersonation = async () => {
     await fetch(
-      `${process.env.NEXT_PUBLIC_BACKEND_URL}/admin/impersonate/exit`,
+      `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/impersonate/exit`,
       {
         method: "POST",
         credentials: "include",
