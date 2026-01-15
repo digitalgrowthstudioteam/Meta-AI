@@ -249,26 +249,27 @@ async def list_ai_actions(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
-    if AIAction is None:
-        return []
 
-    stmt = select(AIAction).order_by(AIAction.created_at.desc()).limit(limit)
+    # Query persistent campaign action logs instead of pydantic AIAction
+    stmt = select(CampaignActionLog).order_by(CampaignActionLog.created_at.desc()).limit(limit)
+
+    # Apply status filter using actor_type if provided
     if status:
-        stmt = stmt.where(AIAction.status == status)
-        
+        stmt = stmt.where(CampaignActionLog.actor_type.ilike(status))
+
     result = await db.execute(stmt)
-    actions = result.scalars().all()
+    logs = result.scalars().all()
 
     return [
         {
-            "id": str(a.id),
-            "campaign_id": str(a.campaign_id),
-            "action_type": a.action_type,
-            "status": a.status,
-            "reason": a.reason,
-            "created_at": a.created_at.isoformat()
+            "id": str(l.id),
+            "campaign_id": str(l.campaign_id),
+            "action_type": l.action_type,
+            "status": l.actor_type.upper() if l.actor_type else None,
+            "reason": l.reason,
+            "created_at": l.created_at.isoformat(),
         }
-        for a in actions
+        for l in logs
     ]
 
 @router.get("/ai-suggestions")
