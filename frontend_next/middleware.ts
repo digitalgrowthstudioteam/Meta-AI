@@ -6,7 +6,7 @@ const PUBLIC_PATHS = ["/", "/login", "/verify"];
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // 1. Always allow Next.js internals, APIs, and static assets
+  // 1️⃣ Always allow Next.js internals, APIs, static assets
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
@@ -17,8 +17,9 @@ export async function middleware(request: NextRequest) {
   }
 
   const session = request.cookies.get("meta_ai_session")?.value;
+  const role = request.cookies.get("meta_ai_role")?.value; // "admin" | "user"
 
-  // 2. Protect private routes
+  // 2️⃣ Block unauthenticated users
   if (!session && !PUBLIC_PATHS.includes(pathname)) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
@@ -26,11 +27,18 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // 3. Logged-in users → always land on admin dashboard
-  if (session && (pathname === "/login" || pathname === "/")) {
-    const adminUrl = request.nextUrl.clone();
-    adminUrl.pathname = "/admin/dashboard";
-    return NextResponse.redirect(adminUrl);
+  // 3️⃣ 🔒 HARD ADMIN PROTECTION
+  if (pathname.startsWith("/admin") && role !== "admin") {
+    const userDashboard = request.nextUrl.clone();
+    userDashboard.pathname = "/dashboard";
+    return NextResponse.redirect(userDashboard);
+  }
+
+  // 4️⃣ Logged-in users visiting / or /login → USER dashboard (not admin)
+  if (session && (pathname === "/" || pathname === "/login")) {
+    const dashboardUrl = request.nextUrl.clone();
+    dashboardUrl.pathname = "/dashboard";
+    return NextResponse.redirect(dashboardUrl);
   }
 
   return NextResponse.next();
