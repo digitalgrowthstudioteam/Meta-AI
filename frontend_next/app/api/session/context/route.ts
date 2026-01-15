@@ -4,14 +4,10 @@ import type { NextRequest } from "next/server";
 /**
  * SESSION CONTEXT — SINGLE SOURCE OF TRUTH
  *
- * Adds:
- * - role awareness
- * - admin ↔ user view switch support
- *
  * Rules:
  * - Normal users NEVER see admin mode
- * - Admin can toggle admin_view = true | false
- * - Toggle state stored in cookie (server-trusted)
+ * - Admins default to admin_view = true
+ * - Toggle stored in cookie (admin_view=true|false)
  */
 
 export async function GET(req: NextRequest) {
@@ -22,7 +18,7 @@ export async function GET(req: NextRequest) {
   const res = await fetch(backend, {
     method: "GET",
     headers: {
-      cookie, // forward auth cookie
+      cookie,
     },
     credentials: "include",
     cache: "no-store",
@@ -41,15 +37,16 @@ export async function GET(req: NextRequest) {
    * -------------------------------
    * ADMIN ↔ USER VIEW SWITCH
    * -------------------------------
-   * Cookie: admin_view=true|false
    */
-  const adminViewCookie = req.cookies.get("admin_view")?.value === "true";
+  const adminViewCookie = req.cookies.get("admin_view")?.value;
 
   if (data?.user?.role === "admin") {
     data.is_admin = true;
-    data.admin_view = adminViewCookie;
+
+    // ✅ FIX: default admins into admin view
+    data.admin_view =
+      adminViewCookie === undefined ? true : adminViewCookie === "true";
   } else {
-    // 🔒 Hard lock for normal users
     data.is_admin = false;
     data.admin_view = false;
   }
