@@ -2,6 +2,10 @@
 const nextConfig = {
   reactStrictMode: false,
   swcMinify: true,
+
+  // 🔒 CRITICAL FIX: prevent static export / prerender of API routes
+  output: "standalone",
+
   images: {
     remotePatterns: [
       {
@@ -18,13 +22,15 @@ const nextConfig = {
       },
     ],
   },
-  // Ensure we can iterate fast without strict build blocking
+
+  // Speed-first, non-blocking
   typescript: {
     ignoreBuildErrors: true,
   },
   eslint: {
     ignoreDuringBuilds: true,
   },
+
   webpack: (config) => {
     return config;
   },
