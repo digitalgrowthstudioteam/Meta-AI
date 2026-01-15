@@ -55,12 +55,7 @@ export default function DashboardPage() {
 
       const json = await res.json();
 
-      // 🔒 ADMIN → FORCE REDIRECT
-      if (json?.user?.is_admin) {
-        router.replace("/admin/dashboard");
-        return;
-      }
-
+      // ❌ REMOVED AUTO-REDIRECT FOR ADMIN (INFINITE LOOP FIX)
       setSession(json);
     } catch (error) {
       console.error("Session load error:", error);
