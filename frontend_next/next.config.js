@@ -3,8 +3,12 @@ const nextConfig = {
   reactStrictMode: false,
   swcMinify: true,
 
-  // 🔒 CRITICAL FIX: prevent static export / prerender of API routes
-  output: "standalone",
+  // ✅ IMPORTANT:
+  // Use default server build (NO export, NO standalone)
+  // Required for:
+  // - app router
+  // - API routes
+  // - next start with systemd
 
   images: {
     remotePatterns: [
@@ -23,7 +27,7 @@ const nextConfig = {
     ],
   },
 
-  // Speed-first, non-blocking
+  // Non-blocking for speed
   typescript: {
     ignoreBuildErrors: true,
   },
