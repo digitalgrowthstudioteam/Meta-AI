@@ -22,17 +22,13 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await apiFetch("/auth/login", {
+      const res = await apiFetch("/api/auth/login", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({ email }),
       });
 
       if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || `HTTP ${res.status}`);
+        throw new Error(`HTTP ${res.status}`);
       }
 
       setSent(true);
@@ -59,7 +55,8 @@ export default function LoginPage() {
         {sent ? (
           <div className="mt-6 space-y-4">
             <div className="rounded-lg bg-green-50 p-4 text-sm text-green-700">
-              ✅ Login link sent successfully.  
+              ✅ Login link sent successfully.
+              <br />
               Please check your inbox and spam folder.
             </div>
 
