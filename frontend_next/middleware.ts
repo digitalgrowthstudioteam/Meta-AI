@@ -3,10 +3,10 @@ import type { NextRequest } from "next/server";
 
 const PUBLIC_PATHS = ["/", "/login", "/verify"];
 
-export async function middleware(request: NextRequest) {
+export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow internals
+  // Allow Next internals & APIs
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
@@ -19,7 +19,7 @@ export async function middleware(request: NextRequest) {
   const session = request.cookies.get("meta_ai_session")?.value;
   const role = request.cookies.get("meta_ai_role")?.value; // admin | user
 
-  // 🔒 Require login
+  // Block unauthenticated users
   if (!session && !PUBLIC_PATHS.includes(pathname)) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
@@ -27,17 +27,18 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // 🔒 HARD ADMIN ROUTE PROTECTION
+  // HARD admin protection
   if (pathname.startsWith("/admin") && role !== "admin") {
-    const dashboardUrl = request.nextUrl.clone();
-    dashboardUrl.pathname = "/dashboard";
-    return NextResponse.redirect(dashboardUrl);
+    const dashboard = request.nextUrl.clone();
+    dashboard.pathname = "/dashboard";
+    return NextResponse.redirect(dashboard);
   }
 
-  // ✅ DO NOT auto-redirect admin anywhere
-  return NextResponse.next();
-}
+  // Logged-in users should NOT be auto-forced to admin
+  if (session && (pathname === "/" || pathname === "/login")) {
+    const dashboard = request.nextUrl.clone();
+    dashboard.pathname = "/dashboard";
+    return NextResponse.redirect(dashboard);
+  }
 
-export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
-};
+  return NextResponse.next(
