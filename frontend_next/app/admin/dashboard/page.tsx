@@ -42,17 +42,19 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await apiFetch("/api/admin/dashboard", {
+        // ✅ FIX: correct backend admin route
+        const res = await apiFetch("/admin/dashboard", {
           cache: "no-store",
         });
-        if (res.ok) {
-          const json = await res.json();
-          setData(json);
-        } else {
+
+        if (!res.ok) {
           setData(null);
+          return;
         }
-      } catch (error) {
-        console.error("Failed to fetch admin dashboard", error);
+
+        const json = await res.json();
+        setData(json);
+      } catch {
         setData(null);
       } finally {
         setLoading(false);
@@ -60,7 +62,6 @@ export default function AdminDashboardPage() {
     })();
   }, []);
 
-  // Empty-safe mock series until backend series is fully wired
   const series = useMemo<TrendPoint[]>(() => {
     const days =
       range === "7d" ? 7 : range === "14d" ? 14 : range === "30d" ? 30 : 90;
@@ -106,7 +107,6 @@ export default function AdminDashboardPage() {
         </select>
       </div>
 
-      {/* KPI Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <KPI title="Total Users" value={data.users} />
         <KPI title="Active Subs" value={data.subscriptions.active} color="text-green-600" />
@@ -116,7 +116,6 @@ export default function AdminDashboardPage() {
         <KPI title="Manual Mode" value={data.campaigns.manual} color="text-orange-600" />
       </div>
 
-      {/* Trend Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ChartCard title="New Users / Day" data={series} />
         <ChartCard title="Revenue Trends" data={series} />
@@ -124,7 +123,6 @@ export default function AdminDashboardPage() {
         <ChartCard title="API Error Rates" data={series} />
       </div>
 
-      {/* System Status Footer */}
       <div className="rounded-lg bg-white shadow-sm ring-1 ring-gray-900/5 p-4 flex items-center justify-between text-sm">
         <div className="flex items-center gap-2">
           <span className="text-gray-500">System Status:</span>
@@ -172,60 +170,25 @@ function ChartCard({
 
   return (
     <div className="rounded-lg bg-white shadow-sm ring-1 ring-gray-900/5 p-6">
-      <h3 className="text-base font-semibold leading-6 text-gray-900 mb-4">{title}</h3>
+      <h3 className="text-base font-semibold leading-6 text-gray-900 mb-4">
+        {title}
+      </h3>
 
       {isEmpty ? (
         <div className="h-64 flex items-center justify-center rounded-lg border-2 border-dashed border-gray-200 bg-gray-50">
-          <div className="text-center">
-            <svg
-              className="mx-auto h-12 w-12 text-gray-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1}
-                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-              />
-            </svg>
-            <h3 className="mt-2 text-sm font-semibold text-gray-900">No Data Available</h3>
-            <p className="mt-1 text-sm text-gray-500">Trends will appear here once data accumulates.</p>
+          <div className="text-center text-sm text-gray-500">
+            No Data Available
           </div>
         </div>
       ) : (
         <div className="h-64 w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-              <XAxis 
-                dataKey="date" 
-                stroke="#6B7280" 
-                fontSize={12} 
-                tickLine={false} 
-                axisLine={false} 
-              />
-              <YAxis 
-                stroke="#6B7280" 
-                fontSize={12} 
-                tickLine={false} 
-                axisLine={false} 
-                tickFormatter={(value) => `${value}`} 
-              />
-              <Tooltip
-                contentStyle={{ backgroundColor: "#FFF", borderRadius: "8px", border: "1px solid #E5E7EB", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}
-                itemStyle={{ color: "#111827", fontSize: "14px", fontWeight: 500 }}
-              />
-              <Line
-                type="monotone"
-                dataKey="value"
-                stroke="#4F46E5"
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 6, strokeWidth: 0 }}
-              />
+            <LineChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="date" />
+              <YAxis />
+              <Tooltip />
+              <Line type="monotone" dataKey="value" stroke="#4F46E5" strokeWidth={2} />
             </LineChart>
           </ResponsiveContainer>
         </div>
