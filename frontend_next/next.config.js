@@ -2,6 +2,9 @@
 const nextConfig = {
   reactStrictMode: false,
 
+  // 🔒 REQUIRED — fixes missing chunks / 404 JS
+  output: "standalone",
+
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "**.fbcdn.net" },
@@ -10,8 +13,12 @@ const nextConfig = {
     ],
   },
 
-  typescript: { ignoreBuildErrors: true },
-  eslint: { ignoreDuringBuilds: true },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
 };
 
 module.exports = nextConfig;
