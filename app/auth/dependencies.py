@@ -8,7 +8,6 @@ from app.users.models import User
 from app.admin.models import GlobalSettings
 from app.meta_api.models import MetaAdAccount, UserMetaAdAccount
 from app.auth.sessions import get_active_session
-from app.campaigns.models import CampaignActionLog
 
 
 # =================================================
@@ -23,15 +22,13 @@ ADMIN_EMAILS = {
 # -------------------------------------------------
 # INTERNAL: LOAD GLOBAL SETTINGS
 # -------------------------------------------------
-async def _get_global_settings(
-    db: AsyncSession,
-) -> GlobalSettings | None:
+async def _get_global_settings(db: AsyncSession) -> GlobalSettings | None:
     result = await db.execute(select(GlobalSettings).limit(1))
     return result.scalar_one_or_none()
 
 
 # -------------------------------------------------
-# 🔐 COOKIE-BASED USER RESOLUTION
+# 🔐 COOKIE-BASED USER RESOLUTION (HARD ROLE ASSIGN)
 # -------------------------------------------------
 async def _resolve_user_from_session(
     request: Request,
@@ -44,20 +41,23 @@ async def _resolve_user_from_session(
 
     session = await get_active_session(db, session_token=session_token)
 
-    if not session:
+    if not session or not session.user:
         raise HTTPException(status_code=401, detail="Session expired")
 
     user = session.user
 
-    # 🔑 HARD ADMIN ROLE ASSIGNMENT
-    if user.email in ADMIN_EMAILS:
-        user.role = "admin"
+    # 🔑 HARD ADMIN ROLE
+    user.role = "admin" if user.email in ADMIN_EMAILS else "user"
+
+    # Defaults
+    user._is_impersonated = False
+    user._write_blocked = False
 
     return user
 
 
 # -------------------------------------------------
-# CORE USER RESOLVER (STRICT IMPERSONATION)
+# CORE USER RESOLVER (STRICT)
 # -------------------------------------------------
 async def get_current_user(
     request: Request,
@@ -73,7 +73,7 @@ async def get_current_user(
                 detail="System under maintenance",
             )
 
-    # 🔁 ADMIN IMPERSONATION (STRICT + READ-ONLY)
+    # 🔁 ADMIN IMPERSONATION
     impersonate_user = request.headers.get("X-Impersonate-User")
 
     if impersonate_user:
@@ -101,7 +101,7 @@ async def get_current_user(
                 detail="Impersonated user not found",
             )
 
-        # 🔒 HARD FLAGS — SINGLE SOURCE OF TRUTH
+        target_user.role = "user"
         target_user._is_impersonated = True
         target_user._impersonated_by = user.email
         target_user._impersonation_mode = "read_only"
@@ -109,14 +109,11 @@ async def get_current_user(
 
         return target_user
 
-    # Normal user
-    user._is_impersonated = False
-    user._write_blocked = False
     return user
 
 
 # -------------------------------------------------
-# 🌍 SESSION CONTEXT (IMPERSONATION-AWARE)
+# 🌍 SESSION CONTEXT (SINGLE SOURCE)
 # -------------------------------------------------
 async def get_session_context(
     db: AsyncSession = Depends(get_db),
@@ -138,7 +135,8 @@ async def get_session_context(
         "user": {
             "id": str(user.id),
             "email": user.email,
-            "is_admin": user.email in ADMIN_EMAILS,
+            "role": user.role,
+            "is_admin": user.role == "admin",
             "is_impersonated": getattr(user, "_is_impersonated", False),
             "impersonation_mode": getattr(user, "_impersonation_mode", None),
             "impersonated_by": getattr(user, "_impersonated_by", None),
@@ -166,7 +164,7 @@ def _safe_uuid_cast(value: str) -> UUID | None:
 
 
 # -------------------------------------------------
-# 🔒 GUARDS (CENTRALIZED WRITE BLOCK)
+# 🔒 GUARDS
 # -------------------------------------------------
 async def require_user(
     user: User = Depends(get_current_user),
@@ -177,7 +175,7 @@ async def require_user(
 async def require_admin(
     user: User = Depends(get_current_user),
 ) -> User:
-    if user.email not in ADMIN_EMAILS:
+    if user.role != "admin":
         raise HTTPException(
             status_code=403,
             detail="Admin access restricted",
