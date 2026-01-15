@@ -7,7 +7,7 @@ Auth Routes
 - /session/context   ✅ SINGLE SOURCE OF TRUTH
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Form, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,13 +23,21 @@ router = APIRouter(tags=["auth"])
 
 
 # =========================================================
-# REQUEST MAGIC LINK
+# REQUEST MAGIC LINK (JSON BODY)
 # =========================================================
 @router.post("/auth/login")
 async def login_request(
-    email: str = Form(...),
+    payload: dict,
     db: AsyncSession = Depends(get_db),
 ):
+    email = payload.get("email")
+
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email required",
+        )
+
     sent = await request_magic_login(db, email=email)
 
     if not sent:
@@ -38,7 +46,7 @@ async def login_request(
             detail="Failed to send login link",
         )
 
-    return None
+    return {"ok": True}
 
 
 # =========================================================
@@ -47,7 +55,7 @@ async def login_request(
 @router.get("/auth/verify")
 async def verify_login(
     token: str = Query(...),
-    next: str = Query("/dashboard"),
+    next: str = Query("/admin/dashboard"),
     db: AsyncSession = Depends(get_db),
 ):
     session_token = await verify_magic_login(db, raw_token=token)
@@ -117,14 +125,4 @@ async def logout(
 async def session_context(
     context: dict = Depends(get_session_context),
 ):
-    """
-    SINGLE SOURCE OF TRUTH FOR FRONTEND
-    Used by:
-    - layout.tsx
-    - dashboard
-    - campaigns
-    - ai-actions
-    - reports
-    - settings
-    """
     return context
