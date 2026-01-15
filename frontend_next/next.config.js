@@ -2,13 +2,6 @@
 const nextConfig = {
   reactStrictMode: false,
 
-  // ✅ REQUIRED for App Router + Node server
-  output: "standalone",
-
-  experimental: {
-    appDir: true,
-  },
-
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "**.fbcdn.net" },
