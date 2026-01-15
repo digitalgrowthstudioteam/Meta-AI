@@ -19,6 +19,7 @@ from app.meta_insights.services.campaign_daily_metrics_sync_service import (
     CampaignDailyMetricsSyncService,
 )
 from app.admin.metrics_sync_routes import router as metrics_sync_router
+from app.meta_api.models import MetaAdAccount, UserMetaAdAccount
 
 # Try importing AI Action, handle if missing to prevent crash
 try:
@@ -49,7 +50,7 @@ async def get_admin_dashboard(
     return await AdminOverrideService.get_dashboard_stats(db=db)
 
 # =========================
-# 2. ADMIN USERS (FIXED CRASH)
+# 2. ADMIN USERS (LIST)
 # =========================
 @router.get("/users")
 async def list_users(
@@ -59,22 +60,17 @@ async def list_users(
     require_admin(current_user)
     assert_admin_permission(current_user, "users:read")
     
-    # 1. Get all users
     result = await db.execute(select(User).order_by(User.created_at.desc()))
     users = result.scalars().all()
     response = []
 
     for u in users:
-        # 2. Get Subscription Status safely
         sub_status = await db.scalar(
             select(Subscription.status)
             .where(Subscription.user_id == u.id)
             .order_by(Subscription.created_at.desc())
             .limit(1)
         )
-
-        # 3. FIXED: Removed the 'Campaign.user_id' query that was crashing the backend.
-        # We perform a safe iteration without joining on a non-existent column.
         
         response.append(
             {
@@ -89,11 +85,100 @@ async def list_users(
                     else None
                 ),
                 "subscription_status": sub_status,
-                "ai_campaigns_active": 0, # Placeholder to prevent frontend crash
+                "ai_campaigns_active": 0,
             }
         )
 
     return response
+
+# =========================
+# 2B. ADMIN USER DETAIL (MISSING FIX ADDED)
+# =========================
+@router.get("/users/{user_id}")
+async def get_user_detail(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user)
+):
+    require_admin(current_user)
+    assert_admin_permission(current_user, "users:read")
+
+    # USER
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    # META ACCOUNTS
+    meta_stmt = (
+        select(MetaAdAccount)
+        .join(UserMetaAdAccount, UserMetaAdAccount.meta_ad_account_id == MetaAdAccount.id)
+        .where(UserMetaAdAccount.user_id == user_id)
+        .order_by(MetaAdAccount.connected_at.desc())
+    )
+    meta_res = await db.execute(meta_stmt)
+    meta_accounts = [
+        {
+            "id": str(m.id),
+            "name": m.account_name,
+            "status": "active" if m.is_active else "inactive",
+            "last_sync_at": None,
+        }
+        for m in meta_res.scalars().all()
+    ]
+
+    # CAMPAIGNS
+    camp_stmt = select(Campaign).order_by(Campaign.created_at.desc())
+    camp_res = await db.execute(camp_stmt)
+    campaigns = []
+    for c in camp_res.scalars().all():
+        campaigns.append(
+            {
+                "id": str(c.id),
+                "name": c.name,
+                "objective": c.objective,
+                "ai_active": c.ai_active,
+                "status": c.status,
+                "last_ai_action_at": None,
+            }
+        )
+
+    # INVOICES
+    inv_stmt = (
+        select(Invoice)
+        .where(Invoice.user_id == user_id)
+        .order_by(Invoice.created_at.desc())
+        .limit(50)
+    )
+    inv_res = await db.execute(inv_stmt)
+    invoices = [
+        {
+            "id": str(i.id),
+            "amount": i.total_amount,
+            "status": i.status,
+            "created_at": i.created_at.isoformat(),
+        }
+        for i in inv_res.scalars().all()
+    ]
+
+    # AI ACTIONS (EMPTY FALLBACK)
+    ai_actions = []
+
+    return {
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "is_active": user.is_active,
+            "created_at": user.created_at.isoformat(),
+            "last_login_at": (
+                user.last_login_at.isoformat()
+                if user.last_login_at else None
+            ),
+        },
+        "meta_accounts": meta_accounts,
+        "campaigns": campaigns,
+        "invoices": invoices,
+        "ai_actions": ai_actions,
+    }
 
 # =========================
 # 3. ADMIN INVOICES
@@ -136,7 +221,6 @@ async def list_razorpay_logs(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
-    # Fetch recent payments
     stmt = select(Payment).order_by(Payment.created_at.desc()).limit(limit)
     result = await db.execute(stmt)
     payments = result.scalars().all()
@@ -166,7 +250,7 @@ async def list_ai_actions(
 ):
     require_admin(current_user)
     if AIAction is None:
-        return [] # Return empty if model missing
+        return []
 
     stmt = select(AIAction).order_by(AIAction.created_at.desc()).limit(limit)
     if status:
@@ -192,7 +276,6 @@ async def list_ai_suggestions(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
-    # Re-use ai-actions endpoint logic for now, filtering for pending/suggested
     return await list_ai_actions(limit=20, status="pending", db=db, current_user=current_user)
 
 # =========================
@@ -203,7 +286,6 @@ async def list_admin_reports(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
-    # Return empty list for now to prevent crash until Reports table exists
     return []
 
 # =========================
@@ -215,7 +297,6 @@ async def get_metrics_sync_status(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
-    # Stub response to load page
     return {
         "status": "healthy",
         "last_sync": datetime.utcnow().isoformat(),
@@ -249,7 +330,6 @@ async def get_risk_alerts(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
-    # Return users who are frozen or inactive
     stmt = select(User).where(User.is_active == False).limit(20)
     result = await db.execute(stmt)
     users = result.scalars().all()
@@ -267,7 +347,6 @@ async def get_risk_alerts(
 # =========================
 # EXISTING ENDPOINTS (KEPT AS IS)
 # =========================
-
 @router.get("/meta-settings")
 async def get_meta_settings(
     db: AsyncSession = Depends(get_db),
