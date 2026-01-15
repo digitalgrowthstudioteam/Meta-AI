@@ -34,22 +34,15 @@ SESSION_EXPIRE_DAYS = 3
 # SESSION TOKEN GENERATION
 # =========================================================
 def generate_session_token() -> str:
-    """
-    Generate a secure session token.
-    Stored server-side only.
-    """
     return secrets.token_urlsafe(48)
 
 
 def session_expiry() -> datetime:
-    """
-    Returns session expiry datetime (UTC).
-    """
     return datetime.now(timezone.utc) + timedelta(days=SESSION_EXPIRE_DAYS)
 
 
 # =========================================================
-# SESSION CREATION
+# SESSION CREATION (SINGLE ACTIVE SESSION)
 # =========================================================
 async def create_session(
     db: AsyncSession,
@@ -57,7 +50,22 @@ async def create_session(
 ) -> Session:
     """
     Create a new active session for a user.
+    Old sessions are revoked to avoid conflicts.
     """
+
+    # 🔒 Revoke all existing active sessions
+    await db.execute(
+        update(Session)
+        .where(
+            Session.user_id == user.id,
+            Session.is_active.is_(True),
+        )
+        .values(
+            is_active=False,
+            revoked_at=datetime.now(timezone.utc),
+        )
+    )
+
     token = generate_session_token()
 
     session = Session(
@@ -75,7 +83,7 @@ async def create_session(
 
 
 # =========================================================
-# SESSION VALIDATION (ASYNC SAFE)
+# SESSION VALIDATION (STRICT)
 # =========================================================
 async def get_active_session(
     db: AsyncSession,
@@ -83,7 +91,6 @@ async def get_active_session(
 ) -> Optional[Session]:
     """
     Fetch a valid active session.
-    Eager-load user to avoid async lazy-loading issues.
     """
     result = await db.execute(
         select(Session)
@@ -93,6 +100,7 @@ async def get_active_session(
             Session.is_active.is_(True),
             Session.expires_at > datetime.now(timezone.utc),
         )
+        .limit(1)
     )
     return result.scalar_one_or_none()
 
@@ -104,9 +112,6 @@ async def revoke_session(
     db: AsyncSession,
     session_token: str,
 ) -> None:
-    """
-    Soft revoke a single session (logout).
-    """
     await db.execute(
         update(Session)
         .where(Session.session_token == session_token)
@@ -122,10 +127,6 @@ async def revoke_all_sessions_for_user(
     db: AsyncSession,
     user_id: UUID,
 ) -> None:
-    """
-    Revoke all active sessions for a user.
-    Used for admin kill-switch later.
-    """
     await db.execute(
         update(Session)
         .where(
