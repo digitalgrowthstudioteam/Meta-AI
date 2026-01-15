@@ -3,23 +3,18 @@ import type { NextRequest } from "next/server";
 
 /**
  * SESSION CONTEXT — SINGLE SOURCE OF TRUTH
- *
- * Rules:
- * - Normal users NEVER see admin mode
- * - Admins default to admin_view = true
- * - Toggle stored in cookie (admin_view=true|false)
  */
 
 export async function GET(req: NextRequest) {
   const cookie = req.headers.get("cookie") || "";
 
-  const backend = `${process.env.NEXT_PUBLIC_BACKEND_URL}/session/context`;
+  // 🔒 FIX: use the SAME backend env as fetcher
+  const backend =
+    `${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/session/context`;
 
   const res = await fetch(backend, {
     method: "GET",
-    headers: {
-      cookie,
-    },
+    headers: { cookie },
     credentials: "include",
     cache: "no-store",
   });
@@ -33,17 +28,10 @@ export async function GET(req: NextRequest) {
     data = {};
   }
 
-  /**
-   * -------------------------------
-   * ADMIN ↔ USER VIEW SWITCH
-   * -------------------------------
-   */
   const adminViewCookie = req.cookies.get("admin_view")?.value;
 
   if (data?.user?.role === "admin") {
     data.is_admin = true;
-
-    // ✅ FIX: default admins into admin view
     data.admin_view =
       adminViewCookie === undefined ? true : adminViewCookie === "true";
   } else {
@@ -51,11 +39,6 @@ export async function GET(req: NextRequest) {
     data.admin_view = false;
   }
 
-  /**
-   * -------------------------------
-   * BACKWARD COMPATIBILITY
-   * -------------------------------
-   */
   if (!data.ad_account && data.ad_accounts && data.active_ad_account_id) {
     const active = data.ad_accounts.find(
       (a: any) => a.id === data.active_ad_account_id
