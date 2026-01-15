@@ -18,6 +18,7 @@ export async function middleware(request: NextRequest) {
 
   const session = request.cookies.get("meta_ai_session")?.value;
   const role = request.cookies.get("meta_ai_role")?.value; // "admin" | "user"
+  const adminView = request.cookies.get("admin_view")?.value === "true";
 
   // 2️⃣ Block unauthenticated users
   if (!session && !PUBLIC_PATHS.includes(pathname)) {
@@ -27,14 +28,36 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // 3️⃣ 🔒 HARD ADMIN PROTECTION
-  if (pathname.startsWith("/admin") && role !== "admin") {
-    const userDashboard = request.nextUrl.clone();
-    userDashboard.pathname = "/dashboard";
-    return NextResponse.redirect(userDashboard);
+  // 3️⃣ 🔒 ADMIN ROUTE PROTECTION (ROLE + VIEW)
+  if (pathname.startsWith("/admin")) {
+    // Non-admins never allowed
+    if (role !== "admin") {
+      const userDashboard = request.nextUrl.clone();
+      userDashboard.pathname = "/dashboard";
+      return NextResponse.redirect(userDashboard);
+    }
+
+    // Admin but NOT in admin_view → force user dashboard
+    if (!adminView) {
+      const userDashboard = request.nextUrl.clone();
+      userDashboard.pathname = "/dashboard";
+      return NextResponse.redirect(userDashboard);
+    }
   }
 
-  // 4️⃣ Logged-in users visiting / or /login → USER dashboard (not admin)
+  // 4️⃣ Prevent admin-view users from accessing user routes
+  if (
+    adminView &&
+    role === "admin" &&
+    !pathname.startsWith("/admin") &&
+    !PUBLIC_PATHS.includes(pathname)
+  ) {
+    const adminDashboard = request.nextUrl.clone();
+    adminDashboard.pathname = "/admin/dashboard";
+    return NextResponse.redirect(adminDashboard);
+  }
+
+  // 5️⃣ Logged-in users visiting / or /login → USER dashboard
   if (session && (pathname === "/" || pathname === "/login")) {
     const dashboardUrl = request.nextUrl.clone();
     dashboardUrl.pathname = "/dashboard";
