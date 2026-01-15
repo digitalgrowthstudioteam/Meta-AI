@@ -207,3 +207,16 @@ async def forbid_impersonated_writes(
 
 # Backward alias
 require_admin_user = require_admin
+
+
+# -------------------------------------------------
+# OPTIONAL USER RESOLVER (NO THROW)
+# -------------------------------------------------
+async def get_current_user_optional(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> User | None:
+    try:
+        return await _resolve_user_from_session(request, db)
+    except Exception:
+        return None
