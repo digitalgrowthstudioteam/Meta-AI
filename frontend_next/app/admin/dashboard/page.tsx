@@ -10,7 +10,6 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
-import { apiFetch } from "../../lib/fetcher";
 
 type DashboardData = {
   users: number;
@@ -42,8 +41,13 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     (async () => {
       try {
-        // ✅ FINAL FIX: non-colliding backend API path
-        const res = await apiFetch("/admin/dashboard/summary", {
+        /**
+         * ✅ SINGLE SOURCE
+         * Always hit Next API → it proxies to backend
+         * Avoids cookie / CORS / auth break
+         */
+        const res = await fetch("/api/admin/dashboard", {
+          credentials: "include",
           cache: "no-store",
         });
 
@@ -98,7 +102,7 @@ export default function AdminDashboardPage() {
         <select
           value={range}
           onChange={(e) => setRange(e.target.value as TimeRange)}
-          className="block w-full sm:w-auto rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+          className="block w-full sm:w-auto rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-indigo-600 sm:text-sm"
         >
           <option value="7d">Last 7 days</option>
           <option value="14d">Last 14 days</option>
@@ -123,15 +127,15 @@ export default function AdminDashboardPage() {
         <ChartCard title="API Error Rates" data={series} />
       </div>
 
-      <div className="rounded-lg bg-white shadow-sm ring-1 ring-gray-900/5 p-4 flex items-center justify-between text-sm">
+      <div className="rounded-lg bg-white shadow-sm ring-1 ring-gray-900/5 p-4 flex justify-between text-sm">
         <div className="flex items-center gap-2">
           <span className="text-gray-500">System Status:</span>
           <span
-            className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${
+            className={`px-2 py-1 text-xs font-medium rounded ${
               data.system_status === "ok"
-                ? "bg-green-50 text-green-700 ring-green-600/20"
-                : "bg-red-50 text-red-700 ring-red-600/20"
-            } uppercase`}
+                ? "bg-green-50 text-green-700"
+                : "bg-red-50 text-red-700"
+            }`}
           >
             {data.system_status}
           </span>
@@ -150,11 +154,21 @@ export default function AdminDashboardPage() {
   );
 }
 
-function KPI({ title, value, color = "text-gray-900" }: { title: string; value: number; color?: string }) {
+/* ---------- Components ---------- */
+
+function KPI({
+  title,
+  value,
+  color = "text-gray-900",
+}: {
+  title: string;
+  value: number;
+  color?: string;
+}) {
   return (
-    <div className="overflow-hidden rounded-lg bg-white px-4 py-5 shadow-sm ring-1 ring-gray-900/5 sm:p-6">
-      <dt className="truncate text-sm font-medium text-gray-500">{title}</dt>
-      <dd className={`mt-1 text-3xl font-semibold tracking-tight ${color}`}>{value}</dd>
+    <div className="rounded-lg bg-white px-4 py-5 shadow-sm ring-1 ring-gray-900/5">
+      <dt className="text-sm text-gray-500">{title}</dt>
+      <dd className={`mt-1 text-3xl font-semibold ${color}`}>{value}</dd>
     </div>
   );
 }
@@ -164,31 +178,27 @@ function ChartCard({
   data,
 }: {
   title: string;
-  data: { date: string; value: number }[];
+  data: TrendPoint[];
 }) {
   const isEmpty = data.every((d) => d.value === 0);
 
   return (
     <div className="rounded-lg bg-white shadow-sm ring-1 ring-gray-900/5 p-6">
-      <h3 className="text-base font-semibold leading-6 text-gray-900 mb-4">
-        {title}
-      </h3>
+      <h3 className="text-base font-semibold mb-4">{title}</h3>
 
       {isEmpty ? (
-        <div className="h-64 flex items-center justify-center rounded-lg border-2 border-dashed border-gray-200 bg-gray-50">
-          <div className="text-center text-sm text-gray-500">
-            No Data Available
-          </div>
+        <div className="h-64 flex items-center justify-center border-2 border-dashed rounded">
+          <span className="text-sm text-gray-500">No Data Available</span>
         </div>
       ) : (
-        <div className="h-64 w-full">
+        <div className="h-64">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="date" />
               <YAxis />
               <Tooltip />
-              <Line type="monotone" dataKey="value" stroke="#4F46E5" strokeWidth={2} />
+              <Line type="monotone" dataKey="value" strokeWidth={2} />
             </LineChart>
           </ResponsiveContainer>
         </div>
