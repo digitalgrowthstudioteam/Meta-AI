@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { apiFetch } from "@/app/lib/fetcher";
 
 type AdminUser = {
   id: string;
@@ -13,9 +14,10 @@ type AdminUser = {
 
 type MetaAccount = {
   id: string;
-  name: string;
-  status: string;
-  last_sync_at?: string;
+  meta_account_id: string;
+  account_name: string;
+  business_category?: string;
+  connected_at?: string;
 };
 
 type Campaign = {
@@ -24,22 +26,17 @@ type Campaign = {
   objective: string;
   ai_active: boolean;
   status: string;
-  last_ai_action_at?: string;
+  created_at?: string;
 };
 
 type Invoice = {
   id: string;
-  amount: number;
+  total_amount: number;
   status: string;
   created_at: string;
 };
 
-type AIAction = {
-  id: string;
-  decision: string;
-  confidence: number;
-  created_at: string;
-};
+type AIAction = any;
 
 type Tab = "profile" | "meta" | "campaigns" | "billing" | "ai";
 
@@ -59,15 +56,11 @@ export default function AdminUserDetailPage() {
 
   useEffect(() => {
     if (!userId) return;
-
     (async () => {
       try {
-        // FIX: call backend admin route directly
-        const res = await fetch(`/admin/users/${userId}`, {
-          credentials: "include",
+        const res = await apiFetch(`/admin/users/${userId}`, {
           cache: "no-store",
         });
-
         const json = await res.json();
 
         setUser(json.user || null);
@@ -112,7 +105,6 @@ export default function AdminUserDetailPage() {
 
       <h1 className="text-lg font-semibold">{user.email}</h1>
 
-      {/* Tabs */}
       <div className="flex gap-2 border-b">
         <TabButton tab="profile" current={tab} setTab={setTab} />
         <TabButton tab="meta" current={tab} setTab={setTab} />
@@ -121,7 +113,6 @@ export default function AdminUserDetailPage() {
         <TabButton tab="ai" current={tab} setTab={setTab} />
       </div>
 
-      {/* PROFILE */}
       {tab === "profile" && (
         <Card>
           <Row label="Email" value={user.email} />
@@ -131,21 +122,20 @@ export default function AdminUserDetailPage() {
         </Card>
       )}
 
-      {/* META */}
       {tab === "meta" && (
         <Card>
           {metaAccounts.length === 0 && <Empty />}
           {metaAccounts.map((a) => (
             <div key={a.id} className="border-b pb-2 mb-2 text-sm">
-              <div className="font-medium">{a.name}</div>
-              <div>Status: {a.status}</div>
-              <div>Last Sync: {a.last_sync_at || "—"}</div>
+              <div className="font-medium">{a.account_name}</div>
+              <div>ID: {a.meta_account_id}</div>
+              <div>Category: {a.business_category || "—"}</div>
+              <div>Connected: {a.connected_at || "—"}</div>
             </div>
           ))}
         </Card>
       )}
 
-      {/* CAMPAIGNS */}
       {tab === "campaigns" && (
         <Card>
           {campaigns.length === 0 && <Empty />}
@@ -155,20 +145,18 @@ export default function AdminUserDetailPage() {
               <div>Objective: {c.objective}</div>
               <div>AI: {c.ai_active ? "ON" : "OFF"}</div>
               <div>Status: {c.status}</div>
-              <div>Last AI Action: {c.last_ai_action_at || "—"}</div>
             </div>
           ))}
         </Card>
       )}
 
-      {/* BILLING */}
       {tab === "billing" && (
         <Card>
           {invoices.length === 0 && <Empty />}
           {invoices.map((i) => (
             <div key={i.id} className="border-b pb-2 mb-2 text-sm">
               <div>Invoice #{i.id}</div>
-              <div>Amount: ₹{i.amount}</div>
+              <div>Amount: ₹{i.total_amount}</div>
               <div>Status: {i.status}</div>
               <div>
                 Date: {new Date(i.created_at).toLocaleDateString()}
@@ -178,21 +166,9 @@ export default function AdminUserDetailPage() {
         </Card>
       )}
 
-      {/* AI */}
       {tab === "ai" && (
         <Card>
           {aiActions.length === 0 && <Empty />}
-          {aiActions.map((a) => (
-            <div key={a.id} className="border-b pb-2 mb-2 text-sm">
-              <div>
-                Decision: <b>{a.decision}</b>
-              </div>
-              <div>Confidence: {a.confidence}%</div>
-              <div>
-                Time: {new Date(a.created_at).toLocaleString()}
-              </div>
-            </div>
-          ))}
         </Card>
       )}
     </div>
