@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { apiFetch } from "@/app/lib/fetcher";
+import { apiFetch } from "../../../lib/fetcher";
 
 type AdminUser = {
   id: string;
@@ -216,7 +216,5 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 function Empty() {
-  return (
-    <div className="text-sm text-gray-500">No data available.</div>
-  );
+  return <div className="text-sm text-gray-500">No data available.</div>;
 }
