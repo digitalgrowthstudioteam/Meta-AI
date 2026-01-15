@@ -33,7 +33,7 @@ def send_email(
     """
 
     # --------------------------------------------------
-    # CONFIG VALIDATION (HARD STOP, SAFE)
+    # CONFIG VALIDATION (SAFE EXIT)
     # --------------------------------------------------
     if not all(
         [
@@ -73,6 +73,7 @@ def send_email(
                 settings.SMTP_HOST,
                 port,
                 context=context,
+                timeout=15,
             ) as server:
                 server.login(
                     settings.SMTP_USER,
@@ -81,16 +82,18 @@ def send_email(
                 server.send_message(msg)
 
         # --------------------------------------------------
-        # STARTTLS (587 / others)
+        # STARTTLS (587)
         # --------------------------------------------------
         else:
+            context = ssl.create_default_context()
             with smtplib.SMTP(
                 settings.SMTP_HOST,
                 port,
-                timeout=10,
+                timeout=15,
             ) as server:
                 server.ehlo()
-                server.starttls()
+                server.starttls(context=context)
+                server.ehlo()
                 server.login(
                     settings.SMTP_USER,
                     settings.SMTP_PASSWORD,
@@ -98,6 +101,6 @@ def send_email(
                 server.send_message(msg)
 
     except Exception as exc:
-        # ABSOLUTE RULE: NEVER BREAK LOGIN FLOW
+        # 🔒 ABSOLUTE RULE: NEVER BREAK LOGIN FLOW
         print(f"[EMAIL ERROR] {exc}")
         return
