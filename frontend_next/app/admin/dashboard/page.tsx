@@ -42,8 +42,8 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     (async () => {
       try {
-        // ✅ FIX: correct backend admin route
-        const res = await apiFetch("/admin/dashboard", {
+        // ✅ FINAL FIX: non-colliding backend API path
+        const res = await apiFetch("/admin/dashboard/summary", {
           cache: "no-store",
         });
 
