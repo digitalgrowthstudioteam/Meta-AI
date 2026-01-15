@@ -26,14 +26,17 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<SessionContext | null>(null);
   const [loaded, setLoaded] = useState(false);
 
-  // Load session context
+  // Load session context from backend directly
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("/api/session/context", {
-          credentials: "include",
-          cache: "no-store",
-        });
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_BACKEND_URL}/session/context`,
+          {
+            credentials: "include",
+            cache: "no-store",
+          }
+        );
 
         if (!res.ok) {
           router.replace("/login");
@@ -42,7 +45,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
         const data = await res.json();
         setSession(data);
-      } catch {
+      } catch (err) {
         router.replace("/login");
       } finally {
         setLoaded(true);
