@@ -17,9 +17,14 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
     headers.set("Content-Type", "application/json");
   }
 
-  // ✅ FINAL ROUTING RULE
-  // ALL requests go to backend unless absolute URL
-  const url = endpoint.startsWith("http")
+  /**
+   * 🔒 ROUTING RULE (CRITICAL)
+   * - /api/*  → Next.js API routes (same origin)
+   * - others  → Backend API
+   */
+  const url = endpoint.startsWith("/api")
+    ? endpoint
+    : endpoint.startsWith("http")
     ? endpoint
     : `${BACKEND_URL}${endpoint}`;
 
