@@ -21,13 +21,15 @@ from app.auth.dependencies import get_current_user
 from app.users.models import User
 from app.meta_api.models import MetaAdAccount, UserMetaAdAccount
 
-router = APIRouter(
-    prefix="/session",
-    tags=["Session Context"],
-)
+# ----------------------------------------
+# Support both /session/* and /api/session/*
+# ----------------------------------------
+router = APIRouter(prefix="/session", tags=["Session Context"])
+api_router = APIRouter(prefix="/api/session", tags=["Session Context"])
 
 
 @router.get("/context")
+@api_router.get("/context")
 async def session_context(
     request: Request,
     response: Response,
@@ -119,6 +121,7 @@ async def session_context(
 
 
 @router.post("/set-active")
+@api_router.post("/set-active")
 async def set_active_ad_account(
     payload: dict,
     response: Response,
