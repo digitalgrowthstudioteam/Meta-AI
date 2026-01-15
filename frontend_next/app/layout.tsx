@@ -2,9 +2,9 @@
 
 import "./globals.css";
 import { ReactNode, useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { Menu, X } from "lucide-react";
+import { Menu, X, Shield } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 import { apiFetch } from "./lib/fetcher";
 
@@ -12,9 +12,12 @@ type SessionContext = {
   user: {
     id: string;
     email: string;
-    is_admin: boolean;
+    role?: string;
+    is_admin?: boolean;
     is_impersonated: boolean;
   };
+  is_admin?: boolean;
+  admin_view?: boolean;
   ad_account: {
     id: string;
     name: string;
@@ -24,6 +27,7 @@ type SessionContext = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [session, setSession] = useState<SessionContext | null>(null);
@@ -31,7 +35,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const load = async () => {
-      // Skip session check for public paths
       if (pathname === "/" || pathname === "/login") {
         setSessionLoaded(true);
         return;
@@ -49,8 +52,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         } else {
           setSession(null);
         }
-      } catch (e) {
-        console.error("Session check failed", e);
+      } catch {
         setSession(null);
       } finally {
         setSessionLoaded(true);
@@ -66,14 +68,16 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     window.location.reload();
   };
 
-  // ADMIN LAYOUT (Clean slate for admin tools)
+  const toggleAdminView = async () => {
+    const next = !session?.admin_view;
+    document.cookie = `admin_view=${next}; path=/; SameSite=None; Secure`;
+    window.location.href = next ? "/admin/dashboard" : "/dashboard";
+  };
+
+  // ADMIN SHELL
   if (pathname.startsWith("/admin")) {
     return (
       <html lang="en">
-        <head>
-          <title>Digital Growth Studio | Admin</title>
-          <meta name="description" content="Meta Ads AI Admin" />
-        </head>
         <body className="bg-slate-50 text-gray-900">
           <Toaster position="bottom-right" />
           {children}
@@ -82,37 +86,27 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  // LOGIN / ROOT
+  // LOGIN / PUBLIC
   if (pathname === "/" || pathname === "/login") {
     return (
       <html lang="en">
-        <head>
-          <title>Digital Growth Studio</title>
-          <meta name="description" content="Meta Ads AI Platform" />
-        </head>
         <body className="bg-slate-50 text-gray-900">{children}</body>
       </html>
     );
   }
 
-  // APP SHELL (Dashboard & Authenticated Routes)
+  // APP SHELL
   return (
     <html lang="en">
-      <head>
-        <title>Digital Growth Studio</title>
-        <meta name="description" content="Meta Ads AI Platform" />
-      </head>
       <body className="bg-amber-50 text-gray-900">
         <Toaster position="bottom-right" />
 
-        {/* Global Loading State */}
         {!sessionLoaded ? (
-           <div className="flex h-screen items-center justify-center text-sm text-gray-500">
-             Loading application context...
-           </div>
+          <div className="flex h-screen items-center justify-center text-sm text-gray-500">
+            Loading application context...
+          </div>
         ) : (
           <div className="flex h-screen w-screen overflow-hidden">
-            {/* Mobile Sidebar Overlay */}
             {sidebarOpen && (
               <div
                 className="fixed inset-0 z-40 bg-black/40 md:hidden"
@@ -120,21 +114,20 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               />
             )}
 
-            {/* Sidebar Navigation */}
             <aside
               className={`
-                fixed z-50 inset-y-0 left-0 w-64 bg-white border-r border-amber-100
-                flex flex-col transform transition-transform duration-200
+                fixed z-50 inset-y-0 left-0 w-64 bg-white border-r
+                flex flex-col transform transition-transform
                 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
                 md:static md:translate-x-0
               `}
             >
-              <div className="px-5 py-4 border-b border-amber-100 flex items-center justify-between">
+              <div className="px-5 py-4 border-b flex justify-between items-center">
                 <div>
-                  <div className="text-sm uppercase tracking-wide text-amber-700 font-bold">
+                  <div className="text-sm font-bold text-amber-700">
                     Digital Growth Studio
                   </div>
-                  <div className="text-xs text-gray-500">Meta Ads AI Platform</div>
+                  <div className="text-xs text-gray-500">Meta Ads AI</div>
                 </div>
                 <button className="md:hidden" onClick={() => setSidebarOpen(false)}>
                   <X size={20} />
@@ -162,44 +155,50 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 <NavLink href="/billing" current={pathname === "/billing"}>
                   Billing
                 </NavLink>
-                <NavLink href="/buy-campaign" current={pathname === "/buy-campaign"}>
-                  Buy Campaign
-                </NavLink>
                 <NavLink href="/settings" current={pathname === "/settings"}>
                   Settings
                 </NavLink>
+
+                {/* 🔥 ADMIN TOGGLE (ADMIN ONLY) */}
+                {session?.is_admin && (
+                  <>
+                    <SectionLabel label="Admin" />
+                    <button
+                      onClick={toggleAdminView}
+                      className="flex items-center gap-2 w-full px-3 py-2 text-sm rounded-md
+                        text-gray-700 hover:bg-amber-50"
+                    >
+                      <Shield size={16} />
+                      {session.admin_view ? "Switch to User View" : "Switch to Admin View"}
+                    </button>
+                  </>
+                )}
               </nav>
 
-              <div className="px-4 py-3 border-t border-amber-100 text-xs text-gray-500">
-                Secure • Read-only • AI Assisted
+              <div className="px-4 py-3 border-t text-xs text-gray-500">
+                Secure • Server Sessions • AI Assisted
               </div>
             </aside>
 
-            {/* Main Content Area */}
             <div className="flex flex-col flex-1 min-w-0">
-              {/* Impersonation Banner */}
               {session?.user.is_impersonated && (
-                <div className="bg-yellow-100 border-b border-yellow-300 px-4 py-2 flex items-center justify-between text-sm">
-                  <div className="text-yellow-900">
-                    🔒 Viewing as <span className="font-medium">{session.user.email}</span>
-                  </div>
+                <div className="bg-yellow-100 border-b px-4 py-2 flex justify-between text-sm">
+                  <span>🔒 Viewing as {session.user.email}</span>
                   <button
                     onClick={exitImpersonation}
-                    className="text-xs font-medium text-red-700 hover:underline"
+                    className="text-xs text-red-700"
                   >
-                    Exit Impersonation
+                    Exit
                   </button>
                 </div>
               )}
 
-              {/* Ad Account Context Banner */}
               {session?.ad_account && (
-                <div className="bg-white border-b px-4 py-2 text-xs text-gray-600 flex justify-between items-center">
-                  <span>Active Ad Account: <strong>{session.ad_account.name}</strong></span>
+                <div className="bg-white border-b px-4 py-2 text-xs">
+                  Active Ad Account: <strong>{session.ad_account.name}</strong>
                 </div>
               )}
 
-              {/* Mobile Header */}
               <header className="md:hidden flex items-center gap-3 px-4 py-3 border-b bg-white">
                 <button onClick={() => setSidebarOpen(true)}>
                   <Menu size={22} />
@@ -207,7 +206,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 <span className="text-sm font-medium">Digital Growth Studio</span>
               </header>
 
-              {/* Page Content */}
               <main className="flex-1 overflow-y-auto p-4 md:p-8">
                 <div className="max-w-7xl mx-auto space-y-6">{children}</div>
               </main>
@@ -221,7 +219,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
 function SectionLabel({ label }: { label: string }) {
   return (
-    <div className="px-2 pt-4 pb-1 text-xs font-medium text-gray-400 uppercase tracking-wide">
+    <div className="px-2 pt-4 pb-1 text-xs font-medium text-gray-400 uppercase">
       {label}
     </div>
   );
@@ -239,10 +237,10 @@ function NavLink({
   return (
     <Link
       href={href}
-      className={`block rounded-md px-3 py-2 text-sm transition-colors ${
+      className={`block rounded-md px-3 py-2 text-sm ${
         current
           ? "bg-amber-100 text-amber-800 font-medium"
-          : "text-gray-700 hover:bg-amber-50 hover:text-gray-900"
+          : "text-gray-700 hover:bg-amber-50"
       }`}
     >
       {children}
