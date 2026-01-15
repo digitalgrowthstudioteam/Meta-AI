@@ -160,7 +160,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 </NavLink>
 
                 {/* 🔥 ADMIN TOGGLE (ADMIN ONLY) */}
-                {session?.is_admin && (
+                {session?.user?.is_admin && (
                   <>
                     <SectionLabel label="Admin" />
                     <button
