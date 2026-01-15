@@ -33,14 +33,15 @@ export default function AdminRiskPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/admin/risk", { cache: "no-store" }).then((r) => r.json()),
-      fetch("/api/admin/risk/timeline", { cache: "no-store" }).then((r) =>
+      // FIX: call backend admin routes directly
+      fetch("/admin/risk", { cache: "no-store" }).then((r) => r.json()),
+      fetch("/admin/risk/timeline", { cache: "no-store" }).then((r) =>
         r.json()
       ),
     ])
       .then(([summaryData, timelineData]) => {
-        setSummary(summaryData);
-        setEvents(timelineData || []);
+        setSummary(summaryData || null);
+        setEvents(Array.isArray(timelineData) ? timelineData : []);
       })
       .finally(() => setLoading(false));
   }, []);
@@ -61,9 +62,7 @@ export default function AdminRiskPage() {
     <div className="space-y-8">
       <h1 className="text-lg font-semibold">Risk & Safety</h1>
 
-      {/* =========================
-          SUMMARY
-         ========================= */}
+      {/* SUMMARY */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card title="User Risk">
           <Stat
@@ -95,9 +94,7 @@ export default function AdminRiskPage() {
         </Card>
       </div>
 
-      {/* =========================
-          TIMELINE
-         ========================= */}
+      {/* TIMELINE */}
       <div className="bg-white border rounded-lg overflow-hidden">
         <div className="px-4 py-3 border-b">
           <h2 className="text-sm font-medium text-gray-900">
