@@ -1,10 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: false,
-  swcMinify: true,
 
-  // 🚫 NO standalone, NO export
-  output: undefined,
+  // ✅ REQUIRED for App Router + Node server
+  output: "standalone",
+
+  experimental: {
+    appDir: true,
+  },
 
   images: {
     remotePatterns: [
