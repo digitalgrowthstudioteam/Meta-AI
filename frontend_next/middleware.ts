@@ -17,6 +17,11 @@ export async function middleware(request: NextRequest) {
 
   const sessionCookie = request.cookies.get("meta_ai_session")?.value;
 
+  // 🛑 Allow admin pages to proceed without redirect loops
+  if (pathname.startsWith("/admin")) {
+    return NextResponse.next();
+  }
+
   if (!sessionCookie && !PUBLIC_PATHS.includes(pathname)) {
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = "/login";
