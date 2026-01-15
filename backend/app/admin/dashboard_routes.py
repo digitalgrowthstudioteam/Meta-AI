@@ -11,8 +11,8 @@ from app.campaigns.models import Campaign
 router = APIRouter(prefix="/admin", tags=["Admin Dashboard"])
 
 
-@router.get("/dashboard")
-async def admin_dashboard(
+@router.get("/dashboard/summary")
+async def admin_dashboard_summary(
     db: AsyncSession = Depends(get_db),
     admin_user: User = Depends(require_admin),
 ):
