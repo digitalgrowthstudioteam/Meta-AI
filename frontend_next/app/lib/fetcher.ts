@@ -13,17 +13,13 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
     headers.set("X-Impersonate-User", impersonate);
   }
 
-  // Default to JSON if not FormData
   if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
 
-  // 🔒 CRITICAL FIX:
-  // /api/* → Next.js
-  // everything else → backend
-  const url = endpoint.startsWith("/api/")
-    ? endpoint
-    : endpoint.startsWith("http")
+  // ✅ FINAL ROUTING RULE
+  // ALL requests go to backend unless absolute URL
+  const url = endpoint.startsWith("http")
     ? endpoint
     : `${BACKEND_URL}${endpoint}`;
 
