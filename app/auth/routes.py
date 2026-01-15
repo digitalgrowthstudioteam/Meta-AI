@@ -7,7 +7,7 @@ Auth Routes
 - /session/context   ✅ SINGLE SOURCE OF TRUTH
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -50,12 +50,12 @@ async def login_request(
 
 
 # =========================================================
-# VERIFY MAGIC LINK (SET COOKIE + REDIRECT)
+# VERIFY MAGIC LINK (SET COOKIES + REDIRECT)
 # =========================================================
 @router.get("/auth/verify")
 async def verify_login(
     token: str = Query(...),
-    next: str = Query("/admin/dashboard"),
+    next: str = Query("/dashboard"),
     db: AsyncSession = Depends(get_db),
 ):
     session_token = await verify_magic_login(db, raw_token=token)
@@ -66,15 +66,33 @@ async def verify_login(
             detail="Invalid or expired login link",
         )
 
+    # 🔐 Resolve user to determine role
+    user = await require_user(
+        request=None,  # not used inside dependency
+        db=db,
+    )
+
     response = RedirectResponse(
         url=next,
         status_code=status.HTTP_302_FOUND,
     )
 
+    # 🔑 SESSION COOKIE
     response.set_cookie(
         key="meta_ai_session",
         value=session_token,
         httponly=True,
+        secure=True,
+        samesite="none",
+        path="/",
+        max_age=60 * 60 * 24 * 3,  # 3 days
+    )
+
+    # 🔒 ROLE COOKIE (CRITICAL FOR MIDDLEWARE)
+    response.set_cookie(
+        key="meta_ai_role",
+        value=user.role,          # "admin" | "user"
+        httponly=False,           # middleware must read
         secure=True,
         samesite="none",
         path="/",
@@ -110,10 +128,8 @@ async def logout(
         status_code=status.HTTP_302_FOUND,
     )
 
-    response.delete_cookie(
-        key="meta_ai_session",
-        path="/",
-    )
+    response.delete_cookie(key="meta_ai_session", path="/")
+    response.delete_cookie(key="meta_ai_role", path="/")
 
     return response
 
