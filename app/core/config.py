@@ -7,12 +7,21 @@ Application configuration
 import os
 from typing import Optional
 
+# 🔥 LOAD .env EXPLICITLY (CRITICAL)
+from dotenv import load_dotenv
+
+# Load .env from project root
+load_dotenv()
+
 
 class Settings:
     # =================================================
     # DATABASE
     # =================================================
     DATABASE_URL: str = os.getenv("DATABASE_URL")
+
+    if not DATABASE_URL:
+        raise RuntimeError("DATABASE_URL is not set")
 
     # =================================================
     # PUBLIC APP (MAGIC LINK, BRANDING)
@@ -38,7 +47,7 @@ class Settings:
     )
 
     # =================================================
-    # GLOBAL SYSTEM KILL SWITCHES (ADMIN POWER)
+    # GLOBAL SYSTEM KILL SWITCHES
     # =================================================
     AI_GLOBALLY_ENABLED: bool = os.getenv(
         "AI_GLOBALLY_ENABLED",
@@ -63,25 +72,26 @@ class Settings:
     META_REDIRECT_URI: str = os.getenv("META_REDIRECT_URI", "")
 
     # =================================================
-    # SMTP (UPDATED FOR VPS COMPATIBILITY)
+    # SMTP
     # =================================================
     SMTP_HOST: Optional[str] = os.getenv("SMTP_HOST")
     SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
-    
-    # 🔥 FIX: Checks for 'SMTP_USER' OR 'SMTP_USERNAME' (Your VPS uses SMTP_USERNAME)
-    SMTP_USER: Optional[str] = os.getenv("SMTP_USER") or os.getenv("SMTP_USERNAME")
-    
+
+    SMTP_USER: Optional[str] = (
+        os.getenv("SMTP_USER")
+        or os.getenv("SMTP_USERNAME")
+    )
+
     SMTP_PASSWORD: Optional[str] = os.getenv("SMTP_PASSWORD")
-    
-    # 🔥 FIX: Checks for all common name variations for the sender email
+
     SMTP_FROM_EMAIL: Optional[str] = (
-        os.getenv("SMTP_FROM_EMAIL") 
-        or os.getenv("EMAIL_FROM") 
+        os.getenv("SMTP_FROM_EMAIL")
+        or os.getenv("EMAIL_FROM")
         or os.getenv("EMAILS_FROM_EMAIL")
     )
 
     # =================================================
-    # SYSTEM METADATA
+    # SYSTEM
     # =================================================
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "production")
     SYSTEM_READ_ONLY: bool = os.getenv(
@@ -93,11 +103,8 @@ class Settings:
 settings = Settings()
 
 # =================================================
-# 🔁 BACKWARD-COMPAT SMTP ENV MAPPING (SAFE)
+# 🔁 BACKWARD-COMPAT SMTP FALLBACKS (SAFE)
 # =================================================
-# Supports legacy LEADGEN_* variables without VPS changes
-# ❌ Does NOT override explicitly set SMTP_* values
-
 if not settings.SMTP_USER and os.getenv("LEADGEN_SMTP_EMAIL"):
     settings.SMTP_USER = os.getenv("LEADGEN_SMTP_EMAIL")
     settings.SMTP_FROM_EMAIL = os.getenv("LEADGEN_SMTP_EMAIL")
