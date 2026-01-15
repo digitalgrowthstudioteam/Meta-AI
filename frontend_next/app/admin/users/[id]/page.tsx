@@ -41,12 +41,7 @@ type AIAction = {
   created_at: string;
 };
 
-type Tab =
-  | "profile"
-  | "meta"
-  | "campaigns"
-  | "billing"
-  | "ai";
+type Tab = "profile" | "meta" | "campaigns" | "billing" | "ai";
 
 export default function AdminUserDetailPage() {
   const params = useParams();
@@ -67,13 +62,15 @@ export default function AdminUserDetailPage() {
 
     (async () => {
       try {
-        const res = await fetch(`/api/admin/users/${userId}`, {
+        // FIX: call backend admin route directly
+        const res = await fetch(`/admin/users/${userId}`, {
           credentials: "include",
           cache: "no-store",
         });
+
         const json = await res.json();
 
-        setUser(json.user);
+        setUser(json.user || null);
         setMetaAccounts(json.meta_accounts || []);
         setCampaigns(json.campaigns || []);
         setInvoices(json.invoices || []);
@@ -128,18 +125,9 @@ export default function AdminUserDetailPage() {
       {tab === "profile" && (
         <Card>
           <Row label="Email" value={user.email} />
-          <Row
-            label="Status"
-            value={user.is_active ? "Active" : "Inactive"}
-          />
-          <Row
-            label="Created"
-            value={user.created_at || "—"}
-          />
-          <Row
-            label="Last Login"
-            value={user.last_login_at || "—"}
-          />
+          <Row label="Status" value={user.is_active ? "Active" : "Inactive"} />
+          <Row label="Created" value={user.created_at || "—"} />
+          <Row label="Last Login" value={user.last_login_at || "—"} />
         </Card>
       )}
 
@@ -182,7 +170,9 @@ export default function AdminUserDetailPage() {
               <div>Invoice #{i.id}</div>
               <div>Amount: ₹{i.amount}</div>
               <div>Status: {i.status}</div>
-              <div>Date: {new Date(i.created_at).toLocaleDateString()}</div>
+              <div>
+                Date: {new Date(i.created_at).toLocaleDateString()}
+              </div>
             </div>
           ))}
         </Card>
