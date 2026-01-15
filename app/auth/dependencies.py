@@ -46,12 +46,14 @@ async def _resolve_user_from_session(
 
     user = session.user
 
-    # 🔑 HARD ADMIN ROLE
+    # 🔑 HARD ADMIN ROLE (EMAIL BASED)
     user.role = "admin" if user.email in ADMIN_EMAILS else "user"
 
     # Defaults
     user._is_impersonated = False
     user._write_blocked = False
+    user._impersonation_mode = None
+    user._impersonated_by = None
 
     return user
 
@@ -65,6 +67,7 @@ async def get_current_user(
 ) -> User:
     user = await _resolve_user_from_session(request, db)
 
+    # 🔧 MAINTENANCE MODE CHECK
     settings = await _get_global_settings(db)
     if settings and settings.maintenance_mode:
         if user.email not in ADMIN_EMAILS:
@@ -73,7 +76,7 @@ async def get_current_user(
                 detail="System under maintenance",
             )
 
-    # 🔁 ADMIN IMPERSONATION
+    # 🔁 ADMIN IMPERSONATION (HEADER BASED)
     impersonate_user = request.headers.get("X-Impersonate-User")
 
     if impersonate_user:
@@ -101,6 +104,7 @@ async def get_current_user(
                 detail="Impersonated user not found",
             )
 
+        # 🔒 FORCE USER MODE (READ-ONLY)
         target_user.role = "user"
         target_user._is_impersonated = True
         target_user._impersonated_by = user.email
@@ -113,7 +117,7 @@ async def get_current_user(
 
 
 # -------------------------------------------------
-# 🌍 SESSION CONTEXT (SINGLE SOURCE)
+# 🌍 SESSION CONTEXT (SINGLE SOURCE OF TRUTH)
 # -------------------------------------------------
 async def get_session_context(
     db: AsyncSession = Depends(get_db),
@@ -132,6 +136,11 @@ async def get_session_context(
     ad_accounts = result.scalars().all()
 
     return {
+        # 🔥 ROOT FLAGS (FRONTEND NEEDS THESE)
+        "is_admin": user.role == "admin",
+        "admin_view": False,
+
+        # 👤 USER CONTEXT
         "user": {
             "id": str(user.id),
             "email": user.email,
@@ -142,6 +151,8 @@ async def get_session_context(
             "impersonated_by": getattr(user, "_impersonated_by", None),
             "write_blocked": getattr(user, "_write_blocked", False),
         },
+
+        # 📊 AD ACCOUNTS
         "ad_accounts": [
             {
                 "id": str(acct.id),
@@ -194,4 +205,5 @@ async def forbid_impersonated_writes(
     return user
 
 
+# Backward alias
 require_admin_user = require_admin
