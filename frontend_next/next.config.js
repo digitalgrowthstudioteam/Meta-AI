@@ -3,8 +3,8 @@ const nextConfig = {
   reactStrictMode: false,
   swcMinify: true,
 
-  // 🔒 FORCE SERVER MODE (NO STATIC EXPORT)
-  output: "standalone",
+  // 🚫 NO standalone, NO export
+  output: undefined,
 
   images: {
     remotePatterns: [
@@ -14,13 +14,8 @@ const nextConfig = {
     ],
   },
 
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  typescript: { ignoreBuildErrors: true },
+  eslint: { ignoreDuringBuilds: true },
 };
 
 module.exports = nextConfig;
