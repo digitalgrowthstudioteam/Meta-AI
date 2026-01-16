@@ -10,7 +10,7 @@ type SessionContext = {
     email: string;
     is_admin: boolean;
     is_impersonated: boolean;
-  };
+  } | null;
   ad_account: {
     id: string;
     name: string;
@@ -145,9 +145,9 @@ export default function DashboardPage() {
           <h1 className="text-xl font-semibold text-gray-900">
             Welcome to Digital Growth Studio
           </h1>
-        <p className="mt-2 text-sm text-gray-600">
-          To get started with AI optimization, please connect your Meta Ads account and select an ad account to manage.
-        </p>
+          <p className="mt-2 text-sm text-gray-600">
+            To get started with AI optimization, please connect your Meta Ads account and select an ad account to manage.
+          </p>
         </div>
         <button
           onClick={connectMeta}
