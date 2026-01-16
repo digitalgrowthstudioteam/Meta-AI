@@ -1,10 +1,5 @@
 """
-Auth Routes
-- /auth/login
-- /auth/verify
-- /auth/logout
-- /auth/me
-- /session/context   ✅ SINGLE SOURCE OF TRUTH
+Auth Routes (API)
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
@@ -19,11 +14,12 @@ from app.auth.dependencies import (
 )
 from app.users.models import User
 
-router = APIRouter(tags=["auth"])
+router = APIRouter(prefix="/api", tags=["auth"])
 
 
 # =========================================================
 # REQUEST MAGIC LINK
+# POST /api/auth/login
 # =========================================================
 @router.post("/auth/login")
 async def login_request(
@@ -50,7 +46,8 @@ async def login_request(
 
 
 # =========================================================
-# VERIFY MAGIC LINK (SET COOKIE + REDIRECT)
+# VERIFY MAGIC LINK
+# GET /api/auth/verify?token=xxx
 # =========================================================
 @router.get("/auth/verify")
 async def verify_login(
@@ -71,7 +68,6 @@ async def verify_login(
         status_code=status.HTTP_302_FOUND,
     )
 
-    # 🔑 SESSION COOKIE (ONLY SOURCE OF AUTH)
     response.set_cookie(
         key="meta_ai_session",
         value=session_token,
@@ -79,17 +75,14 @@ async def verify_login(
         secure=True,
         samesite="none",
         path="/",
-        max_age=60 * 60 * 24 * 3,  # 3 days
+        max_age=60 * 60 * 24 * 3,
     )
-
-    # ❗ DO NOT SET ROLE COOKIE HERE
-    # Role is resolved server-side from session every request
 
     return response
 
 
 # =========================================================
-# AUTH SESSION CHECK
+# GET /api/auth/me
 # =========================================================
 @router.get("/auth/me")
 async def auth_me(
@@ -103,7 +96,7 @@ async def auth_me(
 
 
 # =========================================================
-# LOGOUT
+# POST /api/auth/logout
 # =========================================================
 @router.post("/auth/logout")
 async def logout(
@@ -115,12 +108,11 @@ async def logout(
     )
 
     response.delete_cookie(key="meta_ai_session", path="/")
-
     return response
 
 
 # =========================================================
-# 🌍 GLOBAL SESSION CONTEXT (SINGLE ENDPOINT)
+# GET /api/session/context
 # =========================================================
 @router.get("/session/context")
 async def session_context(
