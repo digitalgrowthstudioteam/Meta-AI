@@ -1,34 +1,30 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: false,
+reactStrictMode: false,
 
-  // 🔒 REQUIRED — fixes missing chunks / 404 JS
-  output: "standalone",
+images: {
+remotePatterns: [
+{ protocol: "https", hostname: "**.fbcdn.net" },
+{ protocol: "https", hostname: "**.facebook.com" },
+{ protocol: "https", hostname: "platform-lookaside.fbsbx.com" },
+],
+},
 
-  images: {
-    remotePatterns: [
-      { protocol: "https", hostname: "**.fbcdn.net" },
-      { protocol: "https", hostname: "**.facebook.com" },
-      { protocol: "https", hostname: "platform-lookaside.fbsbx.com" },
-    ],
-  },
+typescript: {
+ignoreBuildErrors: true,
+},
 
-  typescript: {
-    ignoreBuildErrors: true,
-  },
+eslint: {
+ignoreDuringBuilds: true,
+},
 
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+api: {
+externalResolver: true,
+},
 
-  // ⛔ prevents Next internal API handling in production
-  api: {
-    externalResolver: true,
-  },
-
-  experimental: {
-    serverActions: false,
-  },
+experimental: {
+serverActions: false,
+},
 };
 
 module.exports = nextConfig;
