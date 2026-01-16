@@ -22,7 +22,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await apiFetch("/auth/request", {
+      const res = await apiFetch("/api/auth/login", {
         method: "POST",
         body: JSON.stringify({ email }),
       });
