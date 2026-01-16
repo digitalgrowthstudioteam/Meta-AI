@@ -1,8 +1,7 @@
 const BACKEND_URL =
-  (typeof window === "undefined"
+  typeof window === "undefined"
     ? process.env.NEXT_PUBLIC_BACKEND_URL
-    : process.env.NEXT_PUBLIC_BACKEND_BROWSER_URL) ||
-  "https://meta-ai.digitalgrowthstudio.in";
+    : process.env.NEXT_PUBLIC_BACKEND_BROWSER_URL;
 
 function normalize(path: string) {
   if (!path.startsWith("/")) return `/${path}`;
@@ -22,6 +21,5 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
     ...options,
     headers,
     credentials: "include",
-    cache: "no-store",
   });
 }
