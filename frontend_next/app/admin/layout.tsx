@@ -26,17 +26,13 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<SessionContext | null>(null);
   const [loaded, setLoaded] = useState(false);
 
-  // Load session context from backend directly
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(
-          `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/session/context`,
-          {
-            credentials: "include",
-            cache: "no-store",
-          }
-        );
+        const res = await fetch(`/api/session/context`, {
+          credentials: "include",
+          cache: "no-store",
+        });
 
         if (!res.ok) {
           router.replace("/login");
@@ -44,6 +40,18 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         }
 
         const data = await res.json();
+
+        // Normalize admin flag
+        const adminFlag =
+          data?.is_admin === true ||
+          data?.user?.is_admin === true ||
+          data?.user?.role === "admin";
+
+        if (!adminFlag) {
+          router.replace("/login");
+          return;
+        }
+
         setSession(data);
       } catch (err) {
         router.replace("/login");
@@ -54,13 +62,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   }, [router]);
 
   const exitImpersonation = async () => {
-    await fetch(
-      `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/impersonate/exit`,
-      {
-        method: "POST",
-        credentials: "include",
-      }
-    );
+    await fetch(`/api/admin/impersonate/exit`, {
+      method: "POST",
+      credentials: "include",
+    });
     router.refresh();
   };
 
@@ -69,7 +74,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   }
 
   const isAdmin =
-    session?.is_admin === true || session?.user?.role === "admin";
+    session?.is_admin === true ||
+    session?.user?.is_admin === true ||
+    session?.user?.role === "admin";
 
   if (!isAdmin) {
     return (
@@ -219,8 +226,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     </div>
   );
 }
-
-/* -------------------- COMPONENTS -------------------- */
 
 function SidebarGroup({
   label,
