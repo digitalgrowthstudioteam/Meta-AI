@@ -37,7 +37,7 @@ export default function DashboardPage() {
 
   const loadSession = async () => {
     try {
-      const res = await apiFetch("/session/context", {
+      const res = await apiFetch("/api/session/context", {
         cache: "no-store",
       });
 
@@ -60,7 +60,7 @@ export default function DashboardPage() {
     }
 
     try {
-      const res = await apiFetch("/dashboard/summary", {
+      const res = await apiFetch("/api/dashboard/summary", {
         cache: "no-store",
       });
 
@@ -88,7 +88,7 @@ export default function DashboardPage() {
     if (session && !session.user) {
       router.push("/login");
     }
-  }, [session]);
+  }, [session, router]);
 
   useEffect(() => {
     if (session?.ad_account?.id) {
@@ -142,10 +142,12 @@ export default function DashboardPage() {
     return (
       <div className="space-y-6 max-w-xl mx-auto mt-10 p-6 bg-white rounded-lg border shadow-sm">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Welcome to Digital Growth Studio</h1>
-          <p className="mt-2 text-sm text-gray-600">
-            To get started with AI optimization, please connect your Meta Ads account and select an ad account to manage.
-          </p>
+          <h1 className="text-xl font-semibold text-gray-900">
+            Welcome to Digital Growth Studio
+          </h1>
+        <p className="mt-2 text-sm text-gray-600">
+          To get started with AI optimization, please connect your Meta Ads account and select an ad account to manage.
+        </p>
         </div>
         <button
           onClick={connectMeta}
@@ -166,7 +168,8 @@ export default function DashboardPage() {
       <div>
         <h1 className="text-xl font-semibold text-gray-900">Dashboard</h1>
         <p className="text-sm text-gray-500">
-          Active account: <strong className="text-gray-900">{session.ad_account.name}</strong>
+          Active account:{" "}
+          <strong className="text-gray-900">{session.ad_account.name}</strong>
         </p>
       </div>
 
@@ -206,7 +209,9 @@ function KpiCard({
 }) {
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-1 shadow-sm">
-      <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</div>
+      <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+        {label}
+      </div>
       <div className="text-2xl font-semibold text-gray-900">{value}</div>
       <div className="text-xs text-gray-400">{hint}</div>
     </div>
