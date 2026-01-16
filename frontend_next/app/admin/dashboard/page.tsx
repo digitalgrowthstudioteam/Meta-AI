@@ -45,7 +45,7 @@ export default function AdminDashboardPage() {
          * SINGLE SOURCE
          * Calls backend admin dashboard summary
          */
-        const res = await fetch("/admin/dashboard/summary", {
+        const res = await fetch("/api/admin/dashboard/summary", {
           credentials: "include",
           cache: "no-store",
         });
