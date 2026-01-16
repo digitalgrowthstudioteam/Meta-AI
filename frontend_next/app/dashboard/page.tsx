@@ -37,7 +37,7 @@ export default function DashboardPage() {
 
   const loadSession = async () => {
     try {
-      const res = await apiFetch("/api/session/context", {
+      const res = await apiFetch("/session/context", {
         cache: "no-store",
       });
 
@@ -60,7 +60,7 @@ export default function DashboardPage() {
     }
 
     try {
-      const res = await apiFetch("/api/dashboard/summary", {
+      const res = await apiFetch("/dashboard/summary", {
         cache: "no-store",
       });
 
