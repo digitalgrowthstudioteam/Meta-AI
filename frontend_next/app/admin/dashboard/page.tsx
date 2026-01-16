@@ -42,11 +42,10 @@ export default function AdminDashboardPage() {
     (async () => {
       try {
         /**
-         * ✅ SINGLE SOURCE
-         * Always hit Next API → it proxies to backend
-         * Avoids cookie / CORS / auth break
+         * SINGLE SOURCE
+         * Calls backend admin dashboard summary
          */
-        const res = await fetch("/api/admin/dashboard", {
+        const res = await fetch("/admin/dashboard/summary", {
           credentials: "include",
           cache: "no-store",
         });
@@ -113,11 +112,27 @@ export default function AdminDashboardPage() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <KPI title="Total Users" value={data.users} />
-        <KPI title="Active Subs" value={data.subscriptions.active} color="text-green-600" />
-        <KPI title="Expired Subs" value={data.subscriptions.expired} color="text-gray-500" />
+        <KPI
+          title="Active Subs"
+          value={data.subscriptions.active}
+          color="text-green-600"
+        />
+        <KPI
+          title="Expired Subs"
+          value={data.subscriptions.expired}
+          color="text-gray-500"
+        />
         <KPI title="Total Campaigns" value={data.campaigns.total} />
-        <KPI title="AI Active" value={data.campaigns.ai_active} color="text-indigo-600" />
-        <KPI title="Manual Mode" value={data.campaigns.manual} color="text-orange-600" />
+        <KPI
+          title="AI Active"
+          value={data.campaigns.ai_active}
+          color="text-indigo-600"
+        />
+        <KPI
+          title="Manual Mode"
+          value={data.campaigns.manual}
+          color="text-orange-600"
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
