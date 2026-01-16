@@ -26,6 +26,26 @@ type DashboardSummary = {
   };
 };
 
+function KpiCard({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string | number;
+  hint: string;
+}) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-1 shadow-sm">
+      <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+        {label}
+      </div>
+      <div className="text-2xl font-semibold text-gray-900">{value}</div>
+      <div className="text-xs text-gray-400">{hint}</div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const router = useRouter();
 
@@ -194,26 +214,6 @@ export default function DashboardPage() {
           {syncing ? "Syncing..." : "Sync Campaigns Now"}
         </button>
       </div>
-    </div>
-  );
-}
-
-function KpiCard({
-  label,
-  value,
-  hint,
-}: {
-  label: string;
-  value: string | number;
-  hint: string;
-}) {
-  return (
-    <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-1 shadow-sm">
-      <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-        {label}
-      </div>
-      <div className="text-2xl font-semibold text-gray-900">{value}</div>
-      <div className="text-xs text-gray-400">{hint}</div>
     </div>
   );
 }
