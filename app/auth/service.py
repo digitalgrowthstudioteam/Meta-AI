@@ -141,10 +141,12 @@ async def request_magic_login(
     await db.commit()
 
     subject = build_magic_link_subject()
+
+    # 🔒 SINGLE CORRECT FRONTEND BASE URL
     base_url = settings.PUBLIC_APP_URL.rstrip("/")
+
     magic_link = f"{base_url}/api/auth/verify?token={raw_token}"
 
-    # send_email NEVER raises — this will not fail silently anymore
     send_magic_link_email(
         to_email=email,
         magic_link=magic_link,
