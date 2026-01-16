@@ -7,10 +7,6 @@ function normalize(path: string) {
   return path;
 }
 
-/**
- * Unified fetcher for backend API
- * Always hits FastAPI (never Next.js)
- */
 export async function apiFetch(
   endpoint: string,
   options: RequestInit = {}
@@ -23,13 +19,11 @@ export async function apiFetch(
 
   const _path = normalize(endpoint);
 
-  // ALWAYS hit backend
   const url = `${BACKEND_URL}${_path}`;
 
   return fetch(url, {
     ...options,
     headers,
-    credentials: "include",
-    cache: "no-store",
+    credentials: "include", // REQUIRED for cookies
   });
 }
