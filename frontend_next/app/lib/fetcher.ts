@@ -29,14 +29,13 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
   const _path = normalize(endpoint);
 
   /**
-   * RULES:
-   * /api/*         → Next.js internal API
-   * /backend/*     → Maps to backend, strips /backend
-   * everything else → calls backend
+   * RULES UPDATED:
+   * /api/* → backend, strip /api
+   * everything else → backend
    */
   const url = _path.startsWith("/api/")
-    ? _path // Next.js API
-    : `${BACKEND_URL}${_path}`; // Backend API
+    ? `${BACKEND_URL}${_path.replace(/^\/api/, "")}`
+    : `${BACKEND_URL}${_path}`;
 
   return fetch(url, {
     ...options,
