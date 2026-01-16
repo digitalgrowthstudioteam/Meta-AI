@@ -1,5 +1,7 @@
 const BACKEND_URL =
-  process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "") ||
+  (typeof window === "undefined"
+    ? process.env.NEXT_PUBLIC_BACKEND_URL
+    : process.env.NEXT_PUBLIC_BACKEND_BROWSER_URL) ||
   "http://127.0.0.1:8000";
 
 function normalize(path: string) {
@@ -24,6 +26,6 @@ export async function apiFetch(
   return fetch(url, {
     ...options,
     headers,
-    credentials: "include", // REQUIRED for cookies
+    credentials: "include",
   });
 }
