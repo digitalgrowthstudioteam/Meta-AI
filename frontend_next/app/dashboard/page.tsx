@@ -4,9 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "../lib/fetcher";
 
-/**
- * SINGLE SOURCE OF TRUTH
- */
 type SessionContext = {
   user: {
     id: string;
@@ -34,14 +31,10 @@ export default function DashboardPage() {
 
   const [session, setSession] = useState<SessionContext | null>(null);
   const [data, setData] = useState<DashboardSummary | null>(null);
-
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // -----------------------------
-  // LOAD SESSION CONTEXT
-  // -----------------------------
   const loadSession = async () => {
     try {
       const res = await apiFetch("/api/session/context", {
@@ -54,18 +47,12 @@ export default function DashboardPage() {
       }
 
       const json = await res.json();
-
-      // ❌ REMOVED AUTO-REDIRECT FOR ADMIN (INFINITE LOOP FIX)
       setSession(json);
-    } catch (error) {
-      console.error("Session load error:", error);
+    } catch {
       setSession(null);
     }
   };
 
-  // -----------------------------
-  // LOAD DASHBOARD SUMMARY
-  // -----------------------------
   const loadSummary = async () => {
     if (!session?.ad_account) {
       setData(null);
@@ -84,8 +71,8 @@ export default function DashboardPage() {
 
       const json = await res.json();
       setData(json);
-    } catch (error) {
-      console.error("Dashboard summary error:", error);
+    } catch {
+      setData(null);
     }
   };
 
@@ -98,33 +85,32 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    if (session && !session.user) {
+      router.push("/login");
+    }
+  }, [session]);
+
+  useEffect(() => {
     if (session?.ad_account?.id) {
       loadSummary();
     }
   }, [session?.ad_account?.id]);
 
-  // -----------------------------
-  // CONNECT META
-  // -----------------------------
   const connectMeta = async () => {
     try {
       const res = await apiFetch("/api/meta/connect", {
         cache: "no-store",
       });
+
       if (!res.ok) return;
 
       const json = await res.json();
       if (json?.redirect_url) {
         window.location.href = json.redirect_url;
       }
-    } catch (error) {
-      console.error("Meta connect error:", error);
-    }
+    } catch {}
   };
 
-  // -----------------------------
-  // SYNC CAMPAIGNS
-  // -----------------------------
   const syncCampaigns = async () => {
     setSyncing(true);
     setErrorMsg(null);
@@ -134,6 +120,7 @@ export default function DashboardPage() {
         method: "POST",
         cache: "no-store",
       });
+
       if (!res.ok) throw new Error();
       await loadSummary();
     } catch {
@@ -190,21 +177,9 @@ export default function DashboardPage() {
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <KpiCard
-          label="Total Campaigns"
-          value={totalCampaigns}
-          hint="Selected ad account"
-        />
-        <KpiCard
-          label="AI-Active Campaigns"
-          value={`${aiActive} / ${aiLimit}`}
-          hint="Plan limit"
-        />
-        <KpiCard
-          label="Account Status"
-          value="Connected"
-          hint="Meta Ads"
-        />
+        <KpiCard label="Total Campaigns" value={totalCampaigns} hint="Selected ad account" />
+        <KpiCard label="AI-Active Campaigns" value={`${aiActive} / ${aiLimit}`} hint="Plan limit" />
+        <KpiCard label="Account Status" value="Connected" hint="Meta Ads" />
       </div>
 
       <div className="pt-4 border-t">
@@ -219,8 +194,6 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-/* ----------------------------- */
 
 function KpiCard({
   label,
