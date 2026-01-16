@@ -18,10 +18,6 @@ eslint: {
 ignoreDuringBuilds: true,
 },
 
-api: {
-externalResolver: true,
-},
-
 experimental: {
 serverActions: false,
 },
