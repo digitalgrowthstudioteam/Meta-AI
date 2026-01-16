@@ -19,9 +19,10 @@ export async function apiFetch(
 
   const _path = normalize(endpoint);
 
-  // ALWAYS send /api/* to backend, no double-prefix
-  // everything else also goes to backend (no Next fallback)
-  const url = `${BACKEND_URL}${_path}`;
+  // If frontend calls "/api/*" → send to backend without double /api/api/
+  const url = _path.startsWith("/api/")
+    ? `${BACKEND_URL}${_path}`
+    : `${BACKEND_URL}${_path}`;
 
   return fetch(url, {
     ...options,
