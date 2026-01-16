@@ -19,9 +19,10 @@ export async function apiFetch(
 
   const _path = normalize(endpoint);
 
-  // If frontend calls "/api/*" → send to backend without double /api/api/
+  // If endpoint already starts with `/api/`, call backend as-is
+  // Fixes double-prefix `/api/api/...`
   const url = _path.startsWith("/api/")
-    ? `${BACKEND_URL}${_path}`
+    ? `${BACKEND_URL}${_path.replace(/^\/api/, "")}`
     : `${BACKEND_URL}${_path}`;
 
   return fetch(url, {
