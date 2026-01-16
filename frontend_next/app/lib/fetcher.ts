@@ -30,12 +30,10 @@ export async function apiFetch(endpoint: string, options: RequestInit = {}) {
 
   /**
    * RULES UPDATED:
-   * /api/* → backend, strip /api
-   * everything else → backend
+   * - /api/* → backend
+   * - everything else → backend
    */
-  const url = _path.startsWith("/api/")
-    ? `${BACKEND_URL}${_path.replace(/^\/api/, "")}`
-    : `${BACKEND_URL}${_path}`;
+  const url = `${BACKEND_URL}${_path}`;
 
   return fetch(url, {
     ...options,
