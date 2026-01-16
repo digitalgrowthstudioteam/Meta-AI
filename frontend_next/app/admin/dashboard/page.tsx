@@ -41,10 +41,6 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     (async () => {
       try {
-        /**
-         * SINGLE SOURCE
-         * Calls backend admin dashboard summary
-         */
         const res = await fetch("/api/admin/dashboard/summary", {
           credentials: "include",
           cache: "no-store",
@@ -168,8 +164,6 @@ export default function AdminDashboardPage() {
     </div>
   );
 }
-
-/* ---------- Components ---------- */
 
 function KPI({
   title,
