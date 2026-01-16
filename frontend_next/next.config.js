@@ -16,8 +16,18 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+
   eslint: {
     ignoreDuringBuilds: true,
+  },
+
+  // ⛔ prevents Next internal API handling in production
+  api: {
+    externalResolver: true,
+  },
+
+  experimental: {
+    serverActions: false,
   },
 };
 
