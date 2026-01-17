@@ -8,6 +8,7 @@ type SessionContext = {
   user: {
     id: string;
     email: string;
+    role: string;
     is_admin: boolean;
     is_impersonated: boolean;
   } | null;
@@ -16,6 +17,8 @@ type SessionContext = {
     name: string;
     meta_account_id: string;
   } | null;
+  has_backend_access?: boolean;
+  needs_meta_connect?: boolean;
 };
 
 type DashboardSummary = {
@@ -158,6 +161,40 @@ export default function DashboardPage() {
     );
   }
 
+  // ================================
+  // SAFE FALLBACK MODE (NO META)
+  // ================================
+  if (session?.has_backend_access && session?.needs_meta_connect) {
+    return (
+      <div className="space-y-6 max-w-xl mx-auto mt-10 p-6 bg-white rounded-lg border shadow-sm">
+        <div>
+          <h1 className="text-xl font-semibold text-gray-900">
+            Welcome to Digital Growth Studio
+          </h1>
+          <p className="mt-2 text-sm text-gray-600">
+            You can continue using backend features. Connect Meta Ads anytime for AI optimization.
+          </p>
+        </div>
+
+        <div className="border-t pt-4 space-y-3">
+          <button
+            onClick={connectMeta}
+            className="w-full rounded-md bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-500"
+          >
+            Connect Meta Ads
+          </button>
+
+          <button
+            onClick={() => router.push("/admin/dashboard")}
+            className="w-full rounded-md bg-white px-4 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+          >
+            Go to Backend Dashboard
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (!session?.ad_account) {
     return (
       <div className="space-y-6 max-w-xl mx-auto mt-10 p-6 bg-white rounded-lg border shadow-sm">
@@ -166,12 +203,12 @@ export default function DashboardPage() {
             Welcome to Digital Growth Studio
           </h1>
           <p className="mt-2 text-sm text-gray-600">
-            To get started with AI optimization, please connect your Meta Ads account and select an ad account to manage.
+            To get started with AI optimization, please connect your Meta Ads account.
           </p>
         </div>
         <button
           onClick={connectMeta}
-          className="w-full rounded-md bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+          className="w-full rounded-md bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-500"
         >
           Connect Meta Ads
         </button>
