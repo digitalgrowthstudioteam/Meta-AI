@@ -88,7 +88,7 @@ app.mount(
 # Auth / Session
 app.include_router(auth_router, prefix="/api")
 app.include_router(session_router, prefix="/api")
-app.include_router(session_api_router, prefix="/api")  # <-- FIX: Enables /api/session/context
+app.include_router(session_api_router, prefix="/api")  # enables /api/session/context
 app.include_router(campaigns_router, prefix="/api")
 app.include_router(billing_router, prefix="/api")
 
@@ -119,9 +119,6 @@ app.include_router(admin_ai_force_router, prefix="/api")
 # AUTO-ADMIN PROMOTION LOGIC
 # =========================
 async def ensure_default_admin():
-    """
-    Automatically promotes the main email to Admin on startup.
-    """
     target_email = "digitalgrowthstudioteam@gmail.com"
 
     try:
