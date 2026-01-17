@@ -29,9 +29,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   /**
-   * 🔒 HARD RULE
-   * Admin routes must NEVER load user shell, session redirect logic,
-   * or admin_view toggles.
+   * 🔒 HARD RULE — PURE ADMIN UI
    */
   if (pathname.startsWith("/admin")) {
     return (
@@ -39,30 +37,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <body className="bg-slate-50 text-gray-900">
           <Toaster position="bottom-right" />
           {children}
-        </body>
-      </html>
-    );
-  }
-
-  /**
-   * 🛑 ADMIN SHOULD NEVER ENTER USER ROUTES
-   */
-  if (
-    pathname === "/dashboard" ||
-    pathname.startsWith("/campaigns") ||
-    pathname.startsWith("/ai-actions") ||
-    pathname.startsWith("/billing") ||
-    pathname.startsWith("/settings") ||
-    pathname.startsWith("/reports")
-  ) {
-    return (
-      <html lang="en">
-        <body>
-          <script
-            dangerouslySetInnerHTML={{
-              __html: `window.location.href='/admin/dashboard'`,
-            }}
-          />
         </body>
       </html>
     );
@@ -80,7 +54,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   }
 
   /**
-   * USER APP SHELL ONLY
+   * USER ROUTES → NORMAL USER SHELL
    */
   return <UserShell>{children}</UserShell>;
 }
