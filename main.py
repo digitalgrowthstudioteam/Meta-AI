@@ -86,7 +86,7 @@ app.mount(
 # =========================
 
 # Auth / Session
-app.include_router(auth_router, prefix="/api")
+app.include_router(auth_router)
 app.include_router(session_router, prefix="/api")
 app.include_router(session_api_router, prefix="/api")  # enables /api/session/context
 app.include_router(campaigns_router, prefix="/api")
