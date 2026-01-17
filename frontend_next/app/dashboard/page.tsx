@@ -65,14 +65,14 @@ export default function DashboardPage() {
       });
 
       if (!res.ok) {
-        setSession(null);
+        setSession({ user: null, ad_account: null } as any);
         return;
       }
 
       const json = await res.json();
       setSession(json);
     } catch {
-      setSession(null);
+      setSession({ user: null, ad_account: null } as any);
     }
   };
 
@@ -107,11 +107,12 @@ export default function DashboardPage() {
     })();
   }, []);
 
+  // 🔐 Prevent infinite redirect loop
   useEffect(() => {
-    if (session && !session.user) {
-      router.push("/login");
+    if (!loading && session?.user === null) {
+      router.replace("/login");
     }
-  }, [session, router]);
+  }, [loading, session, router]);
 
   useEffect(() => {
     if (session?.ad_account?.id) {
@@ -184,7 +185,6 @@ export default function DashboardPage() {
             Connect Meta Ads
           </button>
 
-          {/* Only show backend button if admin */}
           {session.user?.is_admin === true && (
             <button
               onClick={() => router.push("/admin/dashboard")}
