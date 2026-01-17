@@ -29,7 +29,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`/api/session/context`, {
+        const backend =
+          `${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/session/context`;
+
+        const res = await fetch(backend, {
           credentials: "include",
           cache: "no-store",
         });
@@ -41,7 +44,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
         const data = await res.json();
 
-        // Normalize admin flag
         const adminFlag =
           data?.is_admin === true ||
           data?.user?.is_admin === true ||
@@ -53,7 +55,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         }
 
         setSession(data);
-      } catch (err) {
+      } catch {
         router.replace("/login");
       } finally {
         setLoaded(true);
@@ -62,10 +64,14 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   }, [router]);
 
   const exitImpersonation = async () => {
-    await fetch(`/api/admin/impersonate/exit`, {
+    const backend =
+      `${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/admin/impersonate/exit`;
+
+    await fetch(backend, {
       method: "POST",
       credentials: "include",
     });
+
     router.refresh();
   };
 
@@ -95,9 +101,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
       {isImpersonating && (
         <div className="fixed top-0 inset-x-0 z-50 bg-red-600 text-white text-sm px-4 py-2 flex items-center justify-between">
-          <div>
-            Viewing as user — <b>READ ONLY</b>. All write actions are blocked.
-          </div>
+          <div>Viewing as user — <b>READ ONLY</b>. All write actions are blocked.</div>
           <button
             onClick={exitImpersonation}
             className="bg-white text-red-600 px-3 py-1 rounded text-xs font-semibold"
@@ -126,9 +130,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             <div className="text-sm uppercase tracking-wide text-blue-700">
               Admin Console
             </div>
-            <div className="text-xs text-gray-500">
-              Digital Growth Studio
-            </div>
+            <div className="text-xs text-gray-500">Digital Growth Studio</div>
           </div>
           <button className="md:hidden" onClick={() => setSidebarOpen(false)}>
             <X size={20} />
@@ -137,66 +139,36 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
         <nav className="flex-1 px-2 py-3 space-y-1 overflow-y-auto">
           <SidebarGroup label="Dashboard">
-            <NavItem href="/admin/dashboard" pathname={pathname}>
-              Overview
-            </NavItem>
+            <NavItem href="/admin/dashboard" pathname={pathname}>Overview</NavItem>
           </SidebarGroup>
 
           <SidebarGroup label="Users">
-            <NavItem href="/admin/users" pathname={pathname}>
-              Users & Impersonation
-            </NavItem>
-            <NavItem href="/admin/chat" pathname={pathname}>
-              Chat Monitor
-            </NavItem>
+            <NavItem href="/admin/users" pathname={pathname}>Users & Impersonation</NavItem>
+            <NavItem href="/admin/chat" pathname={pathname}>Chat Monitor</NavItem>
           </SidebarGroup>
 
           <SidebarGroup label="Campaigns & AI">
-            <NavItem href="/admin/campaigns" pathname={pathname}>
-              Campaigns
-            </NavItem>
-            <NavItem href="/admin/ai-actions" pathname={pathname}>
-              AI Actions Queue
-            </NavItem>
-            <NavItem href="/admin/ai-suggestions" pathname={pathname}>
-              AI Suggestions
-            </NavItem>
+            <NavItem href="/admin/campaigns" pathname={pathname}>Campaigns</NavItem>
+            <NavItem href="/admin/ai-actions" pathname={pathname}>AI Actions Queue</NavItem>
+            <NavItem href="/admin/ai-suggestions" pathname={pathname}>AI Suggestions</NavItem>
           </SidebarGroup>
 
           <SidebarGroup label="Billing">
-            <NavItem href="/admin/billing" pathname={pathname}>
-              Subscriptions
-            </NavItem>
-            <NavItem href="/admin/invoices" pathname={pathname}>
-              Invoices
-            </NavItem>
-            <NavItem href="/admin/razorpay" pathname={pathname}>
-              Razorpay Logs
-            </NavItem>
+            <NavItem href="/admin/billing" pathname={pathname}>Subscriptions</NavItem>
+            <NavItem href="/admin/invoices" pathname={pathname}>Invoices</NavItem>
+            <NavItem href="/admin/razorpay" pathname={pathname}>Razorpay Logs</NavItem>
           </SidebarGroup>
 
           <SidebarGroup label="Audit & Compliance">
-            <NavItem href="/admin/audit" pathname={pathname}>
-              Audit Logs
-            </NavItem>
-            <NavItem href="/admin/reports" pathname={pathname}>
-              Reports
-            </NavItem>
+            <NavItem href="/admin/audit" pathname={pathname}>Audit Logs</NavItem>
+            <NavItem href="/admin/reports" pathname={pathname}>Reports</NavItem>
           </SidebarGroup>
 
           <SidebarGroup label="System">
-            <NavItem href="/admin/settings" pathname={pathname}>
-              Global Settings
-            </NavItem>
-            <NavItem href="/admin/metrics" pathname={pathname}>
-              Metrics Sync
-            </NavItem>
-            <NavItem href="/admin/feature-flags" pathname={pathname}>
-              Feature Flags
-            </NavItem>
-            <NavItem href="/admin/risk" pathname={pathname}>
-              Risk & Safety
-            </NavItem>
+            <NavItem href="/admin/settings" pathname={pathname}>Global Settings</NavItem>
+            <NavItem href="/admin/metrics" pathname={pathname}>Metrics Sync</NavItem>
+            <NavItem href="/admin/feature-flags" pathname={pathname}>Feature Flags</NavItem>
+            <NavItem href="/admin/risk" pathname={pathname}>Risk & Safety</NavItem>
           </SidebarGroup>
         </nav>
 
@@ -227,13 +199,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   );
 }
 
-function SidebarGroup({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
+function SidebarGroup({ label, children }: { label: string; children: ReactNode }) {
   const [open, setOpen] = useState(true);
   return (
     <div className="space-y-1">
