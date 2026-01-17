@@ -6,11 +6,14 @@ const PUBLIC_PATHS = ["/", "/login", "/verify"];
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // Allow system/static files
+  // Allow system/static/SSR/asset files
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/static") ||
     pathname.startsWith("/favicon.ico") ||
+    pathname.startsWith("/manifest") ||
+    pathname.startsWith("/robots.txt") ||
+    pathname.startsWith("/sitemap") ||
     pathname.includes(".")
   ) {
     return NextResponse.next();
@@ -21,7 +24,6 @@ export async function middleware(request: NextRequest) {
 
   // 🔒 ADMIN PROTECTION
   if (pathname.startsWith("/admin")) {
-    // Not logged in → go login
     if (!sessionCookie) {
       const loginUrl = request.nextUrl.clone();
       loginUrl.pathname = "/login";
@@ -29,14 +31,12 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
 
-    // Logged in but not admin → redirect home
     if (roleCookie !== "admin") {
       const dashUrl = request.nextUrl.clone();
       dashUrl.pathname = "/dashboard";
       return NextResponse.redirect(dashUrl);
     }
 
-    // Admin allowed
     return NextResponse.next();
   }
 
@@ -48,7 +48,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // If logged in, redirect away from public "/" & "/login"
+  // Redirect logged in users away from "/" & "/login"
   if (sessionCookie && (pathname === "/" || pathname === "/login")) {
     const dashUrl = request.nextUrl.clone();
     dashUrl.pathname = "/dashboard";
@@ -58,6 +58,9 @@ export async function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
+// ⚠️ Critical: Exclude ALL SSR runtime assets and API routes from middleware
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api).*)"],
+  matcher: [
+    "/((?!_next|static|favicon.ico|manifest|robots.txt|sitemap|api).*)",
+  ],
 };
