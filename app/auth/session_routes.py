@@ -50,6 +50,8 @@ async def session_context(
             "active_ad_account_id": None,
             "ad_account": None,
             "user": None,
+            "has_backend_access": False,
+            "needs_meta_connect": True,
         }
 
     # -----------------------------
@@ -113,6 +115,12 @@ async def session_context(
         else:
             active_account_id = cookie_active_id
 
+    # ------------------------------------------------
+    # SAFE FALLBACK FLAGS (FOR BROKEN/FRESH ACCOUNTS)
+    # ------------------------------------------------
+    has_backend_access = True  # Always true if logged in
+    needs_meta_connect = len(ad_accounts) == 0
+
     # -----------------------------
     # RESPONSE
     # -----------------------------
@@ -130,6 +138,8 @@ async def session_context(
         "ad_accounts": ad_accounts,
         "active_ad_account_id": active_account_id,
         "ad_account": active_account,  # backward compatibility
+        "has_backend_access": has_backend_access,
+        "needs_meta_connect": needs_meta_connect,
     }
 
 
