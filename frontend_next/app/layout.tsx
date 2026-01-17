@@ -18,19 +18,14 @@ type SessionContext = {
   } | null;
   is_admin?: boolean;
   admin_view?: boolean;
-  ad_account?: {
-    id: string;
-    name: string;
-    meta_account_id: string;
-  } | null;
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
-  /** ================================
-   *  1. PURE ADMIN ROUTES (NO SHELL)
-   * ================================ */
+  // ================
+  // 1. PURE ADMIN UI
+  // ================
   if (pathname.startsWith("/admin")) {
     return (
       <html lang="en">
@@ -42,9 +37,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  /** ================================
-   *  2. PUBLIC ROUTES (NO SESSION)
-   * ================================ */
+  // =================
+  // 2. PUBLIC ROUTES
+  // =================
   if (pathname === "/" || pathname === "/login") {
     return (
       <html lang="en">
@@ -56,9 +51,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  /** ================================
-   *  3. USER ROUTES (SESSION SHELL)
-   * ================================ */
+  // =================
+  // 3. USER ROUTES
+  // =================
   return <UserShell>{children}</UserShell>;
 }
 
@@ -119,9 +114,7 @@ function UserShell({ children }: { children: ReactNode }) {
           >
             <div className="px-5 py-4 border-b flex justify-between items-center">
               <div>
-                <div className="text-sm font-bold text-amber-700">
-                  Digital Growth Studio
-                </div>
+                <div className="text-sm font-bold text-amber-700">Digital Growth Studio</div>
                 <div className="text-xs text-gray-500">Meta Ads AI</div>
               </div>
               <button className="md:hidden" onClick={() => setSidebarOpen(false)}>
@@ -149,6 +142,7 @@ function UserShell({ children }: { children: ReactNode }) {
                 Settings
               </Nav>
 
+              {/* ADMIN LINK ONLY SHOWN, NO REDIRECT */}
               {session?.user?.is_admin && (
                 <>
                   <div className="pt-4 text-xs uppercase text-gray-400">Admin</div>
@@ -183,22 +177,12 @@ function UserShell({ children }: { children: ReactNode }) {
   );
 }
 
-function Nav({
-  href,
-  active,
-  children,
-}: {
-  href: string;
-  active: boolean;
-  children: ReactNode;
-}) {
+function Nav({ href, active, children }: { href: string; active: boolean; children: ReactNode }) {
   return (
     <Link
       href={href}
       className={`block rounded-md px-3 py-2 text-sm ${
-        active
-          ? "bg-amber-100 text-amber-800 font-medium"
-          : "text-gray-700 hover:bg-amber-50"
+        active ? "bg-amber-100 text-amber-800 font-medium" : "text-gray-700 hover:bg-amber-50"
       }`}
     >
       {children}
