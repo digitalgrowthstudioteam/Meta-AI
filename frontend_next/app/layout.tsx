@@ -28,9 +28,9 @@ type SessionContext = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
-  /**
-   * 🔒 PURE ADMIN UI (no user shell)
-   */
+  /** ================================
+   *  1. PURE ADMIN ROUTES (NO SHELL)
+   * ================================ */
   if (pathname.startsWith("/admin")) {
     return (
       <html lang="en">
@@ -42,20 +42,23 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  /**
-   * 🌍 PUBLIC ROUTES (no session needed)
-   */
+  /** ================================
+   *  2. PUBLIC ROUTES (NO SESSION)
+   * ================================ */
   if (pathname === "/" || pathname === "/login") {
     return (
       <html lang="en">
-        <body className="bg-slate-50 text-gray-900">{children}</body>
+        <body className="bg-slate-50 text-gray-900">
+          <Toaster position="bottom-right" />
+          {children}
+        </body>
       </html>
     );
   }
 
-  /**
-   * 👤 USER ROUTES (require session shell)
-   */
+  /** ================================
+   *  3. USER ROUTES (SESSION SHELL)
+   * ================================ */
   return <UserShell>{children}</UserShell>;
 }
 
@@ -72,15 +75,8 @@ function UserShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const res = await apiFetch("/api/session/context", {
-          cache: "no-store",
-        });
-
-        if (res.ok) {
-          setSession(await res.json());
-        } else {
-          setSession(null);
-        }
+        const res = await apiFetch("/api/session/context", { cache: "no-store" });
+        setSession(res.ok ? await res.json() : null);
       } catch {
         setSession(null);
       } finally {
@@ -112,6 +108,7 @@ function UserShell({ children }: { children: ReactNode }) {
             />
           )}
 
+          {/* SIDEBAR */}
           <aside
             className={`
               fixed z-50 inset-y-0 left-0 w-64 bg-white border-r
@@ -152,12 +149,9 @@ function UserShell({ children }: { children: ReactNode }) {
                 Settings
               </Nav>
 
-              {/* ADMIN SECTION */}
               {session?.user?.is_admin && (
                 <>
-                  <div className="pt-4 text-xs uppercase text-gray-400">
-                    Admin
-                  </div>
+                  <div className="pt-4 text-xs uppercase text-gray-400">Admin</div>
                   <Link
                     href="/admin/dashboard"
                     className="flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-amber-50"
@@ -170,6 +164,7 @@ function UserShell({ children }: { children: ReactNode }) {
             </nav>
           </aside>
 
+          {/* MAIN CONTENT */}
           <div className="flex flex-col flex-1">
             <header className="md:hidden flex items-center gap-3 px-4 py-3 border-b bg-white">
               <button onClick={() => setSidebarOpen(true)}>
