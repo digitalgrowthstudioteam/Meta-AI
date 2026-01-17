@@ -184,12 +184,15 @@ export default function DashboardPage() {
             Connect Meta Ads
           </button>
 
-          <button
-            onClick={() => router.push("/admin/dashboard")}
-            className="w-full rounded-md bg-white px-4 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
-          >
-            Go to Backend Dashboard
-          </button>
+          {/* Only show backend button if admin */}
+          {session.user?.is_admin === true && (
+            <button
+              onClick={() => router.push("/admin/dashboard")}
+              className="w-full rounded-md bg-white px-4 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+            >
+              Go to Backend Dashboard
+            </button>
+          )}
         </div>
       </div>
     );
@@ -254,4 +257,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
