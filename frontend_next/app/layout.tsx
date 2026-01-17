@@ -15,7 +15,7 @@ type SessionContext = {
     role?: string;
     is_admin?: boolean;
     is_impersonated?: boolean;
-  };
+  } | null;
   is_admin?: boolean;
   admin_view?: boolean;
   ad_account?: {
@@ -29,7 +29,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   /**
-   * 🔒 HARD RULE — PURE ADMIN UI
+   * 🔒 PURE ADMIN UI (no user shell)
    */
   if (pathname.startsWith("/admin")) {
     return (
@@ -43,7 +43,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   }
 
   /**
-   * PUBLIC ROUTES
+   * 🌍 PUBLIC ROUTES (no session needed)
    */
   if (pathname === "/" || pathname === "/login") {
     return (
@@ -54,7 +54,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   }
 
   /**
-   * USER ROUTES → NORMAL USER SHELL
+   * 👤 USER ROUTES (require session shell)
    */
   return <UserShell>{children}</UserShell>;
 }
@@ -152,6 +152,7 @@ function UserShell({ children }: { children: ReactNode }) {
                 Settings
               </Nav>
 
+              {/* ADMIN SECTION */}
               {session?.user?.is_admin && (
                 <>
                   <div className="pt-4 text-xs uppercase text-gray-400">
