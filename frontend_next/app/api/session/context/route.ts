@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
 
   // 🔒 FIX: use the SAME backend env as fetcher
   const backend =
-    `${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/session/context`;
+    `${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/session/context`;
 
   const res = await fetch(backend, {
     method: "GET",
