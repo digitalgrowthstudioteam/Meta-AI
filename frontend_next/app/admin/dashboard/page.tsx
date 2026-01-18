@@ -12,7 +12,7 @@ import {
 } from "recharts";
 
 const BACKEND = process.env.NEXT_PUBLIC_BACKEND_BROWSER_URL || "";
-const SUMMARY_URL = `${BACKEND}/admin/dashboard/summary`;
+const SUMMARY_URL = `${BACKEND}/admin/dashboard`;
 
 type DashboardData = {
   users: number;
