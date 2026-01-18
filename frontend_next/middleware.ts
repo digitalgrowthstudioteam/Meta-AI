@@ -19,22 +19,12 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Read cookies
+  // Cookies
   const sessionCookie = request.cookies.get("meta_ai_session")?.value;
   const roleCookie = request.cookies.get("meta_ai_role")?.value;
 
   // =====================================================
-  //  🧩 WRITE CURRENT PATH FOR SSR LAYOUT USE
-  // =====================================================
-  const response = NextResponse.next();
-  response.cookies.set("next-url", pathname, {
-    httpOnly: false,
-    sameSite: "lax",
-    path: "/",
-  });
-
-  // =====================================================
-  //  🔒 ADMIN PROTECTION — ALLOW CONTEXT SYNC FIRST
+  // 🔒 ADMIN PROTECTION
   // =====================================================
   if (pathname.startsWith("/admin")) {
     // Not logged in → go login
@@ -45,24 +35,24 @@ export function middleware(request: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
 
-    // Logged in but role not synced yet → allow to continue & let backend set cookies
+    // Role not loaded yet (first request) → allow & backend will set role cookie
     if (!roleCookie) {
-      return response;
+      return NextResponse.next();
     }
 
-    // Logged in but not admin → go dashboard
+    // Logged in but not admin → redirect to dashboard
     if (roleCookie !== "admin") {
       const dashUrl = request.nextUrl.clone();
       dashUrl.pathname = "/dashboard";
       return NextResponse.redirect(dashUrl);
     }
 
-    // Admin allowed
-    return response;
+    // Admin authenticated
+    return NextResponse.next();
   }
 
   // =====================================================
-  //  🔐 PUBLIC ROUTES
+  // 🔐 PUBLIC ROUTES
   // =====================================================
   if (!sessionCookie && !PUBLIC_PATHS.includes(pathname)) {
     const loginUrl = request.nextUrl.clone();
@@ -71,18 +61,18 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Logged in but on login/home → send to dashboard
+  // If logged in but on login/home → send to dashboard
   if (sessionCookie && (pathname === "/" || pathname === "/login")) {
     const dashUrl = request.nextUrl.clone();
     dashUrl.pathname = "/dashboard";
     return NextResponse.redirect(dashUrl);
   }
 
-  return response;
+  return NextResponse.next();
 }
 
 // =====================================================
-//  ⚙️ CONFIG (exclude APIs, runtime assets)
+// ⚙️ CONFIG (exclude APIs and static assets)
 // =====================================================
 export const config = {
   matcher: [
