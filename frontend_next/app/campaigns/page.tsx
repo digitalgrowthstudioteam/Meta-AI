@@ -91,7 +91,7 @@ export default function CampaignsPage() {
   };
 
   /* -----------------------------------
-   * DETERMINE SELECTED ACCOUNT
+   * SELECTED ACCOUNT
    * ----------------------------------- */
   const getSelectedAccountId = () => {
     const cookieId = getCookie(COOKIE_KEY);
@@ -177,7 +177,7 @@ export default function CampaignsPage() {
 
       await loadCampaigns();
       toast.success("Campaigns synced successfully");
-    } catch (error) {
+    } catch {
       toast.error("Failed to sync campaigns");
     } finally {
       setSyncing(false);
@@ -185,7 +185,7 @@ export default function CampaignsPage() {
   };
 
   /* -----------------------------------
-   * TOGGLE AI  (PLAN ENFORCED + UI REVERT)
+   * TOGGLE AI
    * ----------------------------------- */
   const toggleAI = async (campaign: Campaign) => {
     if (togglingId) return;
@@ -193,7 +193,6 @@ export default function CampaignsPage() {
     const nextValue = !campaign.ai_active;
     setTogglingId(campaign.id);
 
-    // Optimistic UI update
     setCampaigns((prev) =>
       prev.map((c) => (c.id === campaign.id ? { ...c, ai_active: nextValue } : c))
     );
@@ -208,7 +207,6 @@ export default function CampaignsPage() {
       if (!res.ok) {
         const err = await res.json().catch(() => null);
 
-        // Revert UI
         setCampaigns((prev) =>
           prev.map((c) => (c.id === campaign.id ? { ...c, ai_active: !nextValue } : c))
         );
@@ -223,9 +221,7 @@ export default function CampaignsPage() {
       }
 
       toast.success(nextValue ? "AI activated" : "AI deactivated");
-
     } catch {
-      // Revert UI on unexpected failure
       setCampaigns((prev) =>
         prev.map((c) => (c.id === campaign.id ? { ...c, ai_active: !nextValue } : c))
       );
@@ -240,13 +236,13 @@ export default function CampaignsPage() {
    * RENDER
    * ----------------------------------- */
   if (!session?.ad_accounts) {
-    return <div className="p-4 text-sm text-gray-500">Loading context...</div>;
+    return <div className="p-6 text-sm text-gray-500">Loading context...</div>;
   }
 
   const selectedId = getSelectedAccountId();
 
   return (
-    <div className="space-y-6">
+    <div className="px-4 py-6 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold text-gray-900">Campaigns</h1>
@@ -259,7 +255,7 @@ export default function CampaignsPage() {
         </div>
 
         <select
-          className="block w-full sm:w-auto rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+          className="block w-full sm:w-auto rounded-md border-gray-300 text-gray-900 shadow-sm focus:ring-blue-600 focus:border-blue-600 sm:text-sm"
           value={selectedId || ""}
           onChange={(e) => switchAdAccount(e.target.value)}
         >
@@ -276,7 +272,7 @@ export default function CampaignsPage() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-md border-0 py-1.5 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-indigo-600 sm:text-sm sm:leading-6"
+          className="rounded-md border-gray-300 text-gray-900 shadow-sm focus:ring-blue-600 focus:border-blue-600"
         >
           <option value="">All Status</option>
           <option value="ACTIVE">Active</option>
@@ -286,7 +282,7 @@ export default function CampaignsPage() {
         <select
           value={aiFilter}
           onChange={(e) => setAiFilter(e.target.value)}
-          className="rounded-md border-0 py-1.5 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-indigo-600 sm:text-sm sm:leading-6"
+          className="rounded-md border-gray-300 text-gray-900 shadow-sm focus:ring-blue-600 focus:border-blue-600"
         >
           <option value="">AI (All)</option>
           <option value="true">AI Active</option>
@@ -296,16 +292,16 @@ export default function CampaignsPage() {
         <select
           value={objectiveFilter}
           onChange={(e) => setObjectiveFilter(e.target.value)}
-          className="rounded-md border-0 py-1.5 text-gray-900 ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-indigo-600 sm:text-sm sm:leading-6"
+          className="rounded-md border-gray-300 text-gray-900 shadow-sm focus:ring-blue-600 focus:border-blue-600"
         >
           <option value="">All Objectives</option>
           <option value="LEAD">Lead Gen</option>
           <option value="SALES">Sales</option>
         </select>
 
-        <button 
-          onClick={syncCampaigns} 
-          disabled={syncing} 
+        <button
+          onClick={syncCampaigns}
+          disabled={syncing}
           className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50"
         >
           {syncing ? "Syncing…" : "Sync"}
@@ -316,7 +312,7 @@ export default function CampaignsPage() {
       {error && <div className="text-sm text-red-600">{error}</div>}
 
       {!loading && campaigns.length === 0 && (
-        <div className="text-center py-10 bg-white rounded-lg border border-dashed">
+        <div className="text-center py-12 bg-white rounded-lg border border-dashed shadow-sm">
           <p className="text-sm text-gray-500">No campaigns found matching your criteria.</p>
         </div>
       )}
@@ -326,23 +322,37 @@ export default function CampaignsPage() {
           <table className="min-w-full divide-y divide-gray-300">
             <thead className="bg-gray-50">
               <tr>
-                <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">Campaign</th>
-                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Objective</th>
-                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Status</th>
-                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">AI Optimization</th>
+                <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">
+                  Campaign
+                </th>
+                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                  Objective
+                </th>
+                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                  Status
+                </th>
+                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
+                  AI Optimization
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
               {campaigns.map((c) => (
                 <tr key={c.id}>
-                  <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">{c.name}</td>
-                  <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{c.objective ?? "—"}</td>
+                  <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
+                    {c.name}
+                  </td>
                   <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                    <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${
-                      c.status === 'ACTIVE' 
-                        ? 'bg-green-50 text-green-700 ring-green-600/20' 
-                        : 'bg-yellow-50 text-yellow-800 ring-yellow-600/20'
-                    }`}>
+                    {c.objective ?? "—"}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                    <span
+                      className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${
+                        c.status === "ACTIVE"
+                          ? "bg-green-50 text-green-700 ring-green-600/20"
+                          : "bg-yellow-50 text-yellow-800 ring-yellow-600/20"
+                      }`}
+                    >
                       {c.status}
                     </span>
                   </td>
@@ -350,14 +360,14 @@ export default function CampaignsPage() {
                     <button
                       onClick={() => toggleAI(c)}
                       disabled={togglingId === c.id}
-                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2 ${
-                        c.ai_active ? "bg-indigo-600" : "bg-gray-200"
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${
+                        c.ai_active ? "bg-blue-600" : "bg-gray-200"
                       } ${togglingId === c.id ? "opacity-50 cursor-wait" : ""}`}
                     >
                       <span className="sr-only">Use setting</span>
                       <span
                         aria-hidden="true"
-                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${
                           c.ai_active ? "translate-x-5" : "translate-x-0"
                         }`}
                       />
