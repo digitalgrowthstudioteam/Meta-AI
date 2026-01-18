@@ -49,7 +49,6 @@ type Campaign = {
 export default function ReportsPage() {
   const [session, setSession] = useState<SessionContext | null>(null);
 
-  /* Filters */
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [objective, setObjective] = useState("");
@@ -62,7 +61,7 @@ export default function ReportsPage() {
   const [error, setError] = useState<string | null>(null);
 
   /* ----------------------------------
-   * LOAD SESSION CONTEXT
+   * LOAD SESSION
    * ---------------------------------- */
   const loadSession = async () => {
     const res = await fetch("/api/session/context", {
@@ -80,7 +79,7 @@ export default function ReportsPage() {
   };
 
   /* ----------------------------------
-   * LOAD CAMPAIGNS (STRICT CONTEXT)
+   * LOAD CAMPAIGNS
    * ---------------------------------- */
   const loadCampaigns = async () => {
     if (!session?.ad_account) {
@@ -103,7 +102,7 @@ export default function ReportsPage() {
   };
 
   /* ----------------------------------
-   * LOAD REPORT
+   * LOAD REPORT DATA
    * ---------------------------------- */
   const loadReport = async () => {
     if (!fromDate || !toDate || !session?.ad_account) return;
@@ -149,7 +148,7 @@ export default function ReportsPage() {
   }, [session?.ad_account?.id]);
 
   /* ----------------------------------
-   * DERIVED METRICS
+   * METRICS
    * ---------------------------------- */
   const totals = data.reduce(
     (acc, r) => {
@@ -161,19 +160,20 @@ export default function ReportsPage() {
     { spend: 0, conversions: 0, revenue: 0 }
   );
 
-  const avgRoas =
-    totals.spend > 0 ? totals.revenue / totals.spend : null;
+  const avgRoas = totals.spend > 0 ? totals.revenue / totals.spend : null;
 
   /* ----------------------------------
-   * STATES
+   * NO ACCOUNT
    * ---------------------------------- */
   if (!session?.ad_account) {
     return (
-      <div className="surface p-6">
-        <h2 className="font-medium mb-1">No ad account selected</h2>
-        <p className="text-sm text-gray-600">
-          Connect Meta Ads and select an ad account.
-        </p>
+      <div className="px-4 py-6 sm:px-6 lg:px-8 max-w-4xl mx-auto">
+        <div className="bg-white border rounded-lg shadow-sm p-6">
+          <h2 className="font-medium mb-1 text-gray-900">No ad account selected</h2>
+          <p className="text-sm text-gray-600">
+            Connect Meta Ads and select an ad account.
+          </p>
+        </div>
       </div>
     );
   }
@@ -182,34 +182,35 @@ export default function ReportsPage() {
    * RENDER
    * ---------------------------------- */
   return (
-    <div className="space-y-8">
+    <div className="px-4 py-6 sm:px-6 lg:px-8 max-w-6xl mx-auto space-y-8">
       <div>
-        <h1 className="text-xl font-semibold">Reports</h1>
+        <h1 className="text-xl font-semibold text-gray-900">Reports</h1>
         <p className="text-sm text-gray-500">
-          Active account: <strong>{session.ad_account.name}</strong>
+          Active account:{" "}
+          <strong className="text-gray-900">{session.ad_account.name}</strong>
         </p>
       </div>
 
       {/* FILTER BAR */}
-      <div className="surface p-4 grid grid-cols-2 lg:grid-cols-6 gap-3 text-sm">
+      <div className="bg-white border rounded-lg shadow-sm p-4 grid grid-cols-2 md:grid-cols-6 gap-3 text-sm">
         <input
           type="date"
           value={fromDate}
           onChange={(e) => setFromDate(e.target.value)}
-          className="border rounded px-2 py-1"
+          className="rounded-md border px-2 py-1"
         />
 
         <input
           type="date"
           value={toDate}
           onChange={(e) => setToDate(e.target.value)}
-          className="border rounded px-2 py-1"
+          className="rounded-md border px-2 py-1"
         />
 
         <select
           value={campaignId}
           onChange={(e) => setCampaignId(e.target.value)}
-          className="border rounded px-2 py-1"
+          className="rounded-md border px-2 py-1"
         >
           <option value="">All Campaigns</option>
           {campaigns.map((c) => (
@@ -222,7 +223,7 @@ export default function ReportsPage() {
         <select
           value={objective}
           onChange={(e) => setObjective(e.target.value)}
-          className="border rounded px-2 py-1"
+          className="rounded-md border px-2 py-1"
         >
           <option value="">All Objectives</option>
           <option value="LEAD">Leads</option>
@@ -232,87 +233,78 @@ export default function ReportsPage() {
         <button
           onClick={loadReport}
           disabled={!fromDate || !toDate || loading}
-          className="btn-primary col-span-2"
+          className="bg-indigo-600 text-white rounded-md px-3 py-2 col-span-2 shadow-sm hover:bg-indigo-500 disabled:opacity-50"
         >
           {loading ? "Loading…" : "Generate Report"}
         </button>
       </div>
 
       {error && (
-        <div className="text-sm text-red-600 font-medium">
-          {error}
-        </div>
+        <div className="text-sm text-red-600 font-medium">{error}</div>
       )}
 
       {data.length > 0 && (
         <>
+          {/* KPIs */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="surface p-4">
+            <div className="bg-white border rounded-lg shadow-sm p-4">
               <div className="text-xs text-gray-500">Total Spend</div>
-              <div className="text-lg font-semibold">
+              <div className="text-lg font-semibold text-gray-900">
                 ₹{totals.spend.toFixed(2)}
               </div>
             </div>
 
-            <div className="surface p-4">
-              <div className="text-xs text-gray-500">
-                Total Conversions
-              </div>
-              <div className="text-lg font-semibold">
+            <div className="bg-white border rounded-lg shadow-sm p-4">
+              <div className="text-xs text-gray-500">Total Conversions</div>
+              <div className="text-lg font-semibold text-gray-900">
                 {totals.conversions}
               </div>
             </div>
 
-            <div className="surface p-4">
+            <div className="bg-white border rounded-lg shadow-sm p-4">
               <div className="text-xs text-gray-500">Avg ROAS</div>
-              <div className="text-lg font-semibold">
+              <div className="text-lg font-semibold text-gray-900">
                 {avgRoas ? avgRoas.toFixed(2) : "—"}
               </div>
             </div>
           </div>
 
-          <div className="surface p-4">
-            <h2 className="font-medium mb-3">Performance Over Time</h2>
+          {/* CHART */}
+          <div className="bg-white border rounded-lg shadow-sm p-4">
+            <h2 className="font-medium mb-3 text-gray-900">Performance Over Time</h2>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={data}>
                   <XAxis dataKey="date" />
                   <YAxis />
                   <Tooltip />
-                  <Line dataKey="spend" name="Spend" />
-                  <Line dataKey="revenue" name="Revenue" />
+                  <Line dataKey="spend" name="Spend" stroke="#6366F1" />
+                  <Line dataKey="revenue" name="Revenue" stroke="#16A34A" />
                 </LineChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          <div className="surface overflow-x-auto">
+          {/* TABLE */}
+          <div className="bg-white border rounded-lg shadow-sm overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="border-b">
+              <thead className="border-b bg-gray-50">
                 <tr>
-                  <th className="px-3 py-2">Date</th>
-                  <th className="px-3 py-2">Spend</th>
-                  <th className="px-3 py-2">Conversions</th>
-                  <th className="px-3 py-2">Revenue</th>
-                  <th className="px-3 py-2">ROAS</th>
+                  <th className="px-3 py-2 text-left">Date</th>
+                  <th className="px-3 py-2 text-left">Spend</th>
+                  <th className="px-3 py-2 text-left">Conversions</th>
+                  <th className="px-3 py-2 text-left">Revenue</th>
+                  <th className="px-3 py-2 text-left">ROAS</th>
                 </tr>
               </thead>
               <tbody>
                 {data.map((r, i) => (
                   <tr key={i} className="border-b last:border-0">
                     <td className="px-3 py-2">{r.date}</td>
-                    <td className="px-3 py-2">
-                      ₹{r.spend.toFixed(2)}
-                    </td>
-                    <td className="px-3 py-2">
-                      {r.conversions}
-                    </td>
-                    <td className="px-3 py-2">
-                      ₹{r.revenue.toFixed(2)}
-                    </td>
-                    <td className="px-3 py-2">
-                      {r.roas ? r.roas.toFixed(2) : "—"}
-                    </td>
+                    <td className="px-3 py-2">₹{r.spend.toFixed(2)}</td>
+                    <td className="px-3 py-2">{r.conversions}</td>
+                    <td className="px-3 py-2">₹{r.revenue.toFixed(2)}</td>
+                    <td className="px-3 py-2">{r.roas ? r.roas.toFixed(2) : "—"}</td>
                   </tr>
                 ))}
               </tbody>
