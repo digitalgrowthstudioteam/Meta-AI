@@ -21,9 +21,18 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 
   return (
     <html lang="en">
-      <body className="bg-amber-50 text-gray-900 flex">
+      <body className="min-h-screen w-full bg-[#FFFCEB] text-gray-900 flex">
         <Toaster position="bottom-right" />
-        <ClientShell showSidebar={showSidebar}>{children}</ClientShell>
+
+        {/* Main App Shell */}
+        <div className="flex min-h-screen w-full">
+          <ClientShell showSidebar={showSidebar}>
+            {/* Page Container */}
+            <main className="flex-1 min-h-screen px-6 py-6 space-y-6">
+              {children}
+            </main>
+          </ClientShell>
+        </div>
       </body>
     </html>
   );
