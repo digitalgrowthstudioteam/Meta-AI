@@ -12,5 +12,15 @@ export default function ClientLayoutWrapper({ children }: { children: ReactNode 
     pathname !== "/login" &&
     !pathname.startsWith("/admin");
 
-  return <ClientShell showSidebar={showSidebar}>{children}</ClientShell>;
+  return (
+    <div className="flex w-full min-h-screen bg-[#FFFCEB]">
+      {/** Sidebar Area */}
+      <ClientShell showSidebar={showSidebar} />
+
+      {/** Main Content Area */}
+      <div className="flex-1 w-full min-h-screen overflow-x-auto">
+        {children}
+      </div>
+    </div>
+  );
 }
