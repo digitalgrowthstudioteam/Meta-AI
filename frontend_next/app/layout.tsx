@@ -21,21 +21,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   // ============================
-  // 1. ADMIN ROUTES → NO SHELL
-  // ============================
-  if (pathname.startsWith("/admin")) {
-    return (
-      <html lang="en">
-        <body className="bg-slate-50 text-gray-900">
-          <Toaster position="bottom-right" />
-          {children}
-        </body>
-      </html>
-    );
-  }
-
-  // ============================
-  // 2. PUBLIC ROUTES
+  // 1. PUBLIC ROUTES
   // ============================
   if (pathname === "/" || pathname === "/login") {
     return (
@@ -49,7 +35,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   }
 
   // ============================
-  // 3. USER ROUTES (SHELL)
+  // 2. USER ROUTES (SHELL)
   // ============================
   return <UserShell>{children}</UserShell>;
 }
