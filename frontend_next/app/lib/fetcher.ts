@@ -4,8 +4,10 @@ const BACKEND_URL =
     : process.env.NEXT_PUBLIC_BACKEND_BROWSER_URL;
 
 function normalize(path: string) {
-  if (!path.startsWith("/")) return `/${path}`;
-  return path;
+  let p = path.startsWith("/") ? path : `/${path}`;
+  if (p.startsWith("/api/")) p = p.replace("/api/", "/");
+  if (p === "/api") p = "/";
+  return p;
 }
 
 export async function apiFetch(endpoint: string, options: RequestInit = {}) {
