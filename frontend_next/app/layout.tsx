@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import { Toaster } from "react-hot-toast";
 import Link from "next/link";
 import { Menu, X, Shield } from "lucide-react";
-import { apiFetch } from "./lib/fetcher";
 
 type SessionContext = {
   user: {
@@ -16,16 +15,14 @@ type SessionContext = {
     is_admin?: boolean;
     is_impersonated?: boolean;
   } | null;
-  is_admin?: boolean;
-  admin_view?: boolean;
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
-  // ================
-  // 1. PURE ADMIN UI
-  // ================
+  // ============================
+  // 1. ADMIN ROUTES → NO SHELL
+  // ============================
   if (pathname.startsWith("/admin")) {
     return (
       <html lang="en">
@@ -37,9 +34,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  // =================
+  // ============================
   // 2. PUBLIC ROUTES
-  // =================
+  // ============================
   if (pathname === "/" || pathname === "/login") {
     return (
       <html lang="en">
@@ -51,9 +48,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     );
   }
 
-  // =================
-  // 3. USER ROUTES
-  // =================
+  // ============================
+  // 3. USER ROUTES (SHELL)
+  // ============================
   return <UserShell>{children}</UserShell>;
 }
 
@@ -70,7 +67,13 @@ function UserShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const res = await apiFetch("/api/session/context", { cache: "no-store" });
+        const backend = `${process.env.NEXT_PUBLIC_API_URL}/session/context`;
+
+        const res = await fetch(backend, {
+          credentials: "include",
+          cache: "no-store",
+        });
+
         setSession(res.ok ? await res.json() : null);
       } catch {
         setSession(null);
@@ -123,26 +126,13 @@ function UserShell({ children }: { children: ReactNode }) {
             </div>
 
             <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-              <Nav href="/dashboard" active={pathname === "/dashboard"}>
-                Dashboard
-              </Nav>
-              <Nav href="/campaigns" active={pathname.startsWith("/campaigns")}>
-                Campaigns
-              </Nav>
-              <Nav href="/ai-actions" active={pathname === "/ai-actions"}>
-                AI Actions
-              </Nav>
-              <Nav href="/reports" active={pathname === "/reports"}>
-                Reports
-              </Nav>
-              <Nav href="/billing" active={pathname === "/billing"}>
-                Billing
-              </Nav>
-              <Nav href="/settings" active={pathname === "/settings"}>
-                Settings
-              </Nav>
+              <Nav href="/dashboard" active={pathname === "/dashboard"}>Dashboard</Nav>
+              <Nav href="/campaigns" active={pathname.startsWith("/campaigns")}>Campaigns</Nav>
+              <Nav href="/ai-actions" active={pathname === "/ai-actions"}>AI Actions</Nav>
+              <Nav href="/reports" active={pathname === "/reports"}>Reports</Nav>
+              <Nav href="/billing" active={pathname === "/billing"}>Billing</Nav>
+              <Nav href="/settings" active={pathname === "/settings"}>Settings</Nav>
 
-              {/* ADMIN LINK ONLY SHOWN, NO REDIRECT */}
               {session?.user?.is_admin && (
                 <>
                   <div className="pt-4 text-xs uppercase text-gray-400">Admin</div>
