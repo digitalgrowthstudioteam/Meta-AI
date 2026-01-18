@@ -14,7 +14,7 @@ IMPORTANT (LOCKED DESIGN):
 
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from typing import Optional
+from typing import Optional, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
@@ -96,12 +96,6 @@ async def request_magic_login(
     db: AsyncSession,
     email: str,
 ) -> bool:
-    """
-    Returns:
-        True  -> email triggered
-        False -> rate-limited / blocked
-    """
-
     now = datetime.utcnow()
     cutoff = now - timedelta(minutes=TOKEN_COOLDOWN_MINUTES)
 
@@ -142,9 +136,7 @@ async def request_magic_login(
 
     subject = build_magic_link_subject()
 
-    # 🔒 SINGLE CORRECT FRONTEND BASE URL
     base_url = settings.PUBLIC_APP_URL.rstrip("/")
-
     magic_link = f"{base_url}/api/auth/verify?token={raw_token}"
 
     send_magic_link_email(
@@ -158,11 +150,12 @@ async def request_magic_login(
 
 # =========================================================
 # TOKEN VERIFICATION FLOW
+# (UPDATED: RETURNS (session_token, user))
 # =========================================================
 async def verify_magic_login(
     db: AsyncSession,
     raw_token: str,
-) -> Optional[str]:
+) -> Optional[Tuple[str, User]]:
     token_hash = hash_magic_token(raw_token)
 
     result = await db.execute(
@@ -186,7 +179,7 @@ async def verify_magic_login(
     user.last_login_at = datetime.utcnow()
     await db.commit()
 
-    return session.session_token
+    return session.session_token, user
 
 
 # =========================================================
