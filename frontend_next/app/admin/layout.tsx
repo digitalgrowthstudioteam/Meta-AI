@@ -18,9 +18,9 @@ type SessionContext = {
   };
 };
 
-const BACKEND = process.env.NEXT_PUBLIC_API_URL || "";
-const CONTEXT_URL = `${BACKEND}/session/context`;
-const EXIT_IMPERSONATE_URL = `${BACKEND}/admin/impersonate/exit`;
+const BROWSER_BACKEND = process.env.NEXT_PUBLIC_BACKEND_BROWSER_URL || "";
+const CONTEXT_URL = `${BROWSER_BACKEND}/api/session/context`;
+const EXIT_URL = `${BROWSER_BACKEND}/api/admin/impersonate/exit`;
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -56,7 +56,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         }
 
         setSession(data);
-      } catch {
+      } catch (err) {
         router.replace("/login");
       } finally {
         setLoaded(true);
@@ -65,7 +65,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   }, [router]);
 
   const exitImpersonation = async () => {
-    await fetch(EXIT_IMPERSONATE_URL, {
+    await fetch(EXIT_URL, {
       method: "POST",
       credentials: "include",
     });
