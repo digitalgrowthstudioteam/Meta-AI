@@ -18,6 +18,10 @@ type SessionContext = {
   };
 };
 
+const BACKEND = process.env.NEXT_PUBLIC_API_URL || "";
+const CONTEXT_URL = `${BACKEND}/session/context`;
+const EXIT_IMPERSONATE_URL = `${BACKEND}/admin/impersonate/exit`;
+
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -29,7 +33,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("/api/session/context", {
+        const res = await fetch(CONTEXT_URL, {
           credentials: "include",
           cache: "no-store",
         });
@@ -61,7 +65,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   }, [router]);
 
   const exitImpersonation = async () => {
-    await fetch("/api/admin/impersonate/exit", {
+    await fetch(EXIT_IMPERSONATE_URL, {
       method: "POST",
       credentials: "include",
     });
