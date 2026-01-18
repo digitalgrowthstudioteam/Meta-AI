@@ -11,6 +11,9 @@ import {
   CartesianGrid,
 } from "recharts";
 
+const BACKEND = process.env.NEXT_PUBLIC_BACKEND_BROWSER_URL || "";
+const SUMMARY_URL = `${BACKEND}/api/admin/dashboard/summary`;
+
 type DashboardData = {
   users: number;
   subscriptions: {
@@ -41,7 +44,7 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("/api/admin/dashboard/summary", {
+        const res = await fetch(SUMMARY_URL, {
           credentials: "include",
           cache: "no-store",
         });
@@ -82,7 +85,7 @@ export default function AdminDashboardPage() {
   if (!data) {
     return (
       <div className="rounded-md bg-red-50 p-4 text-sm text-red-700 border border-red-200">
-        Failed to load dashboard data. Please check the backend connection.
+        Failed to load dashboard data. Please check backend API.
       </div>
     );
   }
