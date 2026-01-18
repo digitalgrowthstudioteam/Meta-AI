@@ -5,6 +5,8 @@ Auth Routes (API)
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from datetime import datetime, timedelta, date
 
 from app.core.db_session import get_db
 from app.auth.service import request_magic_login, verify_magic_login
@@ -13,6 +15,7 @@ from app.auth.dependencies import (
     get_session_context,
 )
 from app.users.models import User
+from app.plans.subscription_models import Subscription
 
 router = APIRouter(prefix="/api", tags=["auth"])
 
@@ -55,14 +58,58 @@ async def verify_login(
     next: str = Query("/dashboard"),
     db: AsyncSession = Depends(get_db),
 ):
-    session_token = await verify_magic_login(db, raw_token=token)
+    # ⬇️ Expected return now: (session_token, user_obj)
+    session_token, user = await verify_magic_login(db, raw_token=token)
 
-    if not session_token:
+    if not session_token or not user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired login link",
         )
 
+    """
+    ==========================================
+    🟢 TRIAL LOGIC (New user only)
+    ==========================================
+    Rules:
+    • New users get 7-day trial
+    • AI limit = 3 (Starter equivalent)
+    • After trial → must choose paid plan
+    • Existing users skip this
+    """
+
+    existing = await db.scalar(
+        select(Subscription)
+        .where(Subscription.user_id == user.id)
+        .where(Subscription.status.in_(["trial", "active"]))
+    )
+
+    if not existing:
+        trial_start = datetime.utcnow()
+        trial_end = trial_start + timedelta(days=7)
+
+        trial = Subscription(
+            user_id=user.id,
+            plan_id=0,  # 0 or NULL-like identifier for "Trial"
+            payment_id=None,
+            status="trial",
+            starts_at=trial_start,
+            ends_at=trial_end,
+            is_trial=True,
+            is_active=True,
+            trial_start_date=date.today(),
+            trial_end_date=date.today() + timedelta(days=7),
+            ai_campaign_limit_snapshot=3,  # Starter limit
+            created_by_admin=False,
+            assigned_by_admin=False,
+        )
+
+        db.add(trial)
+        await db.commit()
+
+    # ==========================================
+    # Set session cookie & redirect
+    # ==========================================
     response = RedirectResponse(
         url=next,
         status_code=status.HTTP_302_FOUND,
