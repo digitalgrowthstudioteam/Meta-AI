@@ -18,9 +18,9 @@ type SessionContext = {
   };
 };
 
-const BROWSER_BACKEND = process.env.NEXT_PUBLIC_BACKEND_BROWSER_URL || "";
-const CONTEXT_URL = `${BROWSER_BACKEND}/api/session/context`;
-const EXIT_URL = `${BROWSER_BACKEND}/api/admin/impersonate/exit`;
+const BACKEND = process.env.NEXT_PUBLIC_BACKEND_BROWSER_URL || "";
+const CONTEXT_URL = `${BACKEND}/api/session/context`;
+const EXIT_URL = `${BACKEND}/api/admin/impersonate/exit`;
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -56,7 +56,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         }
 
         setSession(data);
-      } catch (err) {
+      } catch {
         router.replace("/login");
       } finally {
         setLoaded(true);
@@ -94,138 +94,143 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const writeBlocked = !!session?.user?.write_blocked;
 
   return (
-    <div className="flex h-screen w-screen bg-slate-50 overflow-hidden text-gray-900">
-      <Toaster position="bottom-right" />
+    <html lang="en">
+      <body className="bg-slate-50 text-gray-900">
+        <Toaster position="bottom-right" />
 
-      {isImpersonating && (
-        <div className="fixed top-0 inset-x-0 z-50 bg-red-600 text-white text-sm px-4 py-2 flex items-center justify-between">
-          <div>
-            Viewing as user — <b>READ ONLY</b>. All write actions blocked.
-          </div>
-          <button
-            onClick={exitImpersonation}
-            className="bg-white text-red-600 px-3 py-1 rounded text-xs font-semibold"
-          >
-            Exit Impersonation
-          </button>
-        </div>
-      )}
+        <div className="flex h-screen w-screen overflow-hidden">
 
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/40 md:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      <aside
-        className={`fixed md:static z-40 inset-y-0 left-0 w-64 bg-white border-r
-        flex flex-col transform transition-transform duration-200
-        ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
-        md:translate-x-0`}
-        style={{ marginTop: isImpersonating ? 40 : 0 }}
-      >
-        <div className="px-5 py-4 border-b flex items-center justify-between">
-          <div>
-            <div className="text-sm uppercase tracking-wide text-blue-700">
-              Admin Console
+          {isImpersonating && (
+            <div className="fixed top-0 inset-x-0 z-50 bg-red-600 text-white text-sm px-4 py-2 flex items-center justify-between">
+              <div>
+                Viewing as user — <b>READ ONLY</b>. All write actions blocked.
+              </div>
+              <button
+                onClick={exitImpersonation}
+                className="bg-white text-red-600 px-3 py-1 rounded text-xs font-semibold"
+              >
+                Exit Impersonation
+              </button>
             </div>
-            <div className="text-xs text-gray-500">Digital Growth Studio</div>
+          )}
+
+          {sidebarOpen && (
+            <div
+              className="fixed inset-0 z-40 bg-black/40 md:hidden"
+              onClick={() => setSidebarOpen(false)}
+            />
+          )}
+
+          <aside
+            className={`fixed md:static z-40 inset-y-0 left-0 w-64 bg-white border-r
+            flex flex-col transform transition-transform duration-200
+            ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+            md:translate-x-0`}
+            style={{ marginTop: isImpersonating ? 40 : 0 }}
+          >
+            <div className="px-5 py-4 border-b flex items-center justify-between">
+              <div>
+                <div className="text-sm uppercase tracking-wide text-blue-700">
+                  Admin Console
+                </div>
+                <div className="text-xs text-gray-500">Digital Growth Studio</div>
+              </div>
+              <button className="md:hidden" onClick={() => setSidebarOpen(false)}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <nav className="flex-1 px-2 py-3 space-y-1 overflow-y-auto">
+              <SidebarGroup label="Dashboard">
+                <NavItem href="/admin/dashboard" pathname={pathname}>
+                  Overview
+                </NavItem>
+              </SidebarGroup>
+
+              <SidebarGroup label="Users">
+                <NavItem href="/admin/users" pathname={pathname}>
+                  Users & Impersonation
+                </NavItem>
+                <NavItem href="/admin/chat" pathname={pathname}>
+                  Chat Monitor
+                </NavItem>
+              </SidebarGroup>
+
+              <SidebarGroup label="Campaigns & AI">
+                <NavItem href="/admin/campaigns" pathname={pathname}>
+                  Campaigns
+                </NavItem>
+                <NavItem href="/admin/ai-actions" pathname={pathname}>
+                  AI Actions Queue
+                </NavItem>
+                <NavItem href="/admin/ai-suggestions" pathname={pathname}>
+                  AI Suggestions
+                </NavItem>
+              </SidebarGroup>
+
+              <SidebarGroup label="Billing">
+                <NavItem href="/admin/billing" pathname={pathname}>
+                  Subscriptions
+                </NavItem>
+                <NavItem href="/admin/invoices" pathname={pathname}>
+                  Invoices
+                </NavItem>
+                <NavItem href="/admin/razorpay" pathname={pathname}>
+                  Razorpay Logs
+                </NavItem>
+              </SidebarGroup>
+
+              <SidebarGroup label="Audit & Compliance">
+                <NavItem href="/admin/audit" pathname={pathname}>
+                  Audit Logs
+                </NavItem>
+                <NavItem href="/admin/reports" pathname={pathname}>
+                  Reports
+                </NavItem>
+              </SidebarGroup>
+
+              <SidebarGroup label="System">
+                <NavItem href="/admin/settings" pathname={pathname}>
+                  Global Settings
+                </NavItem>
+                <NavItem href="/admin/metrics" pathname={pathname}>
+                  Metrics Sync
+                </NavItem>
+                <NavItem href="/admin/feature-flags" pathname={pathname}>
+                  Feature Flags
+                </NavItem>
+                <NavItem href="/admin/risk" pathname={pathname}>
+                  Risk & Safety
+                </NavItem>
+              </SidebarGroup>
+            </nav>
+
+            <div className="px-4 py-3 border-t text-xs text-gray-500">
+              {writeBlocked ? "READ-ONLY MODE • Audited" : "Admin Only • Audited"}
+            </div>
+          </aside>
+
+          <div className="flex flex-col flex-1 min-w-0">
+            <header
+              className="md:hidden flex items-center gap-3 px-4 py-3 border-b bg-white"
+              style={{ marginTop: isImpersonating ? 40 : 0 }}
+            >
+              <button onClick={() => setSidebarOpen(true)}>
+                <Menu size={22} />
+              </button>
+              <span className="text-sm font-medium">Admin Console</span>
+            </header>
+
+            <main
+              className="flex-1 overflow-y-auto p-4 md:p-8"
+              style={{ paddingTop: isImpersonating ? 80 : undefined }}
+            >
+              <div className="max-w-7xl mx-auto space-y-6">{children}</div>
+            </main>
           </div>
-          <button className="md:hidden" onClick={() => setSidebarOpen(false)}>
-            <X size={20} />
-          </button>
         </div>
-
-        <nav className="flex-1 px-2 py-3 space-y-1 overflow-y-auto">
-          <SidebarGroup label="Dashboard">
-            <NavItem href="/admin/dashboard" pathname={pathname}>
-              Overview
-            </NavItem>
-          </SidebarGroup>
-
-          <SidebarGroup label="Users">
-            <NavItem href="/admin/users" pathname={pathname}>
-              Users & Impersonation
-            </NavItem>
-            <NavItem href="/admin/chat" pathname={pathname}>
-              Chat Monitor
-            </NavItem>
-          </SidebarGroup>
-
-          <SidebarGroup label="Campaigns & AI">
-            <NavItem href="/admin/campaigns" pathname={pathname}>
-              Campaigns
-            </NavItem>
-            <NavItem href="/admin/ai-actions" pathname={pathname}>
-              AI Actions Queue
-            </NavItem>
-            <NavItem href="/admin/ai-suggestions" pathname={pathname}>
-              AI Suggestions
-            </NavItem>
-          </SidebarGroup>
-
-          <SidebarGroup label="Billing">
-            <NavItem href="/admin/billing" pathname={pathname}>
-              Subscriptions
-            </NavItem>
-            <NavItem href="/admin/invoices" pathname={pathname}>
-              Invoices
-            </NavItem>
-            <NavItem href="/admin/razorpay" pathname={pathname}>
-              Razorpay Logs
-            </NavItem>
-          </SidebarGroup>
-
-          <SidebarGroup label="Audit & Compliance">
-            <NavItem href="/admin/audit" pathname={pathname}>
-              Audit Logs
-            </NavItem>
-            <NavItem href="/admin/reports" pathname={pathname}>
-              Reports
-            </NavItem>
-          </SidebarGroup>
-
-          <SidebarGroup label="System">
-            <NavItem href="/admin/settings" pathname={pathname}>
-              Global Settings
-            </NavItem>
-            <NavItem href="/admin/metrics" pathname={pathname}>
-              Metrics Sync
-            </NavItem>
-            <NavItem href="/admin/feature-flags" pathname={pathname}>
-              Feature Flags
-            </NavItem>
-            <NavItem href="/admin/risk" pathname={pathname}>
-              Risk & Safety
-            </NavItem>
-          </SidebarGroup>
-        </nav>
-
-        <div className="px-4 py-3 border-t text-xs text-gray-500">
-          {writeBlocked ? "READ-ONLY MODE • Audited" : "Admin Only • Audited"}
-        </div>
-      </aside>
-
-      <div className="flex flex-col flex-1 min-w-0">
-        <header
-          className="md:hidden flex items-center gap-3 px-4 py-3 border-b bg-white"
-          style={{ marginTop: isImpersonating ? 40 : 0 }}
-        >
-          <button onClick={() => setSidebarOpen(true)}>
-            <Menu size={22} />
-          </button>
-          <span className="text-sm font-medium">Admin Console</span>
-        </header>
-
-        <main
-          className="flex-1 overflow-y-auto p-4 md:p-8"
-          style={{ paddingTop: isImpersonating ? 80 : undefined }}
-        >
-          <div className="max-w-7xl mx-auto space-y-6">{children}</div>
-        </main>
-      </div>
-    </div>
+      </body>
+    </html>
   );
 }
 
