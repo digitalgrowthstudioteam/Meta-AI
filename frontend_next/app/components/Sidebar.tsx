@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { apiFetch } from "../lib/fetcher";
 
 type Session = {
@@ -20,6 +20,7 @@ export default function Sidebar({
 }) {
   const [session, setSession] = useState<Session | null>(null);
   const pathname = usePathname();
+  const router = useRouter();
 
   useEffect(() => {
     (async () => {
@@ -34,9 +35,17 @@ export default function Sidebar({
 
   const isAdmin = session?.user?.is_admin === true;
 
+  const handleLogout = async () => {
+    try {
+      await apiFetch("/api/session/logout", { method: "POST" });
+      router.push("/login");
+    } catch (err) {
+      router.push("/login");
+    }
+  };
+
   return (
     <>
-      {/* overlay (mobile only) */}
       <div
         className={`fixed inset-0 bg-black/40 z-40 md:hidden transition-opacity ${
           mobileOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
@@ -44,7 +53,6 @@ export default function Sidebar({
         onClick={closeMobile}
       />
 
-      {/* drawer + desktop */}
       <aside
         className={`
           fixed z-50 inset-y-0 left-0 w-56 bg-white border-r px-3 py-4 space-y-1 h-screen overflow-y-auto
@@ -56,7 +64,6 @@ export default function Sidebar({
         <div className="flex items-center justify-between px-2 pb-3">
           <div className="text-xs uppercase tracking-wide text-gray-600">Menu</div>
 
-          {/* close btn (mobile only) */}
           <button
             className="md:hidden text-gray-600 hover:text-gray-900"
             onClick={closeMobile}
@@ -85,6 +92,16 @@ export default function Sidebar({
             />
           </>
         )}
+
+        {/* Logout Button */}
+        <div className="mt-4 pt-4 border-t">
+          <button
+            onClick={handleLogout}
+            className="w-full text-left rounded px-3 py-2 text-sm text-red-600 hover:bg-red-50 font-medium"
+          >
+            Logout
+          </button>
+        </div>
       </aside>
     </>
   );
@@ -102,8 +119,7 @@ function NavItem({
   pathname: string;
 }) {
   const active =
-    pathname === href ||
-    (href !== "/" && pathname.startsWith(href));
+    pathname === href || (href !== "/" && pathname.startsWith(href));
 
   return (
     <Link
