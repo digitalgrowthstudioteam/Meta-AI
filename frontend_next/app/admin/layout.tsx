@@ -26,14 +26,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<SessionContext | null>(null);
   const [loaded, setLoaded] = useState(false);
 
-  const BACKEND = `${process.env.NEXT_PUBLIC_API_URL}`;
-  const CONTEXT_URL = `${BACKEND}/session/context`;
-  const EXIT_IMPERSONATE_URL = `${BACKEND}/admin/impersonate/exit`;
-
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(CONTEXT_URL, {
+        const res = await fetch("/api/session/context", {
           credentials: "include",
           cache: "no-store",
         });
@@ -62,13 +58,14 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         setLoaded(true);
       }
     })();
-  }, [router, CONTEXT_URL]);
+  }, [router]);
 
   const exitImpersonation = async () => {
-    await fetch(EXIT_IMPERSONATE_URL, {
+    await fetch("/api/admin/impersonate/exit", {
       method: "POST",
       credentials: "include",
     });
+
     router.refresh();
   };
 
@@ -98,7 +95,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
       {isImpersonating && (
         <div className="fixed top-0 inset-x-0 z-50 bg-red-600 text-white text-sm px-4 py-2 flex items-center justify-between">
-          <div>Viewing as user — <b>READ ONLY</b>. All write actions blocked.</div>
+          <div>
+            Viewing as user — <b>READ ONLY</b>. All write actions blocked.
+          </div>
           <button
             onClick={exitImpersonation}
             className="bg-white text-red-600 px-3 py-1 rounded text-xs font-semibold"
@@ -127,9 +126,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             <div className="text-sm uppercase tracking-wide text-blue-700">
               Admin Console
             </div>
-            <div className="text-xs text-gray-500">
-              Digital Growth Studio
-            </div>
+            <div className="text-xs text-gray-500">Digital Growth Studio</div>
           </div>
           <button className="md:hidden" onClick={() => setSidebarOpen(false)}>
             <X size={20} />
