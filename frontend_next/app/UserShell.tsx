@@ -24,7 +24,6 @@ export default function UserShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        // 🟢 FIXED URL — always hit /api/session/context
         const backend = `${process.env.NEXT_PUBLIC_API_URL}/api/session/context`;
 
         const res = await fetch(backend, {
@@ -54,7 +53,7 @@ export default function UserShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-amber-50">
       {sidebarOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/40 md:hidden"
@@ -64,8 +63,8 @@ export default function UserShell({ children }: { children: ReactNode }) {
 
       <aside
         className={`
-          fixed z-50 inset-y-0 left-0 w-64 bg-white border-r
-          flex flex-col transform transition-transform
+          fixed inset-y-0 left-0 z-50 w-64 border-r bg-white
+          flex flex-col transform transition-transform duration-200
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
           md:static md:translate-x-0
         `}
@@ -105,7 +104,7 @@ export default function UserShell({ children }: { children: ReactNode }) {
         </nav>
       </aside>
 
-      <div className="flex flex-col flex-1">
+      <div className="flex flex-col flex-1 min-w-0">
         <header className="md:hidden flex items-center gap-3 px-4 py-3 border-b bg-white">
           <button onClick={() => setSidebarOpen(true)}>
             <Menu size={22} />
