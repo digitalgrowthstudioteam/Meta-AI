@@ -21,7 +21,21 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   // ============================
-  // 1. PUBLIC ROUTES
+  // 1. ADMIN → HARD BYPASS
+  // ============================
+  if (pathname.startsWith("/admin")) {
+    return (
+      <html lang="en">
+        <body className="bg-slate-50 text-gray-900">
+          <Toaster position="bottom-right" />
+          {children}
+        </body>
+      </html>
+    );
+  }
+
+  // ============================
+  // 2. PUBLIC PAGES
   // ============================
   if (pathname === "/" || pathname === "/login") {
     return (
@@ -35,7 +49,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   }
 
   // ============================
-  // 2. USER ROUTES (SHELL)
+  // 3. USER SHELL
   // ============================
   return <UserShell>{children}</UserShell>;
 }
@@ -103,7 +117,9 @@ function UserShell({ children }: { children: ReactNode }) {
           >
             <div className="px-5 py-4 border-b flex justify-between items-center">
               <div>
-                <div className="text-sm font-bold text-amber-700">Digital Growth Studio</div>
+                <div className="text-sm font-bold text-amber-700">
+                  Digital Growth Studio
+                </div>
                 <div className="text-xs text-gray-500">Meta Ads AI</div>
               </div>
               <button className="md:hidden" onClick={() => setSidebarOpen(false)}>
@@ -112,12 +128,24 @@ function UserShell({ children }: { children: ReactNode }) {
             </div>
 
             <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-              <Nav href="/dashboard" active={pathname === "/dashboard"}>Dashboard</Nav>
-              <Nav href="/campaigns" active={pathname.startsWith("/campaigns")}>Campaigns</Nav>
-              <Nav href="/ai-actions" active={pathname === "/ai-actions"}>AI Actions</Nav>
-              <Nav href="/reports" active={pathname === "/reports"}>Reports</Nav>
-              <Nav href="/billing" active={pathname === "/billing"}>Billing</Nav>
-              <Nav href="/settings" active={pathname === "/settings"}>Settings</Nav>
+              <Nav href="/dashboard" active={pathname === "/dashboard"}>
+                Dashboard
+              </Nav>
+              <Nav href="/campaigns" active={pathname.startsWith("/campaigns")}>
+                Campaigns
+              </Nav>
+              <Nav href="/ai-actions" active={pathname === "/ai-actions"}>
+                AI Actions
+              </Nav>
+              <Nav href="/reports" active={pathname === "/reports"}>
+                Reports
+              </Nav>
+              <Nav href="/billing" active={pathname === "/billing"}>
+                Billing
+              </Nav>
+              <Nav href="/settings" active={pathname === "/settings"}>
+                Settings
+              </Nav>
 
               {session?.user?.is_admin && (
                 <>
@@ -153,7 +181,15 @@ function UserShell({ children }: { children: ReactNode }) {
   );
 }
 
-function Nav({ href, active, children }: { href: string; active: boolean; children: ReactNode }) {
+function Nav({
+  href,
+  active,
+  children,
+}: {
+  href: string;
+  active: boolean;
+  children: ReactNode;
+}) {
   return (
     <Link
       href={href}
