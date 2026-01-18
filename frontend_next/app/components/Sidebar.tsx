@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { apiFetch } from "../lib/fetcher";
 
 type Session = {
@@ -18,6 +19,7 @@ export default function Sidebar({
   closeMobile: () => void;
 }) {
   const [session, setSession] = useState<Session | null>(null);
+  const pathname = usePathname();
 
   useEffect(() => {
     (async () => {
@@ -63,12 +65,12 @@ export default function Sidebar({
           </button>
         </div>
 
-        <NavItem href="/dashboard" label="Dashboard" onClick={closeMobile} />
-        <NavItem href="/campaigns" label="Campaigns" onClick={closeMobile} />
-        <NavItem href="/ai-actions" label="AI Actions" onClick={closeMobile} />
-        <NavItem href="/reports" label="Reports" onClick={closeMobile} />
-        <NavItem href="/billing" label="Billing" onClick={closeMobile} />
-        <NavItem href="/settings" label="Settings" onClick={closeMobile} />
+        <NavItem href="/dashboard" label="Dashboard" onClick={closeMobile} pathname={pathname} />
+        <NavItem href="/campaigns" label="Campaigns" onClick={closeMobile} pathname={pathname} />
+        <NavItem href="/ai-actions" label="AI Actions" onClick={closeMobile} pathname={pathname} />
+        <NavItem href="/reports" label="Reports" onClick={closeMobile} pathname={pathname} />
+        <NavItem href="/billing" label="Billing" onClick={closeMobile} pathname={pathname} />
+        <NavItem href="/settings" label="Settings" onClick={closeMobile} pathname={pathname} />
 
         {isAdmin && (
           <>
@@ -79,6 +81,7 @@ export default function Sidebar({
               href="/admin/dashboard"
               label="Admin Console"
               onClick={closeMobile}
+              pathname={pathname}
             />
           </>
         )}
@@ -91,16 +94,26 @@ function NavItem({
   href,
   label,
   onClick,
+  pathname,
 }: {
   href: string;
   label: string;
   onClick: () => void;
+  pathname: string;
 }) {
+  const active =
+    pathname === href ||
+    (href !== "/" && pathname.startsWith(href));
+
   return (
     <Link
       href={href}
       onClick={onClick}
-      className="block rounded px-3 py-2 text-sm text-gray-700 hover:bg-blue-50 hover:text-gray-900"
+      className={`block rounded px-3 py-2 text-sm transition-colors ${
+        active
+          ? "bg-blue-50 text-blue-700 font-medium"
+          : "text-gray-700 hover:bg-blue-50 hover:text-gray-900"
+      }`}
     >
       {label}
     </Link>
