@@ -73,19 +73,13 @@ export default function CampaignsPage() {
    * ----------------------------------- */
   const loadSession = async () => {
     try {
-      const res = await apiFetch("/api/session/context", {
-        cache: "no-store",
-      });
-
+      const res = await apiFetch("/api/session/context", { cache: "no-store" });
       if (!res.ok) {
         setSession(null);
         return;
       }
-
-      const data = await res.json();
-      setSession(data);
-    } catch (error) {
-      console.error("Session error:", error);
+      setSession(await res.json());
+    } catch {
       setSession(null);
     }
   };
@@ -96,7 +90,6 @@ export default function CampaignsPage() {
   const getSelectedAccountId = () => {
     const cookieId = getCookie(COOKIE_KEY);
     if (cookieId) return cookieId;
-
     const first = session?.ad_accounts?.[0]?.id ?? null;
     if (first) setCookie(COOKIE_KEY, first);
     return first;
@@ -129,7 +122,6 @@ export default function CampaignsPage() {
 
       if (!res.ok) throw new Error();
       const data = await res.json();
-
       setCampaigns(Array.isArray(data) ? data : []);
     } catch {
       setError("Unable to load campaigns");
@@ -142,10 +134,7 @@ export default function CampaignsPage() {
   /* -----------------------------------
    * EFFECTS
    * ----------------------------------- */
-  useEffect(() => {
-    loadSession();
-  }, []);
-
+  useEffect(() => { loadSession(); }, []);
   useEffect(() => {
     if (!session) return;
     loadCampaigns();
@@ -168,13 +157,11 @@ export default function CampaignsPage() {
     if (!selected) return;
 
     setSyncing(true);
-
     try {
       await apiFetch(`/api/campaigns/sync?account_id=${selected}`, {
         method: "POST",
         cache: "no-store",
       });
-
       await loadCampaigns();
       toast.success("Campaigns synced successfully");
     } catch {
@@ -189,12 +176,13 @@ export default function CampaignsPage() {
    * ----------------------------------- */
   const toggleAI = async (campaign: Campaign) => {
     if (togglingId) return;
-
     const nextValue = !campaign.ai_active;
     setTogglingId(campaign.id);
 
     setCampaigns((prev) =>
-      prev.map((c) => (c.id === campaign.id ? { ...c, ai_active: nextValue } : c))
+      prev.map((c) =>
+        c.id === campaign.id ? { ...c, ai_active: nextValue } : c
+      )
     );
 
     try {
@@ -205,28 +193,22 @@ export default function CampaignsPage() {
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => null);
-
         setCampaigns((prev) =>
-          prev.map((c) => (c.id === campaign.id ? { ...c, ai_active: !nextValue } : c))
+          prev.map((c) =>
+            c.id === campaign.id ? { ...c, ai_active: !nextValue } : c
+          )
         );
-
-        if (res.status === 409 && err?.detail?.message) {
-          toast.error(err.detail.message);
-        } else {
-          toast.error("Action failed");
-        }
-
+        toast.error("Action failed");
         return;
       }
 
       toast.success(nextValue ? "AI activated" : "AI deactivated");
     } catch {
       setCampaigns((prev) =>
-        prev.map((c) => (c.id === campaign.id ? { ...c, ai_active: !nextValue } : c))
+        prev.map((c) =>
+          c.id === campaign.id ? { ...c, ai_active: !nextValue } : c
+        )
       );
-
-      toast.error("Action failed");
     } finally {
       setTogglingId(null);
     }
@@ -242,37 +224,26 @@ export default function CampaignsPage() {
   const selectedId = getSelectedAccountId();
 
   return (
-    <div className="px-4 py-6 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">Campaigns</h1>
-          <p className="text-sm text-gray-500">
-            Active account:{" "}
-            <strong className="text-gray-900">
-              {session.ad_accounts.find((a) => a.id === selectedId)?.name || "None"}
-            </strong>
-          </p>
-        </div>
+    <div className="space-y-8 max-w-7xl mx-auto px-6 py-10">
 
-        <select
-          className="block w-full sm:w-auto rounded-md border-gray-300 text-gray-900 shadow-sm focus:ring-blue-600 focus:border-blue-600 sm:text-sm"
-          value={selectedId || ""}
-          onChange={(e) => switchAdAccount(e.target.value)}
-        >
-          {session.ad_accounts.map((acc) => (
-            <option key={acc.id} value={acc.id}>
-              {acc.name}
-            </option>
-          ))}
-        </select>
+      {/* HEADER */}
+      <div>
+        <h1 className="text-lg font-semibold text-gray-900">Campaigns</h1>
+        <p className="text-xs text-gray-500 mt-1">
+          Active Ad Account:{" "}
+          <span className="font-medium text-gray-900">
+            {session.ad_accounts.find((a) => a.id === selectedId)?.name || "None"}
+          </span>
+        </p>
       </div>
 
-      {/* FILTER BAR */}
-      <div className="bg-white p-4 rounded-lg border shadow-sm grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+      {/* FILTER PANEL */}
+      <div className="bg-white p-4 rounded-lg border shadow-sm grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-md border-gray-300 text-gray-900 shadow-sm focus:ring-blue-600 focus:border-blue-600"
+          className="rounded border-gray-300 text-gray-900 shadow-sm focus:ring-blue-600 focus:border-blue-600"
         >
           <option value="">All Status</option>
           <option value="ACTIVE">Active</option>
@@ -282,7 +253,7 @@ export default function CampaignsPage() {
         <select
           value={aiFilter}
           onChange={(e) => setAiFilter(e.target.value)}
-          className="rounded-md border-gray-300 text-gray-900 shadow-sm focus:ring-blue-600 focus:border-blue-600"
+          className="rounded border-gray-300 text-gray-900 shadow-sm focus:ring-blue-600 focus:border-blue-600"
         >
           <option value="">AI (All)</option>
           <option value="true">AI Active</option>
@@ -292,60 +263,67 @@ export default function CampaignsPage() {
         <select
           value={objectiveFilter}
           onChange={(e) => setObjectiveFilter(e.target.value)}
-          className="rounded-md border-gray-300 text-gray-900 shadow-sm focus:ring-blue-600 focus:border-blue-600"
+          className="rounded border-gray-300 text-gray-900 shadow-sm focus:ring-blue-600 focus:border-blue-600"
         >
           <option value="">All Objectives</option>
           <option value="LEAD">Lead Gen</option>
           <option value="SALES">Sales</option>
         </select>
 
+        <select
+          value={selectedId || ""}
+          onChange={(e) => switchAdAccount(e.target.value)}
+          className="rounded border-gray-300 text-gray-900 shadow-sm focus:ring-blue-600 focus:border-blue-600"
+        >
+          {session.ad_accounts.map((acc) => (
+            <option key={acc.id} value={acc.id}>
+              {acc.name}
+            </option>
+          ))}
+        </select>
+
         <button
           onClick={syncCampaigns}
           disabled={syncing}
-          className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 disabled:opacity-50"
+          className="rounded bg-white px-3 py-2 font-semibold shadow-sm ring-1 ring-gray-300 hover:bg-gray-50 text-gray-900 disabled:opacity-50"
         >
           {syncing ? "Syncing…" : "Sync"}
         </button>
       </div>
 
+      {/* STATUS MESSAGES */}
       {loading && <div className="text-sm text-gray-500">Loading campaigns…</div>}
       {error && <div className="text-sm text-red-600">{error}</div>}
 
+      {/* EMPTY STATE */}
       {!loading && campaigns.length === 0 && (
-        <div className="text-center py-12 bg-white rounded-lg border border-dashed shadow-sm">
-          <p className="text-sm text-gray-500">No campaigns found matching your criteria.</p>
+        <div className="text-center py-16 bg-white rounded-lg border border-dashed shadow-sm">
+          <p className="text-sm text-gray-500">No campaigns found.</p>
         </div>
       )}
 
+      {/* DATA TABLE */}
       {!loading && campaigns.length > 0 && (
         <div className="bg-white shadow-sm ring-1 ring-gray-900/5 sm:rounded-lg overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-300">
+          <table className="min-w-full divide-y divide-gray-300 text-sm">
             <thead className="bg-gray-50">
               <tr>
-                <th scope="col" className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900 sm:pl-6">
-                  Campaign
-                </th>
-                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
-                  Objective
-                </th>
-                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
-                  Status
-                </th>
-                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">
-                  AI Optimization
-                </th>
+                <th className="py-3.5 pl-4 pr-3 text-left font-semibold text-gray-900 sm:pl-6">Campaign</th>
+                <th className="px-3 py-3.5 text-left font-semibold text-gray-900">Objective</th>
+                <th className="px-3 py-3.5 text-left font-semibold text-gray-900">Status</th>
+                <th className="px-3 py-3.5 text-left font-semibold text-gray-900">AI Optimization</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
               {campaigns.map((c) => (
                 <tr key={c.id}>
-                  <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
+                  <td className="whitespace-nowrap py-4 pl-4 pr-3 font-medium text-gray-900 sm:pl-6">
                     {c.name}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                  <td className="whitespace-nowrap px-3 py-4 text-gray-500">
                     {c.objective ?? "—"}
                   </td>
-                  <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                  <td className="whitespace-nowrap px-3 py-4">
                     <span
                       className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${
                         c.status === "ACTIVE"
@@ -356,18 +334,17 @@ export default function CampaignsPage() {
                       {c.status}
                     </span>
                   </td>
-                  <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
+                  <td className="whitespace-nowrap px-3 py-4">
                     <button
                       onClick={() => toggleAI(c)}
                       disabled={togglingId === c.id}
-                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${
+                      className={`relative inline-flex h-6 w-11 rounded-full transition-colors ring-1 ring-gray-300 focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${
                         c.ai_active ? "bg-blue-600" : "bg-gray-200"
                       } ${togglingId === c.id ? "opacity-50 cursor-wait" : ""}`}
                     >
-                      <span className="sr-only">Use setting</span>
+                      <span className="sr-only">Toggle AI</span>
                       <span
-                        aria-hidden="true"
-                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${
+                        className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${
                           c.ai_active ? "translate-x-5" : "translate-x-0"
                         }`}
                       />
