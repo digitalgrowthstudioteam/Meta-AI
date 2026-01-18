@@ -11,6 +11,7 @@ export const metadata = {
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const cookieStore = cookies();
+  const pathname = cookieStore.get("next-url")?.value || "/";
 
   // 🔐 SERVER-SIDE PRELOAD (ensures meta_ai_role cookie exists early)
   try {
@@ -18,22 +19,23 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     await fetch(url, {
       credentials: "include",
       cache: "no-store",
-      headers: {
-        cookie: cookieStore.toString(),
-      },
+      headers: { cookie: cookieStore.toString() },
     });
   } catch (_) {}
 
-  // NOTE:
-  // We let `/admin/**` be handled by /app/admin/layout.tsx
-  // We let `/login` and `/` be handled normally
-  // Everything else uses UserShell
+  const isAdmin = pathname.startsWith("/admin");
+  const isPublic = pathname === "/" || pathname === "/login";
 
   return (
     <html lang="en">
       <body className="bg-amber-50 text-gray-900">
         <Toaster position="bottom-right" />
-        {children}
+
+        {isAdmin && children}
+
+        {isPublic && !isAdmin && children}
+
+        {!isAdmin && !isPublic && <UserShell>{children}</UserShell>}
       </body>
     </html>
   );
