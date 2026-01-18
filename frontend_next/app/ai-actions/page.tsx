@@ -97,4 +97,50 @@ export default function AiActionsPage() {
       ) : actions.length === 0 ? (
         <div className="bg-white border border-dashed rounded-lg shadow-sm p-10 text-center space-y-3">
           <CheckCircle className="mx-auto h-10 w-10 text-green-500" />
-          <h3 className="text-base
+          <h3 className="text-base font-medium text-gray-900">All caught up!</h3>
+          <p className="text-sm text-gray-500">
+            There are no pending AI recommendations.
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {actions.map((action) => (
+            <div
+              key={action.id}
+              className="bg-white border rounded-lg shadow-sm p-4 flex items-center justify-between"
+            >
+              <div className="flex items-start gap-4">
+                <div className="p-2 bg-gray-50 rounded">
+                  {getActionIcon(action.action_type)}
+                </div>
+                <div>
+                  <h3 className="font-medium text-gray-900">
+                    {action.action_type.replace(/_/g, " ")}
+                  </h3>
+                  <p className="text-sm text-gray-500">{action.reason}</p>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleAction(action.id, "DISMISS")}
+                  disabled={!!processingId}
+                  className="px-3 py-1.5 border rounded-md text-sm shadow-sm hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Dismiss
+                </button>
+                <button
+                  onClick={() => handleAction(action.id, "APPLY")}
+                  disabled={!!processingId}
+                  className="px-3 py-1.5 bg-indigo-600 text-white rounded-md text-sm shadow-sm hover:bg-indigo-500 disabled:opacity-50"
+                >
+                  Apply
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
