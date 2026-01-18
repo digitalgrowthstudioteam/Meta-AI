@@ -71,7 +71,7 @@ export default function DashboardPage() {
   ============================= */
   const loadSession = async () => {
     try {
-      const res = await apiFetch("/api/session/context", { cache: "no-store" });
+      const res = await apiFetch("/session/context", { cache: "no-store" });
       if (!res.ok) {
         setSession({ user: null, ad_account: null } as any);
         return;
@@ -86,7 +86,7 @@ export default function DashboardPage() {
     if (!session?.ad_account) return;
 
     try {
-      const res = await apiFetch("/api/dashboard/summary", { cache: "no-store" });
+      const res = await apiFetch("/dashboard/summary", { cache: "no-store" });
       if (!res.ok) return;
       setData(await res.json());
     } catch {
@@ -119,7 +119,7 @@ export default function DashboardPage() {
   ============================= */
   const connectMeta = async () => {
     try {
-      const res = await apiFetch("/api/meta/connect", { cache: "no-store" });
+      const res = await apiFetch("/meta/connect", { cache: "no-store" });
       if (!res.ok) return;
       const json = await res.json();
       if (json?.redirect_url) window.location.href = json.redirect_url;
@@ -131,7 +131,7 @@ export default function DashboardPage() {
     setErrorMsg(null);
 
     try {
-      const res = await apiFetch("/api/campaigns/sync", {
+      const res = await apiFetch("/campaigns/sync", {
         method: "POST",
         cache: "no-store",
       });
@@ -220,7 +220,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8 max-w-6xl mx-auto">
-      
+
       {/* HEADER */}
       <div>
         <h1 className="text-lg font-semibold text-gray-900">Dashboard Overview</h1>
