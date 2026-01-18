@@ -24,7 +24,8 @@ export default function UserShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const backend = `${process.env.NEXT_PUBLIC_API_URL}/session/context`;
+        // 🟢 FIXED URL — always hit /api/session/context
+        const backend = `${process.env.NEXT_PUBLIC_API_URL}/api/session/context`;
 
         const res = await fetch(backend, {
           credentials: "include",
@@ -39,6 +40,10 @@ export default function UserShell({ children }: { children: ReactNode }) {
       }
     })();
   }, []);
+
+  const isAdmin =
+    session?.user?.is_admin === true ||
+    session?.user?.role === "admin";
 
   if (!loaded) {
     return (
@@ -78,14 +83,14 @@ export default function UserShell({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          <Nav href="/dashboard" active={pathname === "/dashboard"}>Dashboard</Nav>
+          <Nav href="/dashboard" active={pathname.startsWith("/dashboard")}>Dashboard</Nav>
           <Nav href="/campaigns" active={pathname.startsWith("/campaigns")}>Campaigns</Nav>
-          <Nav href="/ai-actions" active={pathname === "/ai-actions"}>AI Actions</Nav>
-          <Nav href="/reports" active={pathname === "/reports"}>Reports</Nav>
-          <Nav href="/billing" active={pathname === "/billing"}>Billing</Nav>
-          <Nav href="/settings" active={pathname === "/settings"}>Settings</Nav>
+          <Nav href="/ai-actions" active={pathname.startsWith("/ai-actions")}>AI Actions</Nav>
+          <Nav href="/reports" active={pathname.startsWith("/reports")}>Reports</Nav>
+          <Nav href="/billing" active={pathname.startsWith("/billing")}>Billing</Nav>
+          <Nav href="/settings" active={pathname.startsWith("/settings")}>Settings</Nav>
 
-          {session?.user?.is_admin && (
+          {isAdmin && (
             <>
               <div className="pt-4 text-xs uppercase text-gray-400">Admin</div>
               <Link
@@ -129,7 +134,9 @@ function Nav({
     <Link
       href={href}
       className={`block rounded-md px-3 py-2 text-sm ${
-        active ? "bg-amber-100 text-amber-800 font-medium" : "text-gray-700 hover:bg-amber-50"
+        active
+          ? "bg-amber-100 text-amber-800 font-medium"
+          : "text-gray-700 hover:bg-amber-50"
       }`}
     >
       {children}
