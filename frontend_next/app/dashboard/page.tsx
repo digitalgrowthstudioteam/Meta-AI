@@ -107,7 +107,6 @@ export default function DashboardPage() {
     })();
   }, []);
 
-  // 🔐 Prevent infinite redirect loop
   useEffect(() => {
     if (!loading && session?.user === null) {
       router.replace("/login");
@@ -156,43 +155,43 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64 text-sm text-gray-500">
+      <div className="flex items-center justify-center h-[70vh] text-sm text-gray-500">
         Loading dashboard...
       </div>
     );
   }
 
-  // ================================
   // SAFE FALLBACK MODE (NO META)
-  // ================================
   if (session?.has_backend_access && session?.needs_meta_connect) {
     return (
-      <div className="space-y-6 max-w-xl mx-auto mt-10 p-6 bg-white rounded-lg border shadow-sm">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">
-            Welcome to Digital Growth Studio
-          </h1>
-          <p className="mt-2 text-sm text-gray-600">
-            You can continue using backend features. Connect Meta Ads anytime for AI optimization.
-          </p>
-        </div>
+      <div className="flex justify-center items-start pt-24 px-4">
+        <div className="space-y-6 max-w-xl w-full p-6 bg-white rounded-lg border shadow-sm">
+          <div>
+            <h1 className="text-xl font-semibold text-gray-900">
+              Welcome to Digital Growth Studio
+            </h1>
+            <p className="mt-2 text-sm text-gray-600">
+              You can continue using backend features. Connect Meta Ads anytime for AI optimization.
+            </p>
+          </div>
 
-        <div className="border-t pt-4 space-y-3">
-          <button
-            onClick={connectMeta}
-            className="w-full rounded-md bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-500"
-          >
-            Connect Meta Ads
-          </button>
-
-          {session.user?.is_admin === true && (
+          <div className="border-t pt-4 space-y-3">
             <button
-              onClick={() => router.push("/admin/dashboard")}
-              className="w-full rounded-md bg-white px-4 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+              onClick={connectMeta}
+              className="w-full rounded-md bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-500"
             >
-              Go to Backend Dashboard
+              Connect Meta Ads
             </button>
-          )}
+
+            {session.user?.is_admin === true && (
+              <button
+                onClick={() => router.push("/admin/dashboard")}
+                className="w-full rounded-md bg-white px-4 py-2.5 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+              >
+                Go to Backend Dashboard
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -200,21 +199,23 @@ export default function DashboardPage() {
 
   if (!session?.ad_account) {
     return (
-      <div className="space-y-6 max-w-xl mx-auto mt-10 p-6 bg-white rounded-lg border shadow-sm">
-        <div>
-          <h1 className="text-xl font-semibold text-gray-900">
-            Welcome to Digital Growth Studio
-          </h1>
-          <p className="mt-2 text-sm text-gray-600">
-            To get started with AI optimization, please connect your Meta Ads account.
-          </p>
+      <div className="flex justify-center items-start pt-24 px-4">
+        <div className="space-y-6 max-w-xl w-full p-6 bg-white rounded-lg border shadow-sm">
+          <div>
+            <h1 className="text-xl font-semibold text-gray-900">
+              Welcome to Digital Growth Studio
+            </h1>
+            <p className="mt-2 text-sm text-gray-600">
+              To get started with AI optimization, please connect your Meta Ads account.
+            </p>
+          </div>
+          <button
+            onClick={connectMeta}
+            className="w-full rounded-md bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-500"
+          >
+            Connect Meta Ads
+          </button>
         </div>
-        <button
-          onClick={connectMeta}
-          className="w-full rounded-md bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-500"
-        >
-          Connect Meta Ads
-        </button>
       </div>
     );
   }
@@ -224,7 +225,7 @@ export default function DashboardPage() {
   const aiLimit = data?.campaigns.ai_limit ?? 0;
 
   return (
-    <div className="space-y-8">
+    <div className="px-6 py-10 max-w-6xl mx-auto space-y-8">
       <div>
         <h1 className="text-xl font-semibold text-gray-900">Dashboard</h1>
         <p className="text-sm text-gray-500">
