@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useState, useEffect } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { Menu, X, Shield } from "lucide-react";
@@ -20,6 +20,11 @@ export default function UserShell({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [session, setSession] = useState<SessionContext | null>(null);
   const [loaded, setLoaded] = useState(false);
+
+  // ❗ Skip rendering entirely on /admin paths
+  if (pathname.startsWith("/admin")) {
+    return <>{children}</>;
+  }
 
   useEffect(() => {
     (async () => {
