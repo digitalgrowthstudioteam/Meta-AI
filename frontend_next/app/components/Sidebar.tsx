@@ -25,7 +25,7 @@ export default function Sidebar({
   useEffect(() => {
     (async () => {
       try {
-        const res = await apiFetch("/api/session/context", { cache: "no-store" });
+        const res = await apiFetch("/session/context", { cache: "no-store" });
         if (!res.ok) return;
         const data = await res.json();
         setSession(data);
@@ -37,8 +37,8 @@ export default function Sidebar({
 
   const handleLogout = async () => {
     try {
-      await apiFetch("/api/auth/logout", { method: "POST" });
-    } catch (err) {}
+      await apiFetch("/auth/logout", { method: "POST" });
+    } catch {}
     router.push("/login");
   };
 
@@ -61,7 +61,6 @@ export default function Sidebar({
       >
         <div className="flex items-center justify-between px-2 pb-3">
           <div className="text-xs uppercase tracking-wide text-gray-600">Menu</div>
-
           <button
             className="md:hidden text-gray-600 hover:text-gray-900"
             onClick={closeMobile}
