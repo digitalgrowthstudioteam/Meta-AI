@@ -37,11 +37,9 @@ export default function Sidebar({
 
   const handleLogout = async () => {
     try {
-      await apiFetch("/api/session/logout", { method: "POST" });
-      router.push("/login");
-    } catch (err) {
-      router.push("/login");
-    }
+      await apiFetch("/api/auth/logout", { method: "POST" });
+    } catch (err) {}
+    router.push("/login");
   };
 
   return (
@@ -93,7 +91,6 @@ export default function Sidebar({
           </>
         )}
 
-        {/* Logout Button */}
         <div className="mt-4 pt-4 border-t">
           <button
             onClick={handleLogout}
