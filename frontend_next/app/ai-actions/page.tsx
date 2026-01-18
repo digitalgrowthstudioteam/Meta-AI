@@ -1,19 +1,16 @@
 'use client';
 
 import { useEffect, useState } from "react";
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  PauseCircle, 
-  PlayCircle, 
-  AlertCircle, 
-  CheckCircle 
+import {
+  TrendingUp,
+  TrendingDown,
+  PauseCircle,
+  PlayCircle,
+  AlertCircle,
+  CheckCircle
 } from "lucide-react";
 import toast from "react-hot-toast";
-// FIXED: Changed from "@/lib/fetcher" to relative path
 import { apiFetch } from "../lib/fetcher";
-
-// ... (Keep the rest of the file exactly as it is, just change the import at the top) ...
 
 type AIAction = {
   id: string;
@@ -38,7 +35,7 @@ export default function AiActionsPage() {
       const res = await apiFetch("/api/ai/actions/pending", {
         cache: "no-store",
       });
-      
+
       if (res.ok) {
         const json = await res.json();
         setActions(json || []);
@@ -59,9 +56,10 @@ export default function AiActionsPage() {
   const handleAction = async (actionId: string, decision: "APPLY" | "DISMISS") => {
     setProcessingId(actionId);
     try {
-      const endpoint = decision === "APPLY" 
-        ? `/api/ai/actions/${actionId}/apply` 
-        : `/api/ai/actions/${actionId}/dismiss`;
+      const endpoint =
+        decision === "APPLY"
+          ? `/api/ai/actions/${actionId}/apply`
+          : `/api/ai/actions/${actionId}/dismiss`;
 
       await apiFetch(endpoint, { method: "POST" });
       toast.success(decision === "APPLY" ? "Action applied" : "Action dismissed");
@@ -75,43 +73,28 @@ export default function AiActionsPage() {
 
   const getActionIcon = (type: string) => {
     switch (type) {
-      case "SCALE_BUDGET": return <TrendingUp className="h-5 w-5 text-green-600" />;
-      case "REDUCE_BUDGET": return <TrendingDown className="h-5 w-5 text-orange-600" />;
-      case "PAUSE_ADS": return <PauseCircle className="h-5 w-5 text-red-600" />;
-      case "ENABLE_ADS": return <PlayCircle className="h-5 w-5 text-blue-600" />;
-      default: return <AlertCircle className="h-5 w-5 text-gray-600" />;
+      case "SCALE_BUDGET":
+        return <TrendingUp className="h-5 w-5 text-green-600" />;
+      case "REDUCE_BUDGET":
+        return <TrendingDown className="h-5 w-5 text-orange-600" />;
+      case "PAUSE_ADS":
+        return <PauseCircle className="h-5 w-5 text-red-600" />;
+      case "ENABLE_ADS":
+        return <PlayCircle className="h-5 w-5 text-blue-600" />;
+      default:
+        return <AlertCircle className="h-5 w-5 text-gray-600" />;
     }
   };
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-xl font-semibold">AI Recommendations</h1>
+    <div className="px-4 py-6 sm:px-6 lg:px-8 max-w-4xl mx-auto space-y-6">
+      <h1 className="text-xl font-semibold text-gray-900">AI Recommendations</h1>
+
       {loading ? (
-        <div className="text-center py-12">Loading...</div>
+        <div className="text-sm text-gray-500 text-center py-12">
+          Loading...
+        </div>
       ) : actions.length === 0 ? (
-        <div className="text-center py-12 border rounded-lg">
-          <CheckCircle className="mx-auto h-10 w-10 text-green-500 mb-2" />
-          <h3>All caught up!</h3>
-        </div>
-      ) : (
-        <div className="grid gap-4">
-          {actions.map((action) => (
-            <div key={action.id} className="bg-white border p-4 rounded-lg flex justify-between items-center">
-              <div className="flex gap-4">
-                <div className="p-2 bg-gray-50 rounded">{getActionIcon(action.action_type)}</div>
-                <div>
-                  <h3 className="font-medium">{action.action_type}</h3>
-                  <p className="text-sm text-gray-500">{action.reason}</p>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={() => handleAction(action.id, "DISMISS")} disabled={!!processingId} className="px-3 py-1 border rounded text-sm">Dismiss</button>
-                <button onClick={() => handleAction(action.id, "APPLY")} disabled={!!processingId} className="px-3 py-1 bg-indigo-600 text-white rounded text-sm">Apply</button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
+        <div className="bg-white border border-dashed rounded-lg shadow-sm p-10 text-center space-y-3">
+          <CheckCircle className="mx-auto h-10 w-10 text-green-500" />
+          <h3 className="text-base
