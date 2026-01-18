@@ -11,11 +11,11 @@ type Session = {
 };
 
 export default function Sidebar({
-  open,
-  onClose,
+  mobileOpen,
+  closeMobile,
 }: {
-  open: boolean;
-  onClose: () => void;
+  mobileOpen: boolean;
+  closeMobile: () => void;
 }) {
   const [session, setSession] = useState<Session | null>(null);
 
@@ -34,12 +34,12 @@ export default function Sidebar({
 
   return (
     <>
-      {/* overlay */}
+      {/* overlay (mobile only) */}
       <div
         className={`fixed inset-0 bg-black/40 z-40 md:hidden transition-opacity ${
-          open ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+          mobileOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         }`}
-        onClick={onClose}
+        onClick={closeMobile}
       />
 
       {/* drawer + desktop */}
@@ -47,35 +47,39 @@ export default function Sidebar({
         className={`
           fixed z-50 inset-y-0 left-0 w-56 bg-white border-r px-3 py-4 space-y-1 h-screen overflow-y-auto
           transform transition-transform duration-200
-          ${open ? "translate-x-0" : "-translate-x-full"}
+          ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
           md:static md:translate-x-0 md:z-0 md:flex-shrink-0
         `}
       >
         <div className="flex items-center justify-between px-2 pb-3">
           <div className="text-xs uppercase tracking-wide text-gray-600">Menu</div>
 
-          {/* close btn mobile */}
+          {/* close btn (mobile only) */}
           <button
             className="md:hidden text-gray-600 hover:text-gray-900"
-            onClick={onClose}
+            onClick={closeMobile}
           >
             ✕
           </button>
         </div>
 
-        <NavItem href="/dashboard" label="Dashboard" onClick={onClose} />
-        <NavItem href="/campaigns" label="Campaigns" onClick={onClose} />
-        <NavItem href="/ai-actions" label="AI Actions" onClick={onClose} />
-        <NavItem href="/reports" label="Reports" onClick={onClose} />
-        <NavItem href="/billing" label="Billing" onClick={onClose} />
-        <NavItem href="/settings" label="Settings" onClick={onClose} />
+        <NavItem href="/dashboard" label="Dashboard" onClick={closeMobile} />
+        <NavItem href="/campaigns" label="Campaigns" onClick={closeMobile} />
+        <NavItem href="/ai-actions" label="AI Actions" onClick={closeMobile} />
+        <NavItem href="/reports" label="Reports" onClick={closeMobile} />
+        <NavItem href="/billing" label="Billing" onClick={closeMobile} />
+        <NavItem href="/settings" label="Settings" onClick={closeMobile} />
 
         {isAdmin && (
           <>
             <div className="pt-3 mt-3 border-t px-2 pb-1 text-xs uppercase tracking-wide text-gray-600">
               Admin
             </div>
-            <NavItem href="/admin/dashboard" label="Admin Console" onClick={onClose} />
+            <NavItem
+              href="/admin/dashboard"
+              label="Admin Console"
+              onClick={closeMobile}
+            />
           </>
         )}
       </aside>
