@@ -1,8 +1,6 @@
-"use client";
-
 import "./globals.css";
-import { ReactNode, useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
+import { ReactNode } from "react";
+import { cookies, headers } from "next/headers";
 import { Toaster } from "react-hot-toast";
 import Link from "next/link";
 import { Menu, X, Shield } from "lucide-react";
@@ -17,8 +15,20 @@ type SessionContext = {
   } | null;
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
-  const pathname = usePathname();
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  const pathname = headers().get("x-invoke-path") || headers().get("referer") || "";
+
+  // 🔐 SERVER-SIDE PRELOAD OF SESSION CONTEXT (sets meta_ai_role cookie early)
+  try {
+    const url = `${process.env.NEXT_PUBLIC_API_URL}/session/context`;
+    await fetch(url, {
+      credentials: "include",
+      cache: "no-store",
+      headers: {
+        cookie: cookies().toString(),
+      },
+    });
+  } catch (_) {}
 
   // ============================
   // 1. ADMIN → HARD BYPASS
@@ -49,14 +59,26 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   }
 
   // ============================
-  // 3. USER SHELL
+  // 3. USER SHELL (Client-side)
   // ============================
-  return <UserShell>{children}</UserShell>;
+  return (
+    <html lang="en">
+      <body className="bg-amber-50 text-gray-900">
+        <Toaster position="bottom-right" />
+        <UserShell>{children}</UserShell>
+      </body>
+    </html>
+  );
 }
 
 /* ===================================================== */
 /* ================= USER SHELL ONLY =================== */
 /* ===================================================== */
+
+"use client";
+
+import { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
 
 function UserShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -85,99 +107,89 @@ function UserShell({ children }: { children: ReactNode }) {
 
   if (!loaded) {
     return (
-      <html lang="en">
-        <body className="flex h-screen items-center justify-center text-sm text-gray-500">
-          Loading…
-        </body>
-      </html>
+      <div className="flex h-screen items-center justify-center text-sm text-gray-500">
+        Loading…
+      </div>
     );
   }
 
   return (
-    <html lang="en">
-      <body className="bg-amber-50 text-gray-900">
-        <Toaster position="bottom-right" />
+    <div className="flex h-screen w-screen overflow-hidden">
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
-        <div className="flex h-screen w-screen overflow-hidden">
-          {sidebarOpen && (
-            <div
-              className="fixed inset-0 z-40 bg-black/40 md:hidden"
-              onClick={() => setSidebarOpen(false)}
-            />
-          )}
-
-          {/* SIDEBAR */}
-          <aside
-            className={`
-              fixed z-50 inset-y-0 left-0 w-64 bg-white border-r
-              flex flex-col transform transition-transform
-              ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
-              md:static md:translate-x-0
-            `}
-          >
-            <div className="px-5 py-4 border-b flex justify-between items-center">
-              <div>
-                <div className="text-sm font-bold text-amber-700">
-                  Digital Growth Studio
-                </div>
-                <div className="text-xs text-gray-500">Meta Ads AI</div>
-              </div>
-              <button className="md:hidden" onClick={() => setSidebarOpen(false)}>
-                <X size={20} />
-              </button>
+      <aside
+        className={`
+          fixed z-50 inset-y-0 left-0 w-64 bg-white border-r
+          flex flex-col transform transition-transform
+          ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}
+          md:static md:translate-x-0
+        `}
+      >
+        <div className="px-5 py-4 border-b flex justify-between items-center">
+          <div>
+            <div className="text-sm font-bold text-amber-700">
+              Digital Growth Studio
             </div>
-
-            <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-              <Nav href="/dashboard" active={pathname === "/dashboard"}>
-                Dashboard
-              </Nav>
-              <Nav href="/campaigns" active={pathname.startsWith("/campaigns")}>
-                Campaigns
-              </Nav>
-              <Nav href="/ai-actions" active={pathname === "/ai-actions"}>
-                AI Actions
-              </Nav>
-              <Nav href="/reports" active={pathname === "/reports"}>
-                Reports
-              </Nav>
-              <Nav href="/billing" active={pathname === "/billing"}>
-                Billing
-              </Nav>
-              <Nav href="/settings" active={pathname === "/settings"}>
-                Settings
-              </Nav>
-
-              {session?.user?.is_admin && (
-                <>
-                  <div className="pt-4 text-xs uppercase text-gray-400">Admin</div>
-                  <Link
-                    href="/admin/dashboard"
-                    className="flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-amber-50"
-                  >
-                    <Shield size={16} />
-                    Admin Console
-                  </Link>
-                </>
-              )}
-            </nav>
-          </aside>
-
-          {/* MAIN CONTENT */}
-          <div className="flex flex-col flex-1">
-            <header className="md:hidden flex items-center gap-3 px-4 py-3 border-b bg-white">
-              <button onClick={() => setSidebarOpen(true)}>
-                <Menu size={22} />
-              </button>
-              <span className="text-sm font-medium">Digital Growth Studio</span>
-            </header>
-
-            <main className="flex-1 overflow-y-auto p-4 md:p-8">
-              <div className="max-w-7xl mx-auto">{children}</div>
-            </main>
+            <div className="text-xs text-gray-500">Meta Ads AI</div>
           </div>
+          <button className="md:hidden" onClick={() => setSidebarOpen(false)}>
+            <X size={20} />
+          </button>
         </div>
-      </body>
-    </html>
+
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+          <Nav href="/dashboard" active={pathname === "/dashboard"}>
+            Dashboard
+          </Nav>
+          <Nav href="/campaigns" active={pathname.startsWith("/campaigns")}>
+            Campaigns
+          </Nav>
+          <Nav href="/ai-actions" active={pathname === "/ai-actions"}>
+            AI Actions
+          </Nav>
+          <Nav href="/reports" active={pathname === "/reports"}>
+            Reports
+          </Nav>
+          <Nav href="/billing" active={pathname === "/billing"}>
+            Billing
+          </Nav>
+          <Nav href="/settings" active={pathname === "/settings"}>
+            Settings
+          </Nav>
+
+          {session?.user?.is_admin && (
+            <>
+              <div className="pt-4 text-xs uppercase text-gray-400">Admin</div>
+              <Link
+                href="/admin/dashboard"
+                className="flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-amber-50"
+              >
+                <Shield size={16} />
+                Admin Console
+              </Link>
+            </>
+          )}
+        </nav>
+      </aside>
+
+      <div className="flex flex-col flex-1">
+        <header className="md:hidden flex items-center gap-3 px-4 py-3 border-b bg-white">
+          <button onClick={() => setSidebarOpen(true)}>
+            <Menu size={22} />
+          </button>
+          <span className="text-sm font-medium">Digital Growth Studio</span>
+        </header>
+
+        <main className="flex-1 overflow-y-auto p-4 md:p-8">
+          <div className="max-w-7xl mx-auto">{children}</div>
+        </main>
+      </div>
+    </div>
   );
 }
 
