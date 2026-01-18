@@ -25,7 +25,7 @@ export default function Sidebar({
   useEffect(() => {
     (async () => {
       try {
-        const res = await apiFetch("/session/context", { cache: "no-store" });
+        const res = await apiFetch("/api/session/context", { cache: "no-store" });
         if (!res.ok) return;
         const data = await res.json();
         setSession(data);
@@ -37,27 +37,27 @@ export default function Sidebar({
 
   const handleLogout = async () => {
     try {
-      await apiFetch("/auth/logout", { method: "POST" });
+      await apiFetch("/api/auth/logout", { method: "POST" });
     } catch {}
     router.push("/login");
   };
 
   return (
     <>
+      {/* Mobile Overlay */}
       <div
-        className={`fixed inset-0 bg-black/40 z-40 md:hidden transition-opacity ${
+        className={`fixed inset-0 bg-black/40 z-40 md:hidden transition-opacity duration-200 ${
           mobileOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
         }`}
         onClick={closeMobile}
       />
 
+      {/* Sidebar Panel */}
       <aside
-        className={`
-          fixed z-50 inset-y-0 left-0 w-56 bg-white border-r px-3 py-4 space-y-1 h-screen overflow-y-auto
-          transform transition-transform duration-200
-          ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
-          md:static md:translate-x-0 md:z-0 md:flex-shrink-0
-        `}
+        className={`fixed z-50 inset-y-0 left-0 w-56 bg-white border-r px-3 py-4 space-y-1 h-screen overflow-y-auto
+        transform transition-transform duration-200
+        ${mobileOpen ? "translate-x-0" : "-translate-x-full"}
+        md:translate-x-0 md:static md:flex-shrink-0`}
       >
         <div className="flex items-center justify-between px-2 pb-3">
           <div className="text-xs uppercase tracking-wide text-gray-600">Menu</div>
@@ -69,13 +69,15 @@ export default function Sidebar({
           </button>
         </div>
 
-        <NavItem href="/dashboard" label="Dashboard" onClick={closeMobile} pathname={pathname} />
-        <NavItem href="/campaigns" label="Campaigns" onClick={closeMobile} pathname={pathname} />
-        <NavItem href="/ai-actions" label="AI Actions" onClick={closeMobile} pathname={pathname} />
-        <NavItem href="/reports" label="Reports" onClick={closeMobile} pathname={pathname} />
-        <NavItem href="/billing" label="Billing" onClick={closeMobile} pathname={pathname} />
-        <NavItem href="/settings" label="Settings" onClick={closeMobile} pathname={pathname} />
+        {/* Main Links */}
+        <NavItem href="/dashboard" label="Dashboard" pathname={pathname} onClick={closeMobile} />
+        <NavItem href="/campaigns" label="Campaigns" pathname={pathname} onClick={closeMobile} />
+        <NavItem href="/ai-actions" label="AI Actions" pathname={pathname} onClick={closeMobile} />
+        <NavItem href="/reports" label="Reports" pathname={pathname} onClick={closeMobile} />
+        <NavItem href="/billing" label="Billing" pathname={pathname} onClick={closeMobile} />
+        <NavItem href="/settings" label="Settings" pathname={pathname} onClick={closeMobile} />
 
+        {/* Admin Section */}
         {isAdmin && (
           <>
             <div className="pt-3 mt-3 border-t px-2 pb-1 text-xs uppercase tracking-wide text-gray-600">
@@ -84,12 +86,13 @@ export default function Sidebar({
             <NavItem
               href="/admin/dashboard"
               label="Admin Console"
-              onClick={closeMobile}
               pathname={pathname}
+              onClick={closeMobile}
             />
           </>
         )}
 
+        {/* Logout */}
         <div className="mt-4 pt-4 border-t">
           <button
             onClick={handleLogout}
@@ -103,19 +106,20 @@ export default function Sidebar({
   );
 }
 
+/* ---------------- Nav Item ---------------- */
+
 function NavItem({
   href,
   label,
-  onClick,
   pathname,
+  onClick,
 }: {
   href: string;
   label: string;
-  onClick: () => void;
   pathname: string;
+  onClick: () => void;
 }) {
-  const active =
-    pathname === href || (href !== "/" && pathname.startsWith(href));
+  const active = pathname === href || (href !== "/" && pathname.startsWith(href));
 
   return (
     <Link
