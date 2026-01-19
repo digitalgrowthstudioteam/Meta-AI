@@ -23,6 +23,7 @@ from app.core.db_session import AsyncSessionLocal
 # =========================
 # ROUTERS (API ONLY)
 # =========================
+from app.billing.webhooks import router as webhook_router
 from app.auth.routes import router as auth_router
 from app.campaigns.routes import router as campaigns_router
 from app.meta_api.routes import router as meta_router
@@ -91,6 +92,7 @@ app.include_router(session_router, prefix="/api")
 app.include_router(session_api_router, prefix="/api")  # enables /api/session/context
 app.include_router(campaigns_router, prefix="/api")
 app.include_router(billing_router, prefix="/api")
+app.include_router(webhook_router, prefix="/api")
 
 # Admin Core
 app.include_router(admin_main_router, prefix="/api")
