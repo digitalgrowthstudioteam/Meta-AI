@@ -80,10 +80,10 @@ export function middleware(request: NextRequest) {
 }
 
 // =====================================================
-// ⚙️ CONFIG (exclude APIs and static assets)
+// ⚙️ CONFIG (exclude APIs, static assets & webhook)
 // =====================================================
 export const config = {
   matcher: [
-    "/((?!_next|static|favicon.ico|manifest|robots.txt|sitemap|api).*)",
+    "/((?!_next|static|favicon.ico|manifest|robots.txt|sitemap|api|billing/webhook).*)",
   ],
 };
