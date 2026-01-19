@@ -9,12 +9,16 @@ from app.core.database import Base
 
 class Payment(Base):
     """
-    Razorpay payment record (immutable after success).
+    Razorpay Payment Record (Unified for all billing modes)
 
-    Covers:
-    - Subscription purchase (Plan snapshot stored as integer plan_id)
-    - Manual campaign purchase (UUID)
-    - Add-ons (UUID)
+    Supported types:
+        - subscription           (recurring monthly)
+        - subscription_yearly    (one-time prepaid yearly)
+        - manual_campaign        (one-time campaign purchase)
+        - addon                  (one-time addon purchase)
+
+    Status lifecycle mirrors Razorpay:
+        created -> authorized -> captured -> refunded -> failed
     """
 
     __tablename__ = "payments"
@@ -32,13 +36,21 @@ class Payment(Base):
         index=True,
     )
 
-    # -------------------------
+    # ------------------------------------------------
     # Razorpay identifiers
-    # -------------------------
-    razorpay_order_id: Mapped[str] = mapped_column(
+    # ------------------------------------------------
+    razorpay_order_id: Mapped[str | None] = mapped_column(
         String,
-        nullable=False,
+        nullable=True,
         index=True,
+        doc="Set for one-time payments (yearly/addon/manual/etc)",
+    )
+
+    razorpay_subscription_id: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+        index=True,
+        doc="Set for monthly recurring subscriptions",
     )
 
     razorpay_payment_id: Mapped[str | None] = mapped_column(
@@ -52,13 +64,13 @@ class Payment(Base):
         nullable=True,
     )
 
-    # -------------------------
-    # Amount & status
-    # -------------------------
+    # ------------------------------------------------
+    # Amount & Status
+    # ------------------------------------------------
     amount: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
-        doc="Amount in paise",
+        doc="Amount in paise (smallest INR unit)",
     )
 
     currency: Mapped[str] = mapped_column(
@@ -70,38 +82,39 @@ class Payment(Base):
     status: Mapped[str] = mapped_column(
         String,
         nullable=False,
-        doc="created | authorized | captured | failed | refunded",
+        doc="created | authorized | captured | refunded | failed",
     )
 
-    # -------------------------
-    # Business reference
-    # -------------------------
+    # ------------------------------------------------
+    # Business fields
+    # ------------------------------------------------
     payment_for: Mapped[str] = mapped_column(
         String,
         nullable=False,
-        doc="subscription | manual_campaign | addon",
+        doc="subscription | subscription_yearly | manual_campaign | addon",
     )
 
-    # PLAN ID stored separately for subscription billing
+    # Plan reference (only for subscription types)
     plan_id: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
-        doc="Only used when payment_for='subscription'",
+        doc="Plan ID for subscription & subscription_yearly",
     )
 
-    # UUID reference for addon, campaign, future features
+    # UUID-based reference (manual campaign ID, addon ID, etc)
     reference_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         nullable=True,
-        doc="Addon ID / Campaign ID / etc.",
+        doc="Used for manual campaign / addon / future",
     )
 
-    # -------------------------
+    # ------------------------------------------------
     # Timestamps
-    # -------------------------
+    # ------------------------------------------------
     paid_at: Mapped[datetime | None] = mapped_column(
         DateTime,
         nullable=True,
+        doc="Set when payment is fully captured",
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -112,7 +125,9 @@ class Payment(Base):
 
 
 # =====================================================
-# INDEXES
+# INDEXES (Query Optimized)
 # =====================================================
 Index("ix_payment_user_created", Payment.user_id, Payment.created_at)
 Index("ix_payment_status", Payment.status)
+Index("ix_payment_order", Payment.razorpay_order_id)
+Index("ix_payment_subscription", Payment.razorpay_subscription_id)
