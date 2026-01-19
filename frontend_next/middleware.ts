@@ -3,8 +3,16 @@ import type { NextRequest } from "next/server";
 
 const PUBLIC_PATHS = ["/", "/login", "/verify"];
 
+// 🔓 Razorpay/Webhook bypass
+const WEBHOOK_PATHS = ["/billing/webhook"];
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // 🔓 Allow webhook paths through without auth or redirects
+  if (WEBHOOK_PATHS.some((p) => pathname.startsWith(p))) {
+    return NextResponse.next();
+  }
 
   // System/static/assets → always allow
   if (
