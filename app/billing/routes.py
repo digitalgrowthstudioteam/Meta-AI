@@ -1,12 +1,11 @@
 # ================================
-# app/billing/routes.py
+# app/billing/routes.py (UPDATED)
 # ================================
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import Optional
 from datetime import datetime, timedelta
 from uuid import UUID
 
@@ -19,7 +18,6 @@ from app.billing.invoice_service import InvoicePDFService
 from app.admin.models_pricing import AdminPricingConfig
 from app.plans.models import Plan
 from app.plans.subscription_models import SubscriptionAddon
-
 
 router = APIRouter(prefix="/billing", tags=["Billing"])
 
@@ -39,9 +37,9 @@ async def _get_active_pricing(db: AsyncSession) -> AdminPricingConfig:
 
 
 # =====================================================
-# RECURRING MONTHLY SUBSCRIPTION (NON-ENTERPRISE)
+# CREATE RECURRING MONTHLY SUBSCRIPTION (STARTER/PRO/AGENCY)
 # =====================================================
-@router.post("/subscription/monthly/recurring")
+@router.post("/subscription/recurring")
 async def create_recurring_subscription(
     *,
     plan_id: int = Query(...),
@@ -58,17 +56,18 @@ async def create_recurring_subscription(
         raise HTTPException(400, "Invalid or inactive plan")
 
     plan_key = plan.name.lower()
+
     if plan_key == "free":
         raise HTTPException(400, "FREE plan cannot be purchased")
 
     if plan_key == "enterprise":
-        raise HTTPException(400, "Enterprise is manual only")
+        raise HTTPException(400, "Enterprise does not support auto recurring")
 
     if not plan.auto_allowed:
         raise HTTPException(400, "Recurring billing disabled for this plan")
 
     if not plan.razorpay_monthly_plan_id:
-        raise HTTPException(400, "Missing Razorpay mapping for recurring")
+        raise HTTPException(400, "Missing Razorpay recurring plan mapping")
 
     service = BillingService()
 
@@ -83,73 +82,19 @@ async def create_recurring_subscription(
         "razorpay_subscription_id": sub.razorpay_subscription_id,
         "plan_id": plan.id,
         "plan_name": plan.name,
-        "billing_cycle": sub.billing_cycle,
-        "key": service.public_key,
-    }
-
-
-# =====================================================
-# MANUAL MONTHLY SUBSCRIPTION (LOAD PRICE FROM ADMIN)
-# =====================================================
-@router.post("/subscription/monthly/manual")
-async def create_manual_monthly_subscription(
-    *,
-    plan_id: int = Query(...),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_user),
-):
-    plan = await db.scalar(
-        select(Plan).where(
-            Plan.id == plan_id,
-            Plan.is_active.is_(True),
-        )
-    )
-    if not plan:
-        raise HTTPException(400, "Invalid or inactive plan")
-
-    plan_key = plan.name.lower()
-    if plan_key == "free":
-        raise HTTPException(400, "FREE plan cannot be purchased")
-
-    pricing = await _get_active_pricing(db)
-
-    if plan_key not in pricing.plan_pricing:
-        raise HTTPException(400, "Pricing not configured in admin")
-
-    plan_price_config = pricing.plan_pricing[plan_key]
-    if "monthly" not in plan_price_config:
-        raise HTTPException(400, "Monthly price not configured for this plan")
-
-    amount = int(plan_price_config["monthly"])  # paise
-
-    service = BillingService()
-    payment = await service.create_order(
-        db=db,
-        user=current_user,
-        amount=amount,
-        payment_for="subscription_monthly",
-        related_reference_id=plan.id,
-    )
-
-    return {
-        "payment_id": str(payment.id),
-        "razorpay_order_id": payment.razorpay_order_id,
-        "plan_id": plan.id,
-        "plan_name": plan.name,
         "billing_cycle": "monthly",
-        "amount": amount,
-        "currency": pricing.currency,
         "key": service.public_key,
     }
 
 
 # =====================================================
-# MANUAL YEARLY SUBSCRIPTION (LOAD PRICE FROM ADMIN)
+# MANUAL MONTHLY/YEARLY SUBSCRIPTION
 # =====================================================
-@router.post("/subscription/yearly/manual")
-async def create_manual_yearly_subscription(
+@router.post("/subscription/manual")
+async def create_manual_subscription(
     *,
     plan_id: int = Query(...),
+    cycle: str = Query(..., regex="^(monthly|yearly)$"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
@@ -166,33 +111,25 @@ async def create_manual_yearly_subscription(
     if plan_key == "free":
         raise HTTPException(400, "FREE plan cannot be purchased")
 
-    pricing = await _get_active_pricing(db)
-
-    if plan_key not in pricing.plan_pricing:
-        raise HTTPException(400, "Pricing not configured in admin")
-
-    plan_price_config = pricing.plan_pricing[plan_key]
-    if "yearly" not in plan_price_config:
-        raise HTTPException(400, "Yearly price not configured for this plan")
-
-    amount = int(plan_price_config["yearly"])  # paise
-
+    # Enterprise is allowed here, just not recurring
     service = BillingService()
-    payment = await service.create_order(
+
+    payment = await service.create_order_manual_subscription(
         db=db,
         user=current_user,
-        amount=amount,
-        payment_for="subscription_yearly",
-        related_reference_id=plan.id,
+        plan_id=plan.id,
+        billing_cycle=cycle,
     )
+
+    pricing = await _get_active_pricing(db)
 
     return {
         "payment_id": str(payment.id),
         "razorpay_order_id": payment.razorpay_order_id,
         "plan_id": plan.id,
         "plan_name": plan.name,
-        "billing_cycle": "yearly",
-        "amount": amount,
+        "billing_cycle": cycle,
+        "amount": payment.amount,
         "currency": pricing.currency,
         "key": service.public_key,
     }
@@ -244,12 +181,11 @@ async def buy_campaign_slots(
     total_amount = selected["price"] * quantity
 
     service = BillingService()
-    payment = await service.create_order(
+    payment = await service.create_order_manual_subscription(
         db=db,
         user=current_user,
-        amount=total_amount,
-        payment_for="addon",
-        related_reference_id=None,
+        plan_id=None,
+        billing_cycle=None,
     )
 
     return {
@@ -353,5 +289,5 @@ async def download_invoice(
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{invoice.invoice_number}.pdf"'},
+        headers={"Content-Disposition": f'attachment; filename=\"{invoice.invoice_number}.pdf\"'},
     )
