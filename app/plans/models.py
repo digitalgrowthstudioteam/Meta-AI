@@ -22,13 +22,11 @@ class Plan(Base):
     monthly_price: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
-        doc="Monthly recurring price in paise",
     )
 
     yearly_price: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
-        doc="Yearly prepaid price in paise (25% discount applied)",
     )
 
     # ======================
@@ -37,13 +35,11 @@ class Plan(Base):
     razorpay_monthly_plan_id: Mapped[str | None] = mapped_column(
         String,
         nullable=True,
-        doc="Razorpay subscription plan id for monthly recurring",
     )
 
     razorpay_yearly_plan_id: Mapped[str | None] = mapped_column(
         String,
         nullable=True,
-        doc="Razorpay order plan id (yearly prepaid, not recurring)",
     )
 
     # ======================
@@ -52,20 +48,16 @@ class Plan(Base):
     max_ai_campaigns: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
-        doc="Max AI-active campaigns allowed",
     )
 
     max_ad_accounts: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
-        doc="Max connected Meta ad accounts (NULL = unlimited)",
     )
 
-    # optional: team seats later if required
     max_team_members: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
-        doc="Team seats (NULL = unlimited)",
     )
 
     allows_addons: Mapped[bool] = mapped_column(
@@ -86,7 +78,36 @@ class Plan(Base):
     trial_days: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
-        doc="Trial duration in days",
+    )
+
+    # ======================
+    # PLAN CAPS / USER MODES
+    # ======================
+    auto_allowed: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
+
+    manual_allowed: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False,
+    )
+
+    yearly_allowed: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
+
+    # ======================
+    # VISIBILITY (Enterprise hidden)
+    # ======================
+    is_hidden: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
     )
 
     # ======================
