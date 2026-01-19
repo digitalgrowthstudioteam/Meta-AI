@@ -103,7 +103,7 @@ class BillingService:
             {
                 "plan_id": plan.razorpay_monthly_plan_id,
                 "customer_notify": 1,
-                "total_count": 9999,  # explicitly infinite billing
+                "total_count": 1199,  # explicitly infinite billing
                 "notes": {
                     "user_id": str(user.id),
                     "plan_id": str(plan.id),
