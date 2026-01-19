@@ -38,6 +38,12 @@ type Invoice = {
 
 type AIAction = any;
 
+type SubscriptionResponse = {
+  current: any | null;
+  history: any[];
+  addons: any[];
+};
+
 type Tab = "profile" | "meta" | "campaigns" | "billing" | "ai" | "subscription";
 
 export default function AdminUserDetailPage() {
@@ -53,6 +59,7 @@ export default function AdminUserDetailPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [aiActions, setAiActions] = useState<AIAction[]>([]);
+  const [subscription, setSubscription] = useState<SubscriptionResponse | null>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -72,6 +79,22 @@ export default function AdminUserDetailPage() {
         setUser(null);
       } finally {
         setLoading(false);
+      }
+    })();
+  }, [userId]);
+
+  // Subscription fetch
+  useEffect(() => {
+    if (!userId) return;
+    (async () => {
+      try {
+        const res = await apiFetch(`/admin/users/${userId}/subscription`, {
+          cache: "no-store",
+        });
+        const json = await res.json();
+        setSubscription(json || null);
+      } catch {
+        setSubscription(null);
       }
     })();
   }, [userId]);
@@ -170,6 +193,76 @@ export default function AdminUserDetailPage() {
           {aiActions.length === 0 && <Empty />}
         </Card>
       )}
+
+      {tab === "subscription" && (
+        <Card>
+          {!subscription?.current && <Empty />}
+
+          {subscription?.current && (
+            <div className="space-y-2 border-b pb-3 mb-3">
+              <div className="font-medium text-blue-600">Current Subscription</div>
+              <Row label="Plan ID" value={subscription.current.plan_id || "—"} />
+              <Row label="Status" value={subscription.current.status} />
+              <Row
+                label="Starts"
+                value={subscription.current.starts_at || "—"}
+              />
+              <Row
+                label="Ends"
+                value={subscription.current.ends_at || "Never"}
+              />
+              <Row
+                label="Pricing Mode"
+                value={subscription.current.pricing_mode || "—"}
+              />
+              <Row
+                label="Custom Price"
+                value={String(subscription.current.custom_price ?? "—")}
+              />
+              <Row
+                label="Duration"
+                value={
+                  (subscription.current.custom_duration_months
+                    ? `${subscription.current.custom_duration_months}mo `
+                    : "") +
+                    (subscription.current.custom_duration_days
+                      ? `${subscription.current.custom_duration_days}d`
+                      : "") || "—"
+                }
+              />
+              <Row
+                label="Never Expires"
+                value={subscription.current.never_expires ? "Yes" : "No"}
+              />
+              <Row
+                label="Admin Notes"
+                value={subscription.current.admin_notes || "—"}
+              />
+            </div>
+          )}
+
+          <div className="font-medium text-gray-700 mb-1">History</div>
+          {subscription?.history?.length === 0 && <Empty />}
+          {subscription?.history?.map((h: any) => (
+            <div key={h.id} className="border-b pb-2 mb-2 text-sm">
+              <div>Status: {h.status}</div>
+              <div>Plan: {h.plan_id}</div>
+              <div>Starts: {h.starts_at}</div>
+              <div>Ends: {h.ends_at || "Never"}</div>
+              <div>Pricing: {h.pricing_mode}</div>
+            </div>
+          ))}
+
+          <div className="font-medium text-gray-700 mt-3 mb-1">Add-ons</div>
+          {subscription?.addons?.length === 0 && <Empty />}
+          {subscription?.addons?.map((a: any) => (
+            <div key={a.id} className="border-b pb-2 mb-2 text-sm">
+              <div>Extra AI Campaigns: {a.extra_ai_campaigns}</div>
+              <div>Expires: {a.expires_at || "Never"}</div>
+            </div>
+          ))}
+        </Card>
+      )}
     </div>
   );
 }
@@ -205,11 +298,11 @@ function Card({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value }: { label: string; value: any }) {
   return (
     <div className="flex justify-between">
       <span className="text-gray-600">{label}</span>
-      <span>{value}</span>
+      <span>{String(value)}</span>
     </div>
   );
 }
