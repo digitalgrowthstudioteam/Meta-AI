@@ -12,24 +12,27 @@ type AdminUser = {
   last_login_at?: string;
 };
 
-type Subscription = {
+type SubscriptionItem = {
   id: string;
-  plan_name: string;
+  plan_id: number;
   status: string;
   starts_at: string;
   ends_at: string | null;
   pricing_mode: string;
   custom_price: number | null;
+  custom_duration_months?: number | null;
+  custom_duration_days?: number | null;
   never_expires: boolean;
+  admin_notes?: string | null;
 };
 
-type Tab =
-  | "profile"
-  | "meta"
-  | "campaigns"
-  | "billing"
-  | "ai"
-  | "subscription";
+type SubscriptionResponse = {
+  current: SubscriptionItem | null;
+  history: SubscriptionItem[];
+  addons: any[];
+};
+
+type Tab = "profile" | "meta" | "campaigns" | "billing" | "ai" | "subscription";
 
 export default function AdminUserDetailPage() {
   const params = useParams();
@@ -39,7 +42,11 @@ export default function AdminUserDetailPage() {
   const [tab, setTab] = useState<Tab>("profile");
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<AdminUser | null>(null);
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [subs, setSubs] = useState<SubscriptionResponse>({
+    current: null,
+    history: [],
+    addons: [],
+  });
   const [assignOpen, setAssignOpen] = useState(false);
 
   useEffect(() => {
@@ -54,11 +61,11 @@ export default function AdminUserDetailPage() {
   }, [userId]);
 
   const loadSubscriptions = async () => {
-    const res = await apiFetch(`/admin/users/${userId}/subscriptions`, {
+    const res = await apiFetch(`/admin/users/${userId}/subscription`, {
       cache: "no-store",
     });
     const json = await res.json();
-    setSubscriptions(json || []);
+    setSubs(json);
   };
 
   useEffect(() => {
@@ -74,6 +81,10 @@ export default function AdminUserDetailPage() {
         <div className="text-red-600 text-sm">User not found</div>
       </div>
     );
+
+  const historyList: SubscriptionItem[] = subs.current
+    ? [subs.current, ...subs.history]
+    : subs.history;
 
   return (
     <div className="space-y-6">
@@ -103,13 +114,13 @@ export default function AdminUserDetailPage() {
             </button>
           </div>
 
-          {subscriptions.length === 0 ? (
+          {historyList.length === 0 ? (
             <Empty />
           ) : (
-            subscriptions.map((s) => (
+            historyList.map((s) => (
               <div key={s.id} className="border-b pb-2 mb-2 text-sm">
                 <div className="font-medium">
-                  {s.plan_name} — {s.status.toUpperCase()}
+                  PLAN #{s.plan_id} — {s.status.toUpperCase()}
                 </div>
                 <div>
                   Starts: {new Date(s.starts_at).toLocaleDateString()} | Ends:{" "}
@@ -158,14 +169,7 @@ function BackButton() {
 }
 
 function TabBar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
-  const tabs: Tab[] = [
-    "profile",
-    "meta",
-    "campaigns",
-    "billing",
-    "ai",
-    "subscription",
-  ];
+  const tabs: Tab[] = ["profile", "meta", "campaigns", "billing", "ai", "subscription"];
   return (
     <div className="flex gap-2 border-b">
       {tabs.map((t) => (
@@ -186,11 +190,7 @@ function TabBar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
 }
 
 function Card({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded border bg-white p-4 space-y-2 text-sm">
-      {children}
-    </div>
-  );
+  return <div className="rounded border bg-white p-4 space-y-2 text-sm">{children}</div>;
 }
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -218,9 +218,7 @@ function AssignModal({
   onAssigned: () => void;
 }) {
   const [planId, setPlanId] = useState<string>("2");
-  const [pricingMode, setPricingMode] = useState<"standard" | "custom">(
-    "standard"
-  );
+  const [pricingMode, setPricingMode] = useState<"standard" | "custom">("standard");
   const [customPrice, setCustomPrice] = useState<string>("0");
   const [months, setMonths] = useState<string>("1");
   const [days, setDays] = useState<string>("0");
@@ -243,8 +241,7 @@ function AssignModal({
         user_id: userId,
         plan_id: planId,
         pricing_mode: pricingMode,
-        custom_price:
-          pricingMode === "custom" ? Number(customPrice) : null,
+        custom_price: pricingMode === "custom" ? Number(customPrice) : null,
         custom_duration_months: Number(months),
         custom_duration_days: Number(days),
         never_expires: neverExp,
