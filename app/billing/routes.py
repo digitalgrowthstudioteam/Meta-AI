@@ -34,6 +34,34 @@ async def _get_active_pricing(db: AsyncSession) -> AdminPricingConfig:
 
 
 # =====================================================
+# PHASE-1: CREATE RECURRING SUBSCRIPTION (MONTHLY)
+# =====================================================
+@router.post("/razorpay/subscription/create")
+async def create_razorpay_subscription(
+    *,
+    plan_id: int = Query(..., description="Plan ID"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    service = BillingService()
+
+    try:
+        sub = await service.create_subscription_recurring(
+            db=db,
+            user=current_user,
+            plan_id=plan_id,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {
+        "subscription_id": str(sub.id),
+        "razorpay_subscription_id": sub.razorpay_subscription_id,
+        "key": service.public_key,
+    }
+
+
+# =====================================================
 # CREATE RAZORPAY ORDER
 # =====================================================
 @router.post("/razorpay/order")
