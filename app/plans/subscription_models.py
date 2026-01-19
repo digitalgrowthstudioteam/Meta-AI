@@ -120,6 +120,14 @@ class Subscription(Base):
         doc="Set only for monthly recurring",
     )
 
+    # Razorpay invoice link (for renewals and yearly)
+    razorpay_invoice_id: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+        index=True,
+        doc="Stores last Razorpay invoice id",
+    )
+
     # snapshot limits
     ai_campaign_limit_snapshot: Mapped[int] = mapped_column(
         Integer,
@@ -150,12 +158,13 @@ class Subscription(Base):
             postgresql_where=(status.in_(["trial", "active", "grace"])),
         ),
     )
-    
+
     custom_duration_days: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
         doc="Custom duration in days (optional, adds on top of months)",
     )
+
 
 class SubscriptionAddon(Base):
     __tablename__ = "subscription_addons"
