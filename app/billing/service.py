@@ -1,5 +1,8 @@
+# ================================
+# app/billing/service.py
+# ================================
+
 import razorpay
-from uuid import UUID
 from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,16 +18,6 @@ from app.admin.models_pricing import AdminPricingConfig
 
 
 class BillingService:
-    """
-    Razorpay payment lifecycle + subscription activation service.
-
-    RULES:
-    - Order creation is idempotent
-    - Payment verification is idempotent
-    - Subscription activation happens HERE and ONLY HERE
-    - Pricing, currency, tax are read from AdminPricingConfig
-    """
-
     def __init__(self):
         if not settings.RAZORPAY_KEY_ID or not settings.RAZORPAY_KEY_SECRET:
             raise RuntimeError("Razorpay keys not configured")
@@ -34,9 +27,9 @@ class BillingService:
         )
         self.public_key = settings.RAZORPAY_KEY_ID
 
-    # =====================================================
+    # ------------------------------------------------------
     # INTERNAL — LOAD ACTIVE PRICING CONFIG
-    # =====================================================
+    # ------------------------------------------------------
     async def _get_active_pricing(self, db: AsyncSession) -> AdminPricingConfig:
         config = await db.scalar(
             select(AdminPricingConfig)
@@ -47,9 +40,9 @@ class BillingService:
             raise RuntimeError("No active pricing configuration")
         return config
 
-    # =====================================================
-    # PHASE-1: CREATE RECURRING SUBSCRIPTION (MONTHLY)
-    # =====================================================
+    # ------------------------------------------------------
+    # RECURRING MONTHLY SUBSCRIPTION (NON-ENTERPRISE ONLY)
+    # ------------------------------------------------------
     async def create_subscription_recurring(
         self,
         *,
@@ -67,25 +60,31 @@ class BillingService:
         if not plan:
             raise RuntimeError("Invalid or inactive plan")
 
+        plan_key = plan.name.lower()
+
+        if plan_key == "free":
+            raise RuntimeError("FREE plan cannot have paid subscription")
+
+        if plan_key == "enterprise":
+            raise RuntimeError("Enterprise is manual only, no recurring allowed")
+
         if not plan.auto_allowed:
-            raise RuntimeError("Plan does not support auto billing")
+            raise RuntimeError("Plan has auto billing disabled")
 
         if not plan.razorpay_monthly_plan_id:
             raise RuntimeError("Missing Razorpay monthly plan mapping")
 
-        # Create Razorpay subscription
         rp_sub = self.client.subscription.create(
             {
                 "plan_id": plan.razorpay_monthly_plan_id,
                 "customer_notify": 1,
                 "quantity": 1,
-                "total_count": 0,  # endless
+                "total_count": 0,  # endless recurring
             }
         )
 
         razorpay_subscription_id = rp_sub["id"]
 
-        # Insert DB subscription as pending
         sub = Subscription(
             user_id=user.id,
             plan_id=plan.id,
@@ -107,9 +106,9 @@ class BillingService:
 
         return sub
 
-    # =====================================================
-    # CREATE RAZORPAY ORDER (IDEMPOTENT)
-    # =====================================================
+    # ------------------------------------------------------
+    # MANUAL ORDER — MONTHLY / YEARLY / ADDONS
+    # ------------------------------------------------------
     async def create_order(
         self,
         *,
@@ -122,7 +121,7 @@ class BillingService:
 
         pricing = await self._get_active_pricing(db)
 
-        result = await db.execute(
+        existing = await db.scalar(
             select(Payment).where(
                 Payment.user_id == user.id,
                 Payment.amount == amount,
@@ -130,7 +129,6 @@ class BillingService:
                 Payment.status == "created",
             )
         )
-        existing = result.scalar_one_or_none()
         if existing:
             return existing
 
@@ -157,9 +155,9 @@ class BillingService:
         await db.refresh(payment)
         return payment
 
-    # =====================================================
-    # VERIFY PAYMENT + ACTIVATE SUBSCRIPTION
-    # =====================================================
+    # ------------------------------------------------------
+    # PAYMENT VERIFY — RAZORPAY ORDER
+    # ------------------------------------------------------
     async def verify_payment(
         self,
         *,
@@ -170,9 +168,7 @@ class BillingService:
     ) -> Payment:
 
         payment = await db.scalar(
-            select(Payment).where(
-                Payment.razorpay_order_id == razorpay_order_id
-            )
+            select(Payment).where(Payment.razorpay_order_id == razorpay_order_id)
         )
         if not payment:
             raise ValueError("Payment record not found")
@@ -196,36 +192,25 @@ class BillingService:
         await db.commit()
         await db.refresh(payment)
 
-        await self._activate_subscription_after_payment(
-            db=db,
-            payment=payment,
-        )
+        await self._post_payment_subscription_logic(db=db, payment=payment)
 
         return payment
 
-    # =====================================================
-    # SUBSCRIPTION ACTIVATION (IDEMPOTENT)
-    # =====================================================
-    async def _activate_subscription_after_payment(
+    # ------------------------------------------------------
+    # POST PAYMENT — MANUAL SUBSCRIPTION ACTIVATION
+    # ------------------------------------------------------
+    async def _post_payment_subscription_logic(
         self,
         *,
         db: AsyncSession,
         payment: Payment,
     ) -> None:
 
-        if payment.payment_for != "subscription":
-            return
-
-        existing_sub = await db.scalar(
-            select(Subscription).where(
-                Subscription.payment_id == payment.id
-            )
-        )
-        if existing_sub:
+        if payment.payment_for not in ("subscription_monthly", "subscription_yearly"):
             return
 
         if payment.related_reference_id is None:
-            raise RuntimeError("related_reference_id missing for subscription")
+            raise RuntimeError("Plan reference missing for subscription payment")
 
         plan = await db.scalar(
             select(Plan).where(
@@ -236,10 +221,15 @@ class BillingService:
         if not plan:
             raise RuntimeError("Invalid or inactive plan")
 
-        pricing = await self._get_active_pricing(db)
+        plan_key = plan.name.lower()
+        if plan_key == "free":
+            return
 
         now = datetime.utcnow()
-        ends_at = now + timedelta(days=30)
+        if payment.payment_for == "subscription_monthly":
+            ends_at = now + timedelta(days=30)
+        else:
+            ends_at = now + timedelta(days=365)
 
         await db.execute(
             update(Subscription)
@@ -254,7 +244,7 @@ class BillingService:
             )
         )
 
-        subscription = Subscription(
+        sub = Subscription(
             user_id=payment.user_id,
             plan_id=plan.id,
             payment_id=payment.id,
@@ -268,11 +258,10 @@ class BillingService:
             assigned_by_admin=False,
         )
 
-        db.add(subscription)
+        db.add(sub)
 
-        tax_amount = int(
-            payment.amount * pricing.tax_percentage / 100
-        )
+        pricing = await self._get_active_pricing(db)
+        tax_amount = int(payment.amount * pricing.tax_percentage / 100)
 
         invoice = Invoice(
             user_id=payment.user_id,
