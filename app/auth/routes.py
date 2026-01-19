@@ -58,13 +58,15 @@ async def verify_login(
     next: str = Query("/dashboard"),
     db: AsyncSession = Depends(get_db),
 ):
-    session_token, user = await verify_magic_login(db, raw_token=token)
+    result = await verify_magic_login(db, raw_token=token)
 
-    if not session_token or not user:
+    if not result:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired login link",
         )
+
+    session_token, user = result
 
     existing = await db.scalar(
         select(Subscription)
