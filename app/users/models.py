@@ -2,10 +2,9 @@ from sqlalchemy import String, Boolean, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from datetime import datetime
 import uuid
+from typing import Optional
 
 from app.core.base import Base
-
-# ✅ CRITICAL: import Session model so mapper can resolve it
 from app.auth.models import Session
 
 
@@ -45,9 +44,14 @@ class User(Base):
         nullable=True,
     )
 
-    # 🔐 Auth relationship (server-side sessions)
+    razorpay_customer_id: Mapped[Optional[str]] = mapped_column(
+        String,
+        nullable=True,
+        index=True,
+    )
+
     sessions = relationship(
-        Session,                 # ✅ direct reference, not string
+        Session,
         back_populates="user",
         cascade="all, delete-orphan",
         lazy="selectin",
