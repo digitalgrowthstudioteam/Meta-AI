@@ -48,6 +48,66 @@ class BillingService:
         return config
 
     # =====================================================
+    # PHASE-1: CREATE RECURRING SUBSCRIPTION (MONTHLY)
+    # =====================================================
+    async def create_subscription_recurring(
+        self,
+        *,
+        db: AsyncSession,
+        user: User,
+        plan_id: int,
+    ) -> Subscription:
+
+        plan = await db.scalar(
+            select(Plan).where(
+                Plan.id == plan_id,
+                Plan.is_active.is_(True),
+            )
+        )
+        if not plan:
+            raise RuntimeError("Invalid or inactive plan")
+
+        if not plan.auto_allowed:
+            raise RuntimeError("Plan does not support auto billing")
+
+        if not plan.razorpay_monthly_plan_id:
+            raise RuntimeError("Missing Razorpay monthly plan mapping")
+
+        # Create Razorpay subscription
+        rp_sub = self.client.subscription.create(
+            {
+                "plan_id": plan.razorpay_monthly_plan_id,
+                "customer_notify": 1,
+                "quantity": 1,
+                "total_count": 0,  # endless
+            }
+        )
+
+        razorpay_subscription_id = rp_sub["id"]
+
+        # Insert DB subscription as pending
+        sub = Subscription(
+            user_id=user.id,
+            plan_id=plan.id,
+            status="pending",
+            billing_cycle="monthly",
+            razorpay_subscription_id=razorpay_subscription_id,
+            starts_at=datetime.utcnow(),
+            ends_at=None,
+            is_active=False,
+            is_trial=False,
+            pricing_mode="standard",
+            created_by_admin=False,
+            assigned_by_admin=False,
+        )
+
+        db.add(sub)
+        await db.commit()
+        await db.refresh(sub)
+
+        return sub
+
+    # =====================================================
     # CREATE RAZORPAY ORDER (IDEMPOTENT)
     # =====================================================
     async def create_order(
@@ -201,7 +261,7 @@ class BillingService:
             status="active",
             starts_at=now,
             ends_at=ends_at,
-            ai_campaign_limit_snapshot=plan.ai_campaign_limit or 0,
+            ai_campaign_limit_snapshot=plan.max_ai_campaigns or 0,
             is_active=True,
             is_trial=False,
             created_by_admin=False,
