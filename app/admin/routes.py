@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, update
+from sqlalchemy import select, func, update, desc
 from uuid import UUID, uuid4
 from datetime import datetime, timedelta
 
@@ -34,6 +34,9 @@ def require_admin(user: User):
     return user
 
 
+# =========================
+# DASHBOARD
+# =========================
 @router.get("/dashboard")
 async def get_admin_dashboard(
     db: AsyncSession = Depends(get_db),
@@ -44,6 +47,9 @@ async def get_admin_dashboard(
     return await AdminOverrideService.get_dashboard_stats(db=db)
 
 
+# =========================
+# USERS LIST
+# =========================
 @router.get("/users")
 async def list_users(
     db: AsyncSession = Depends(get_db),
@@ -82,6 +88,9 @@ async def list_users(
     return response
 
 
+# =========================
+# USER DETAIL BASE
+# =========================
 @router.get("/users/{user_id}")
 async def get_user_detail(
     user_id: UUID,
@@ -161,6 +170,94 @@ async def get_user_detail(
     }
 
 
+# ===============================
+# NEW: USER SUBSCRIPTION DETAIL
+# ===============================
+@router.get("/users/{user_id}/subscription")
+async def get_user_subscription_detail(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user)
+):
+    require_admin(current_user)
+    assert_admin_permission(admin_user=current_user, permission="billing:read")
+
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(404, "User not found")
+
+    # current subscription (active / trial)
+    current = await db.execute(
+        select(Subscription)
+        .where(Subscription.user_id == user_id)
+        .where(Subscription.status.in_(["active", "trial"]))
+        .order_by(Subscription.created_at.desc())
+        .limit(1)
+    )
+    current_sub = current.scalar_one_or_none()
+
+    # history including expired (limit 20)
+    history_res = await db.execute(
+        select(Subscription)
+        .where(Subscription.user_id == user_id)
+        .order_by(desc(Subscription.created_at))
+        .limit(20)
+    )
+    history = history_res.scalars().all()
+
+    # addons (slots etc)
+    addons_res = await db.execute(
+        select(SubscriptionAddon)
+        .join(Subscription, Subscription.id == SubscriptionAddon.subscription_id)
+        .where(Subscription.user_id == user_id)
+    )
+    addons = addons_res.scalars().all()
+
+    return {
+        "current": (
+            {
+                "id": str(current_sub.id),
+                "plan_id": current_sub.plan_id,
+                "status": current_sub.status,
+                "starts_at": current_sub.starts_at.isoformat(),
+                "ends_at": current_sub.ends_at.isoformat() if current_sub.ends_at else None,
+                "pricing_mode": current_sub.pricing_mode,
+                "custom_price": current_sub.custom_price,
+                "custom_duration_months": current_sub.custom_duration_months,
+                "custom_duration_days": current_sub.custom_duration_days,
+                "never_expires": current_sub.never_expires,
+                "admin_notes": current_sub.admin_notes,
+            }
+            if current_sub else None
+        ),
+        "history": [
+            {
+                "id": str(s.id),
+                "plan_id": s.plan_id,
+                "status": s.status,
+                "starts_at": s.starts_at.isoformat(),
+                "ends_at": s.ends_at.isoformat() if s.ends_at else None,
+                "pricing_mode": s.pricing_mode,
+                "custom_price": s.custom_price,
+                "never_expires": s.never_expires,
+            }
+            for s in history
+        ],
+        "addons": [
+            {
+                "id": str(a.id),
+                "subscription_id": str(a.subscription_id),
+                "extra_ai_campaigns": a.extra_ai_campaigns,
+                "expires_at": a.expires_at.isoformat() if a.expires_at else None,
+            }
+            for a in addons
+        ],
+    }
+
+
+# =========================
+# INVOICES
+# =========================
 @router.get("/invoices")
 async def list_admin_invoices(
     limit: int = 50,
@@ -190,6 +287,9 @@ async def list_admin_invoices(
     ]
 
 
+# =========================
+# RAZORPAY LOGS
+# =========================
 @router.get("/razorpay")
 async def list_razorpay_logs(
     limit: int = 50,
@@ -215,6 +315,9 @@ async def list_razorpay_logs(
     ]
 
 
+# =========================
+# AI ACTIONS
+# =========================
 @router.get("/ai-actions")
 async def list_ai_actions(
     limit: int = 50,
@@ -252,6 +355,9 @@ async def list_ai_suggestions(
     return await list_ai_actions(limit=20, status="pending", db=db, current_user=current_user)
 
 
+# =========================
+# REPORTS
+# =========================
 @router.get("/reports")
 async def list_admin_reports(
     current_user: User = Depends(require_user),
@@ -260,6 +366,9 @@ async def list_admin_reports(
     return []
 
 
+# =========================
+# METRIC SYNC
+# =========================
 @router.get("/metrics/sync-status")
 async def get_metrics_sync_status(
     db: AsyncSession = Depends(get_db),
@@ -273,6 +382,9 @@ async def get_metrics_sync_status(
     }
 
 
+# =========================
+# RISK
+# =========================
 @router.get("/risk")
 async def get_risk_dashboard(
     current_user: User = Depends(require_user),
@@ -314,6 +426,9 @@ async def get_risk_alerts(
     ]
 
 
+# =========================
+# META SETTINGS
+# =========================
 @router.get("/meta-settings")
 async def get_meta_settings(
     db: AsyncSession = Depends(get_db),
@@ -371,6 +486,9 @@ async def update_meta_settings(
     return {"status": "updated"}
 
 
+# =========================
+# AUDIT LOGS
+# =========================
 @router.get("/audit/actions")
 async def list_admin_audit_logs(
     *,
@@ -404,6 +522,9 @@ async def list_admin_audit_logs(
     ]
 
 
+# =========================
+# RISK ACTIONS
+# =========================
 @router.post("/risk/freeze-user")
 async def risk_freeze_user(
     payload: dict,
@@ -461,6 +582,9 @@ async def risk_disable_user_ai(
     return {"status": "ai_disabled_for_user"}
 
 
+# =========================
+# PRICING CONFIG
+# =========================
 @router.get("/pricing-config/active")
 async def get_active_pricing_config(
     db: AsyncSession = Depends(get_db),
@@ -508,6 +632,9 @@ async def activate_pricing_config(
     return {"status": "activated"}
 
 
+# =========================
+# SLOT CONTROLS
+# =========================
 @router.post("/slots/{addon_id}/extend")
 async def admin_extend_slot_expiry(
     addon_id: UUID,
@@ -567,6 +694,9 @@ async def admin_adjust_slot_quantity(
     return {"status": "adjusted", "extra_ai_campaigns": addon.extra_ai_campaigns}
 
 
+# =========================
+# ASSIGN SUBSCRIPTION
+# =========================
 @router.post("/subscriptions/assign")
 async def admin_assign_subscription(
     payload: dict,
@@ -578,7 +708,7 @@ async def admin_assign_subscription(
 
     user_id = payload.get("user_id")
     plan_id = payload.get("plan_id")
-    pricing_mode = payload.get("pricing_mode")  # standard | custom
+    pricing_mode = payload.get("pricing_mode")
     custom_price = payload.get("custom_price")
     custom_months = payload.get("custom_duration_months")
     custom_days = payload.get("custom_duration_days")
@@ -656,4 +786,7 @@ async def admin_assign_subscription(
     return {"status": "assigned", "subscription_id": str(sub.id)}
 
 
+# =========================
+# INCLUDE METRICS ROUTES
+# =========================
 router.include_router(metrics_sync_router)
