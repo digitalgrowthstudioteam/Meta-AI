@@ -12,36 +12,15 @@ type AdminUser = {
   last_login_at?: string;
 };
 
-type MetaAccount = {
+type Subscription = {
   id: string;
-  meta_account_id: string;
-  account_name: string;
-  business_category?: string;
-  connected_at?: string;
-};
-
-type Campaign = {
-  id: string;
-  name: string;
-  objective: string;
-  ai_active: boolean;
+  plan_name: string;
   status: string;
-  created_at?: string;
-};
-
-type Invoice = {
-  id: string;
-  total_amount: number;
-  status: string;
-  created_at: string;
-};
-
-type AIAction = any;
-
-type SubscriptionResponse = {
-  current: any | null;
-  history: any[];
-  addons: any[];
+  starts_at: string;
+  ends_at: string | null;
+  pricing_mode: string;
+  custom_price: number | null;
+  never_expires: boolean;
 };
 
 type Tab = "profile" | "meta" | "campaigns" | "billing" | "ai" | "subscription";
@@ -55,87 +34,46 @@ export default function AdminUserDetailPage() {
   const [loading, setLoading] = useState(true);
 
   const [user, setUser] = useState<AdminUser | null>(null);
-  const [metaAccounts, setMetaAccounts] = useState<MetaAccount[]>([]);
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [aiActions, setAiActions] = useState<AIAction[]>([]);
-  const [subscription, setSubscription] = useState<SubscriptionResponse | null>(null);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [assignOpen, setAssignOpen] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
     (async () => {
-      try {
-        const res = await apiFetch(`/admin/users/${userId}`, {
-          cache: "no-store",
-        });
-        const json = await res.json();
-
-        setUser(json.user || null);
-        setMetaAccounts(json.meta_accounts || []);
-        setCampaigns(json.campaigns || []);
-        setInvoices(json.invoices || []);
-        setAiActions(json.ai_actions || []);
-      } catch {
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
+      setLoading(true);
+      const res = await apiFetch(`/admin/users/${userId}`, { cache: "no-store" });
+      const json = await res.json();
+      setUser(json.user || null);
+      setLoading(false);
     })();
   }, [userId]);
 
-  // Subscription fetch
+  const loadSubscriptions = async () => {
+    const res = await apiFetch(`/admin/users/${userId}/subscriptions`, { cache: "no-store" });
+    const json = await res.json();
+    setSubscriptions(json || []);
+  };
+
   useEffect(() => {
-    if (!userId) return;
-    (async () => {
-      try {
-        const res = await apiFetch(`/admin/users/${userId}/subscription`, {
-          cache: "no-store",
-        });
-        const json = await res.json();
-        setSubscription(json || null);
-      } catch {
-        setSubscription(null);
-      }
-    })();
+    if (userId) loadSubscriptions();
   }, [userId]);
 
-  if (loading) {
-    return <div className="text-sm text-gray-600">Loading user…</div>;
-  }
+  if (loading) return <div className="text-sm text-gray-600">Loading user…</div>;
 
-  if (!user) {
+  if (!user)
     return (
       <div className="space-y-4">
-        <button
-          onClick={() => router.back()}
-          className="text-blue-600 hover:underline text-sm"
-        >
-          ← Back
-        </button>
+        <BackButton />
         <div className="text-red-600 text-sm">User not found</div>
       </div>
     );
-  }
 
   return (
     <div className="space-y-6">
-      <button
-        onClick={() => router.back()}
-        className="text-blue-600 hover:underline text-sm"
-      >
-        ← Back
-      </button>
-
+      <BackButton />
       <h1 className="text-lg font-semibold">{user.email}</h1>
 
-      <div className="flex gap-2 border-b">
-        <TabButton tab="profile" current={tab} setTab={setTab} />
-        <TabButton tab="meta" current={tab} setTab={setTab} />
-        <TabButton tab="campaigns" current={tab} setTab={setTab} />
-        <TabButton tab="billing" current={tab} setTab={setTab} />
-        <TabButton tab="ai" current={tab} setTab={setTab} />
-        <TabButton tab="subscription" current={tab} setTab={setTab} />
-      </div>
+      <TabBar tab={tab} setTab={setTab} />
 
       {tab === "profile" && (
         <Card>
@@ -146,167 +84,234 @@ export default function AdminUserDetailPage() {
         </Card>
       )}
 
-      {tab === "meta" && (
-        <Card>
-          {metaAccounts.length === 0 && <Empty />}
-          {metaAccounts.map((a) => (
-            <div key={a.id} className="border-b pb-2 mb-2 text-sm">
-              <div className="font-medium">{a.account_name}</div>
-              <div>ID: {a.meta_account_id}</div>
-              <div>Category: {a.business_category || "—"}</div>
-              <div>Connected: {a.connected_at || "—"}</div>
-            </div>
-          ))}
-        </Card>
-      )}
-
-      {tab === "campaigns" && (
-        <Card>
-          {campaigns.length === 0 && <Empty />}
-          {campaigns.map((c) => (
-            <div key={c.id} className="border-b pb-2 mb-2 text-sm">
-              <div className="font-medium">{c.name}</div>
-              <div>Objective: {c.objective}</div>
-              <div>AI: {c.ai_active ? "ON" : "OFF"}</div>
-              <div>Status: {c.status}</div>
-            </div>
-          ))}
-        </Card>
-      )}
-
-      {tab === "billing" && (
-        <Card>
-          {invoices.length === 0 && <Empty />}
-          {invoices.map((i) => (
-            <div key={i.id} className="border-b pb-2 mb-2 text-sm">
-              <div>Invoice #{i.id}</div>
-              <div>Amount: ₹{i.total_amount}</div>
-              <div>Status: {i.status}</div>
-              <div>Date: {new Date(i.created_at).toLocaleDateString()}</div>
-            </div>
-          ))}
-        </Card>
-      )}
-
-      {tab === "ai" && (
-        <Card>
-          {aiActions.length === 0 && <Empty />}
-        </Card>
-      )}
-
       {tab === "subscription" && (
         <Card>
-          {!subscription?.current && <Empty />}
+          <div className="flex justify-between items-center mb-2">
+            <div className="text-sm font-medium">Subscription History</div>
+            <button
+              className="px-2 py-1 text-xs bg-blue-600 text-white rounded"
+              onClick={() => setAssignOpen(true)}
+            >
+              Assign Subscription
+            </button>
+          </div>
 
-          {subscription?.current && (
-            <div className="space-y-2 border-b pb-3 mb-3">
-              <div className="font-medium text-blue-600">Current Subscription</div>
-              <Row label="Plan ID" value={subscription.current.plan_id || "—"} />
-              <Row label="Status" value={subscription.current.status} />
-              <Row
-                label="Starts"
-                value={subscription.current.starts_at || "—"}
-              />
-              <Row
-                label="Ends"
-                value={subscription.current.ends_at || "Never"}
-              />
-              <Row
-                label="Pricing Mode"
-                value={subscription.current.pricing_mode || "—"}
-              />
-              <Row
-                label="Custom Price"
-                value={String(subscription.current.custom_price ?? "—")}
-              />
-              <Row
-                label="Duration"
-                value={
-                  (subscription.current.custom_duration_months
-                    ? `${subscription.current.custom_duration_months}mo `
-                    : "") +
-                    (subscription.current.custom_duration_days
-                      ? `${subscription.current.custom_duration_days}d`
-                      : "") || "—"
-                }
-              />
-              <Row
-                label="Never Expires"
-                value={subscription.current.never_expires ? "Yes" : "No"}
-              />
-              <Row
-                label="Admin Notes"
-                value={subscription.current.admin_notes || "—"}
-              />
-            </div>
+          {subscriptions.length === 0 ? (
+            <Empty />
+          ) : (
+            subscriptions.map((s) => (
+              <div key={s.id} className="border-b pb-2 mb-2 text-sm">
+                <div className="font-medium">
+                  {s.plan_name} — {s.status.toUpperCase()}
+                </div>
+                <div>
+                  Starts: {new Date(s.starts_at).toLocaleDateString()} | Ends:{" "}
+                  {s.never_expires
+                    ? "Never"
+                    : s.ends_at
+                    ? new Date(s.ends_at).toLocaleDateString()
+                    : "—"}
+                </div>
+                <div>Pricing: {s.pricing_mode}</div>
+                {s.custom_price !== null && <div>Custom Price: ₹{s.custom_price}</div>}
+              </div>
+            ))
           )}
-
-          <div className="font-medium text-gray-700 mb-1">History</div>
-          {subscription?.history?.length === 0 && <Empty />}
-          {subscription?.history?.map((h: any) => (
-            <div key={h.id} className="border-b pb-2 mb-2 text-sm">
-              <div>Status: {h.status}</div>
-              <div>Plan: {h.plan_id}</div>
-              <div>Starts: {h.starts_at}</div>
-              <div>Ends: {h.ends_at || "Never"}</div>
-              <div>Pricing: {h.pricing_mode}</div>
-            </div>
-          ))}
-
-          <div className="font-medium text-gray-700 mt-3 mb-1">Add-ons</div>
-          {subscription?.addons?.length === 0 && <Empty />}
-          {subscription?.addons?.map((a: any) => (
-            <div key={a.id} className="border-b pb-2 mb-2 text-sm">
-              <div>Extra AI Campaigns: {a.extra_ai_campaigns}</div>
-              <div>Expires: {a.expires_at || "Never"}</div>
-            </div>
-          ))}
         </Card>
+      )}
+
+      {assignOpen && (
+        <AssignModal
+          userId={userId}
+          onClose={() => setAssignOpen(false)}
+          onAssigned={() => {
+            setAssignOpen(false);
+            loadSubscriptions();
+          }}
+        />
       )}
     </div>
   );
 }
 
-function TabButton({
-  tab,
-  current,
-  setTab,
-}: {
-  tab: Tab;
-  current: Tab;
-  setTab: (t: Tab) => void;
-}) {
+/* ------------------------- SUB COMPONENTS ------------------------- */
+
+function BackButton() {
+  const router = useRouter();
   return (
-    <button
-      onClick={() => setTab(tab)}
-      className={`px-3 py-2 text-sm border-b-2 ${
-        current === tab
-          ? "border-blue-600 text-blue-600"
-          : "border-transparent text-gray-500"
-      }`}
-    >
-      {tab.toUpperCase()}
+    <button onClick={() => router.back()} className="text-blue-600 hover:underline text-sm">
+      ← Back
     </button>
   );
 }
 
-function Card({ children }: { children: React.ReactNode }) {
+function TabBar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
+  const tabs: Tab[] = ["profile", "meta", "campaigns", "billing", "ai", "subscription"];
   return (
-    <div className="rounded border bg-white p-4 space-y-2 text-sm">
-      {children}
+    <div className="flex gap-2 border-b">
+      {tabs.map((t) => (
+        <button
+          key={t}
+          onClick={() => setTab(t)}
+          className={`px-3 py-2 text-sm border-b-2 ${
+            tab === t ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500"
+          }`}
+        >
+          {t.toUpperCase()}
+        </button>
+      ))}
     </div>
   );
 }
 
-function Row({ label, value }: { label: string; value: any }) {
+function Card({ children }: { children: React.ReactNode }) {
+  return <div className="rounded border bg-white p-4 space-y-2 text-sm">{children}</div>;
+}
+
+function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between">
       <span className="text-gray-600">{label}</span>
-      <span>{String(value)}</span>
+      <span>{value}</span>
     </div>
   );
 }
 
 function Empty() {
   return <div className="text-sm text-gray-500">No data available.</div>;
+}
+
+/* ------------------------- ASSIGN MODAL ------------------------- */
+
+function AssignModal({
+  userId,
+  onClose,
+  onAssigned,
+}: {
+  userId: string;
+  onClose: () => void;
+  onAssigned: () => void;
+}) {
+  const [planId, setPlanId] = useState<string>("1");
+  const [pricingMode, setPricingMode] = useState<"standard" | "custom">("standard");
+  const [customPrice, setCustomPrice] = useState<string>("0");
+  const [months, setMonths] = useState<string>("1");
+  const [days, setDays] = useState<string>("0");
+  const [neverExp, setNeverExp] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const PLANS = [
+    { id: "1", label: "FREE" },
+    { id: "2", label: "STARTER" },
+    { id: "3", label: "PRO" },
+    { id: "4", label: "AGENCY" },
+    { id: "5", label: "ENTERPRISE" },
+  ];
+
+  const handleSubmit = async () => {
+    setSaving(true);
+    await apiFetch("/admin/subscriptions/assign", {
+      method: "POST",
+      body: JSON.stringify({
+        user_id: userId,
+        plan_id: planId,
+        pricing_mode: pricingMode,
+        custom_price: pricingMode === "custom" ? Number(customPrice) : null,
+        custom_duration_months: Number(months),
+        custom_duration_days: Number(days),
+        never_expires: neverExp,
+      }),
+    });
+    setSaving(false);
+    onAssigned();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div className="bg-white rounded p-4 w-96 space-y-3 text-sm shadow-lg">
+        <div className="font-medium text-base">Assign Subscription</div>
+
+        <div>
+          <label className="block mb-1">Plan</label>
+          <select
+            className="border rounded px-2 py-1 w-full"
+            value={planId}
+            onChange={(e) => setPlanId(e.target.value)}
+          >
+            {PLANS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block mb-1">Pricing Mode</label>
+          <select
+            className="border rounded px-2 py-1 w-full"
+            value={pricingMode}
+            onChange={(e) => setPricingMode(e.target.value as any)}
+          >
+            <option value="standard">Standard</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+
+        {pricingMode === "custom" && (
+          <div>
+            <label className="block mb-1">Custom Price (₹)</label>
+            <input
+              type="number"
+              min="0"
+              className="border rounded px-2 py-1 w-full"
+              value={customPrice}
+              onChange={(e) => setCustomPrice(e.target.value)}
+            />
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <label className="block mb-1">Months</label>
+            <input
+              type="number"
+              min="0"
+              className="border rounded px-2 py-1 w-full"
+              value={months}
+              onChange={(e) => setMonths(e.target.value)}
+            />
+          </div>
+          <div className="flex-1">
+            <label className="block mb-1">Days</label>
+            <input
+              type="number"
+              min="0"
+              className="border rounded px-2 py-1 w-full"
+              value={days}
+              onChange={(e) => setDays(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <input type="checkbox" checked={neverExp} onChange={(e) => setNeverExp(e.target.checked)} />
+          <span>Never Expires</span>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <button className="px-3 py-1 text-xs" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            disabled={saving}
+            className="px-3 py-1 text-xs bg-blue-600 text-white rounded disabled:opacity-50"
+            onClick={handleSubmit}
+          >
+            {saving ? "Saving…" : "Assign"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
