@@ -43,7 +43,7 @@ class Plan(Base):
     razorpay_yearly_plan_id: Mapped[str | None] = mapped_column(
         String,
         nullable=True,
-        doc="Razorpay order plan id for yearly prepaid (not recurring)",
+        doc="Razorpay order plan id (yearly prepaid, not recurring)",
     )
 
     # ======================
@@ -55,11 +55,17 @@ class Plan(Base):
         doc="Max AI-active campaigns allowed",
     )
 
-    # NULL = unlimited (for agency)
     max_ad_accounts: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
         doc="Max connected Meta ad accounts (NULL = unlimited)",
+    )
+
+    # optional: team seats later if required
+    max_team_members: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        doc="Team seats (NULL = unlimited)",
     )
 
     allows_addons: Mapped[bool] = mapped_column(
