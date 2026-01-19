@@ -597,10 +597,14 @@ async def get_active_pricing_config(
 
 
 @router.get("/pricing-config")
-async def list_pric
-awaiter(db)  # truncated for brevity
-
-
+async def list_pricing_configs(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    configs = await AdminPricingConfigService.list_configs(db)
+    return configs
+    
 # =========================
 # SLOT CONTROLS
 # =========================
