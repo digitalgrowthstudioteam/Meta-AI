@@ -1,7 +1,8 @@
 import json
 import hmac
 import hashlib
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -15,8 +16,18 @@ from app.billing.invoice_models import Invoice
 from app.plans.subscription_models import Subscription
 from app.plans.models import Plan
 
-
 router = APIRouter(prefix="/billing/webhook", tags=["Billing Webhooks"])
+
+IST = ZoneInfo("Asia/Kolkata")
+
+
+def ist_now_utc():
+    """Generate IST timestamp converted to UTC for DB."""
+    return datetime.now(IST).astimezone(timezone.utc)
+
+
+def generate_invoice_no():
+    return f"INV-{datetime.now(IST).strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
 
 
 @router.post("/razorpay")
@@ -40,63 +51,218 @@ async def razorpay_webhook(
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     payload = json.loads(body.decode())
-    entity = payload.get("payload", {}).get("payment", {}).get("entity", {})
+    event = payload.get("event")
 
-    razorpay_order_id = entity.get("order_id")
-    razorpay_payment_id = entity.get("id")
-    status = entity.get("status")
+    # SAFETY: We must handle multiple event types
+    if event == "subscription.activated":
+        return await handle_subscription_activated(payload, db)
 
-    if not razorpay_order_id:
-        return {"status": "ignored"}
+    if event == "subscription.charged":
+        return await handle_subscription_charged(payload, db)
 
-    result = await db.execute(
-        select(Payment).where(Payment.razorpay_order_id == razorpay_order_id)
+    if event == "invoice.paid":
+        return await handle_invoice_paid(payload, db)
+
+    if event == "payment.captured":
+        return await handle_payment_captured(payload, db)
+
+    if event == "payment.failed":
+        return await handle_payment_failed(payload, db)
+
+    return {"status": "ignored", "reason": "unsupported_event"}
+
+
+# ======================================================
+# 1) subscription.activated
+# ======================================================
+async def handle_subscription_activated(payload, db: AsyncSession):
+    subscription = payload["payload"]["subscription"]["entity"]
+    razorpay_subscription_id = subscription["id"]
+
+    # Lookup existing payment
+    payment = await db.scalar(
+        select(Payment).where(Payment.reference_id == razorpay_subscription_id)
     )
-    payment = result.scalar_one_or_none()
+
+    if not payment:
+        return {"status": "ignored", "reason": "payment_not_found"}
+
+    # Idempotent check
+    existing = await db.scalar(
+        select(Subscription).where(
+            Subscription.user_id == payment.user_id,
+            Subscription.status == "active"
+        )
+    )
+    if existing:
+        return {"status": "already_active"}
+
+    plan = await db.scalar(select(Plan).where(Plan.id == payment.plan_id))
+    if not plan:
+        return {"status": "error", "detail": "plan_not_found"}
+
+    now = ist_now_utc()
+    ends = now + timedelta(days=30)
+    grace = ends + timedelta(days=3)
+
+    sub = Subscription(
+        user_id=payment.user_id,
+        plan_id=plan.id,
+        payment_id=payment.id,
+        status="active",
+        starts_at=now,
+        ends_at=ends,
+        grace_ends_at=grace,
+        is_trial=False,
+        ai_campaign_limit_snapshot=plan.max_ai_campaigns,
+        is_active=True,
+    )
+
+    db.add(sub)
+    await db.commit()
+
+    return {"status": "activated"}
+
+
+# ======================================================
+# 2) subscription.charged (RENEWAL)
+# ======================================================
+async def handle_subscription_charged(payload, db: AsyncSession):
+    subscription = payload["payload"]["subscription"]["entity"]
+    razorpay_subscription_id = subscription["id"]
+
+    payment = await db.scalar(
+        select(Payment).where(Payment.reference_id == razorpay_subscription_id)
+    )
 
     if not payment:
         return {"status": "ignored"}
 
-    if payment.status == "captured":
+    # Find active subscription
+    current_sub = await db.scalar(
+        select(Subscription).where(
+            Subscription.user_id == payment.user_id,
+            Subscription.status == "active"
+        )
+    )
+
+    # If none, treat as first activation fallback
+    if not current_sub:
+        return await handle_subscription_activated(payload, db)
+
+    plan = await db.scalar(select(Plan).where(Plan.id == payment.plan_id))
+
+    # Extend by 30 days
+    current_sub.ends_at += timedelta(days=30)
+    current_sub.grace_ends_at = current_sub.ends_at + timedelta(days=3)
+
+    await db.commit()
+
+    return {"status": "renewed"}
+
+
+# ======================================================
+# 3) invoice.paid (YEARLY SUBSCRIPTIONS + ADDONS + MANUAL)
+# ======================================================
+async def handle_invoice_paid(payload, db: AsyncSession):
+    invoice = payload["payload"]["invoice"]["entity"]
+    payment_id = invoice.get("payment_id")
+
+    if not payment_id:
+        return {"status": "ignored"}
+
+    payment = await db.scalar(
+        select(Payment).where(Payment.razorpay_payment_id == payment_id)
+    )
+
+    if not payment:
+        return {"status": "ignored"}
+
+    if payment.status == "paid":
         return {"status": "already_processed"}
 
-    payment.razorpay_payment_id = razorpay_payment_id
-    payment.status = status
+    payment.status = "paid"
+    payment.paid_at = ist_now_utc()
 
-    if status != "captured":
-        await db.commit()
-        return {"status": "updated"}
+    await db.commit()
 
-    payment.paid_at = datetime.utcnow()
+    return await finalize_payment(payment, db)
 
-    period_from = None
-    period_to = None
 
-    # ================================
-    # SUBSCRIPTION ACTIVATION LOGIC
-    # ================================
-    if payment.payment_for == "subscription":
-        plan_id = payment.related_reference_id
+# ======================================================
+# 4) payment.captured (NON-SUBSCRIPTION SINGLE CHARGES)
+# ======================================================
+async def handle_payment_captured(payload, db: AsyncSession):
+    pay = payload["payload"]["payment"]["entity"]
+    rp_payment_id = pay["id"]
+    status = pay["status"]
 
-        if not plan_id:
-            raise HTTPException(status_code=400, detail="Missing related_reference_id for subscription")
+    payment = await db.scalar(
+        select(Payment).where(Payment.razorpay_payment_id == rp_payment_id)
+    )
 
-        plan = await db.scalar(
-            select(Plan).where(Plan.id == plan_id)
-        )
+    if not payment:
+        return {"status": "ignored"}
+
+    if payment.status == "paid":
+        return {"status": "already_processed"}
+
+    payment.status = "paid"
+    payment.paid_at = ist_now_utc()
+    await db.commit()
+
+    return await finalize_payment(payment, db)
+
+
+# ======================================================
+# 5) payment.failed
+# ======================================================
+async def handle_payment_failed(payload, db: AsyncSession):
+    pay = payload["payload"]["payment"]["entity"]
+    rp_payment_id = pay["id"]
+
+    payment = await db.scalar(
+        select(Payment).where(Payment.razorpay_payment_id == rp_payment_id)
+    )
+
+    if not payment:
+        return {"status": "ignored"}
+
+    payment.status = "failed"
+    await db.commit()
+
+    return {"status": "failed"}
+
+
+# ======================================================
+# FINAL PAYMENT HANDLER (ONE-TIME LOGIC)
+# ======================================================
+async def finalize_payment(payment: Payment, db: AsyncSession):
+    """
+    Handles:
+    - yearly subscription purchase
+    - manual buys
+    - addons
+    """
+
+    now = ist_now_utc()
+
+    # ========= YEARLY SUBSCRIPTION ==========
+    if payment.payment_for == "subscription_yearly":
+        plan = await db.scalar(select(Plan).where(Plan.id == payment.plan_id))
         if not plan:
-            raise HTTPException(status_code=400, detail="Plan not found")
+            return {"status": "error", "reason": "plan_not_found"}
 
-        period_from = datetime.utcnow()
-        period_to = period_from + timedelta(days=30)
+        # Year = 365 days (but calendar logic can be added later)
+        # Grace = +3 days
+        ends = now + timedelta(days=365)
+        grace = ends + timedelta(days=3)
 
+        # Expire old
         await db.execute(
             update(Subscription)
-            .where(
-                Subscription.user_id == payment.user_id,
-                Subscription.status.in_(["trial", "active"])
-            )
-            .values(status="expired", is_active=False, ends_at=datetime.utcnow())
+            .where(Subscription.user_id == payment.user_id)
+            .values(status="expired", is_active=False)
         )
 
         sub = Subscription(
@@ -104,41 +270,40 @@ async def razorpay_webhook(
             plan_id=plan.id,
             payment_id=payment.id,
             status="active",
-            starts_at=period_from,
-            ends_at=period_to,
-            ai_campaign_limit_snapshot=plan.ai_campaign_limit or 0,
+            starts_at=now,
+            ends_at=ends,
+            grace_ends_at=grace,
             is_trial=False,
+            ai_campaign_limit_snapshot=plan.max_ai_campaigns,
             is_active=True,
-            created_by_admin=False,
-            assigned_by_admin=False,
         )
-
         db.add(sub)
 
-    # ================================
-    # INVOICE (IDEMPOTENT)
-    # ================================
-    existing_invoice = await db.scalar(
-        select(Invoice).where(Invoice.payment_id == payment.id)
-    )
+    # ========= MANUAL CAMPAIGN PURCHASE ==========
+    elif payment.payment_for == "manual_campaign":
+        # TODO: Campaign credits implementation later.
+        pass
 
-    if not existing_invoice:
+    # ========= ADDON PURCHASE ==========
+    elif payment.payment_for == "addon":
+        # TODO: Addon table implementation later.
+        pass
+
+    # Auto generate invoice (idempotent)
+    inv = await db.scalar(select(Invoice).where(Invoice.payment_id == payment.id))
+    if not inv:
         invoice = Invoice(
             user_id=payment.user_id,
             payment_id=payment.id,
-            invoice_number=f"INV-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}",
-            invoice_date=datetime.utcnow(),
-            billing_name="Digital Growth Studio User",
-            billing_email="billing@digitalgrowthstudio.in",
+            invoice_number=generate_invoice_no(),
+            invoice_date=now,
             subtotal=payment.amount,
             tax_amount=0,
             total_amount=payment.amount,
             currency=payment.currency,
-            period_from=period_from,
-            period_to=period_to,
             status="paid",
         )
         db.add(invoice)
 
     await db.commit()
-    return {"status": "activated"}
+    return {"status": "processed"}
