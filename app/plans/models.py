@@ -16,24 +16,50 @@ class Plan(Base):
         nullable=False,
     )
 
-    # Pricing (paise)
+    # ======================
+    # PRICING (IN PAISE)
+    # ======================
     monthly_price: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
-        doc="Monthly price in smallest currency unit (e.g. paise)",
+        doc="Monthly recurring price in paise",
     )
 
-    # Limits
+    yearly_price: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        doc="Yearly prepaid price in paise (25% discount applied)",
+    )
+
+    # ======================
+    # RAZORPAY PLAN MAPPING
+    # ======================
+    razorpay_monthly_plan_id: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+        doc="Razorpay subscription plan id for monthly recurring",
+    )
+
+    razorpay_yearly_plan_id: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+        doc="Razorpay order plan id for yearly prepaid (not recurring)",
+    )
+
+    # ======================
+    # LIMITS
+    # ======================
     max_ai_campaigns: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
         doc="Max AI-active campaigns allowed",
     )
 
-    max_ad_accounts: Mapped[int] = mapped_column(
+    # NULL = unlimited (for agency)
+    max_ad_accounts: Mapped[int | None] = mapped_column(
         Integer,
-        nullable=False,
-        doc="Max connected Meta ad accounts",
+        nullable=True,
+        doc="Max connected Meta ad accounts (NULL = unlimited)",
     )
 
     allows_addons: Mapped[bool] = mapped_column(
@@ -42,7 +68,9 @@ class Plan(Base):
         nullable=False,
     )
 
-    # Trial policy
+    # ======================
+    # TRIAL POLICY
+    # ======================
     is_trial_allowed: Mapped[bool] = mapped_column(
         Boolean,
         default=False,
@@ -52,9 +80,12 @@ class Plan(Base):
     trial_days: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
+        doc="Trial duration in days",
     )
 
-    # Status
+    # ======================
+    # STATUS
+    # ======================
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         default=True,
