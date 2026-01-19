@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Subscription Test UI</title>
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+</head>
+<body>
+  <h2>Test LIVE Subscription</h2>
+  <button id="btn">Start Subscription</button>
+
+  <script>
+    document.getElementById("btn").onclick = async function() {
+      const resp = await fetch("https://meta-ai.digitalgrowthstudio.in/api/billing/subscription/recurring?plan_id=2", {
+        method: "POST",
+        credentials: "include", // important for cookie auth
+      });
+
+      if (!resp.ok) {
+        alert("API error: " + resp.status);
+        return;
+      }
+
+      const data = await resp.json();
+      console.log("API Response:", data);
+
+      if (!data.razorpay_subscription_id) {
+        alert("Missing razorpay_subscription_id");
+        return;
+      }
+
+      const options = {
+        key: data.key,
+        subscription_id: data.razorpay_subscription_id,
+        name: "Meta AI",
+        description: data.plan_name + " Plan",
+        handler: function (response){
+          console.log("Success:", response);
+          alert("Payment Done! Wait for webhook to process backend.");
+        },
+        theme: {
+          color: "#2B6CB0"
+        }
+      };
+
+      const rzp = new Razorpay(options);
+      rzp.open();
+    };
+  </script>
+</body>
+</html>
