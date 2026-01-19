@@ -58,7 +58,6 @@ async def verify_login(
     next: str = Query("/dashboard"),
     db: AsyncSession = Depends(get_db),
 ):
-    # ⬇️ Expected return now: (session_token, user_obj)
     session_token, user = await verify_magic_login(db, raw_token=token)
 
     if not session_token or not user:
@@ -66,17 +65,6 @@ async def verify_login(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired login link",
         )
-
-    """
-    ==========================================
-    🟢 TRIAL LOGIC (New user only)
-    ==========================================
-    Rules:
-    • New users get 7-day trial
-    • AI limit = 3 (Starter equivalent)
-    • After trial → must choose paid plan
-    • Existing users skip this
-    """
 
     existing = await db.scalar(
         select(Subscription)
@@ -90,26 +78,25 @@ async def verify_login(
 
         trial = Subscription(
             user_id=user.id,
-            plan_id=0,  # 0 or NULL-like identifier for "Trial"
+            plan_id=0,               # trial pseudo-plan
             payment_id=None,
             status="trial",
+            billing_cycle="trial",   # REQUIRED field
             starts_at=trial_start,
             ends_at=trial_end,
             is_trial=True,
             is_active=True,
-            trial_start_date=date.today(),
-            trial_end_date=date.today() + timedelta(days=7),
-            ai_campaign_limit_snapshot=3,  # Starter limit
+            trial_start=date.today(),
+            trial_end=date.today() + timedelta(days=7),
+            ai_campaign_limit_snapshot=3,
             created_by_admin=False,
             assigned_by_admin=False,
+            razorpay_subscription_id=None,   # nullable
         )
 
         db.add(trial)
         await db.commit()
 
-    # ==========================================
-    # Set session cookie & redirect
-    # ==========================================
     response = RedirectResponse(
         url=next,
         status_code=status.HTTP_302_FOUND,
