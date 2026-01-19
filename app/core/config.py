@@ -81,6 +81,24 @@ class Settings:
     )
 
     # =================================================
+    # RAZORPAY (🚀 SUBSCRIPTIONS + ORDERS)
+    # =================================================
+    RAZORPAY_KEY_ID: str = os.getenv("RAZORPAY_KEY_ID", "")
+    RAZORPAY_KEY_SECRET: str = os.getenv("RAZORPAY_KEY_SECRET", "")
+    RAZORPAY_WEBHOOK_SECRET: str = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
+
+    # Plans (Already created in Razorpay dashboard)
+    RAZORPAY_SUBSCRIPTION_PLAN_STARTER: str = os.getenv("RAZORPAY_SUBSCRIPTION_PLAN_STARTER", "")
+    RAZORPAY_SUBSCRIPTION_PLAN_PRO: str = os.getenv("RAZORPAY_SUBSCRIPTION_PLAN_PRO", "")
+    RAZORPAY_SUBSCRIPTION_PLAN_AGENCY: str = os.getenv("RAZORPAY_SUBSCRIPTION_PLAN_AGENCY", "")
+
+    # =================================================
+    # BILLING MODE (LOCKED DESIGN)
+    # =================================================
+    BILLING_MODE: str = os.getenv("BILLING_MODE", "subscriptions")  # subscriptions | prepaid
+    BILLING_CURRENCY: str = os.getenv("BILLING_CURRENCY", "INR")
+
+    # =================================================
     # SYSTEM
     # =================================================
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "production")
