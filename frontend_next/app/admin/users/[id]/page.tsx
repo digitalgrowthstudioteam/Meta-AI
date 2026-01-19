@@ -23,7 +23,13 @@ type Subscription = {
   never_expires: boolean;
 };
 
-type Tab = "profile" | "meta" | "campaigns" | "billing" | "ai" | "subscription";
+type Tab =
+  | "profile"
+  | "meta"
+  | "campaigns"
+  | "billing"
+  | "ai"
+  | "subscription";
 
 export default function AdminUserDetailPage() {
   const params = useParams();
@@ -32,7 +38,6 @@ export default function AdminUserDetailPage() {
 
   const [tab, setTab] = useState<Tab>("profile");
   const [loading, setLoading] = useState(true);
-
   const [user, setUser] = useState<AdminUser | null>(null);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [assignOpen, setAssignOpen] = useState(false);
@@ -49,7 +54,9 @@ export default function AdminUserDetailPage() {
   }, [userId]);
 
   const loadSubscriptions = async () => {
-    const res = await apiFetch(`/admin/users/${userId}/subscriptions`, { cache: "no-store" });
+    const res = await apiFetch(`/admin/users/${userId}/subscriptions`, {
+      cache: "no-store",
+    });
     const json = await res.json();
     setSubscriptions(json || []);
   };
@@ -113,7 +120,9 @@ export default function AdminUserDetailPage() {
                     : "—"}
                 </div>
                 <div>Pricing: {s.pricing_mode}</div>
-                {s.custom_price !== null && <div>Custom Price: ₹{s.custom_price}</div>}
+                {s.custom_price !== null && (
+                  <div>Custom Price: ₹{s.custom_price}</div>
+                )}
               </div>
             ))
           )}
@@ -139,14 +148,24 @@ export default function AdminUserDetailPage() {
 function BackButton() {
   const router = useRouter();
   return (
-    <button onClick={() => router.back()} className="text-blue-600 hover:underline text-sm">
+    <button
+      onClick={() => router.back()}
+      className="text-blue-600 hover:underline text-sm"
+    >
       ← Back
     </button>
   );
 }
 
 function TabBar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
-  const tabs: Tab[] = ["profile", "meta", "campaigns", "billing", "ai", "subscription"];
+  const tabs: Tab[] = [
+    "profile",
+    "meta",
+    "campaigns",
+    "billing",
+    "ai",
+    "subscription",
+  ];
   return (
     <div className="flex gap-2 border-b">
       {tabs.map((t) => (
@@ -154,7 +173,9 @@ function TabBar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
           key={t}
           onClick={() => setTab(t)}
           className={`px-3 py-2 text-sm border-b-2 ${
-            tab === t ? "border-blue-600 text-blue-600" : "border-transparent text-gray-500"
+            tab === t
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-gray-500"
           }`}
         >
           {t.toUpperCase()}
@@ -165,7 +186,11 @@ function TabBar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
 }
 
 function Card({ children }: { children: React.ReactNode }) {
-  return <div className="rounded border bg-white p-4 space-y-2 text-sm">{children}</div>;
+  return (
+    <div className="rounded border bg-white p-4 space-y-2 text-sm">
+      {children}
+    </div>
+  );
 }
 
 function Row({ label, value }: { label: string; value: string }) {
@@ -192,8 +217,10 @@ function AssignModal({
   onClose: () => void;
   onAssigned: () => void;
 }) {
-  const [planId, setPlanId] = useState<string>("1");
-  const [pricingMode, setPricingMode] = useState<"standard" | "custom">("standard");
+  const [planId, setPlanId] = useState<string>("2");
+  const [pricingMode, setPricingMode] = useState<"standard" | "custom">(
+    "standard"
+  );
   const [customPrice, setCustomPrice] = useState<string>("0");
   const [months, setMonths] = useState<string>("1");
   const [days, setDays] = useState<string>("0");
@@ -216,12 +243,14 @@ function AssignModal({
         user_id: userId,
         plan_id: planId,
         pricing_mode: pricingMode,
-        custom_price: pricingMode === "custom" ? Number(customPrice) : null,
+        custom_price:
+          pricingMode === "custom" ? Number(customPrice) : null,
         custom_duration_months: Number(months),
         custom_duration_days: Number(days),
         never_expires: neverExp,
       }),
     });
+
     setSaving(false);
     onAssigned();
   };
@@ -282,6 +311,7 @@ function AssignModal({
               onChange={(e) => setMonths(e.target.value)}
             />
           </div>
+
           <div className="flex-1">
             <label className="block mb-1">Days</label>
             <input
@@ -295,7 +325,11 @@ function AssignModal({
         </div>
 
         <div className="flex items-center gap-2">
-          <input type="checkbox" checked={neverExp} onChange={(e) => setNeverExp(e.target.checked)} />
+          <input
+            type="checkbox"
+            checked={neverExp}
+            onChange={(e) => setNeverExp(e.target.checked)}
+          />
           <span>Never Expires</span>
         </div>
 
