@@ -15,6 +15,7 @@ type AdminUser = {
 type SubscriptionItem = {
   id: string;
   plan_id: number;
+  plan_name: string; // <- using plan_name instead of PLAN #
   status: string;
   starts_at: string;
   ends_at: string | null;
@@ -120,7 +121,7 @@ export default function AdminUserDetailPage() {
             historyList.map((s) => (
               <div key={s.id} className="border-b pb-2 mb-2 text-sm">
                 <div className="font-medium">
-                  PLAN #{s.plan_id} — {s.status.toUpperCase()}
+                  {s.plan_name} — {s.status.toUpperCase()}
                 </div>
                 <div>
                   Starts: {new Date(s.starts_at).toLocaleDateString()} | Ends:{" "}
@@ -131,9 +132,7 @@ export default function AdminUserDetailPage() {
                     : "—"}
                 </div>
                 <div>Pricing: {s.pricing_mode}</div>
-                {s.custom_price !== null && (
-                  <div>Custom Price: ₹{s.custom_price}</div>
-                )}
+                {s.custom_price !== null && <div>Custom Price: ₹{s.custom_price}</div>}
               </div>
             ))
           )}
