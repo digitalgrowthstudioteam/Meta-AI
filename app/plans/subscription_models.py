@@ -54,11 +54,44 @@ class Subscription(Base):
         nullable=False,
     )
 
-    # billing cycle: monthly | yearly | trial
+    # billing cycle: monthly | yearly | trial | custom
     billing_cycle: Mapped[str] = mapped_column(
         String,
         nullable=False,
-        doc="monthly | yearly | trial",
+        doc="monthly | yearly | trial | custom",
+    )
+
+    # ENTERPRISE-CUSTOM BILLING
+    pricing_mode: Mapped[str] = mapped_column(
+        String,
+        default="standard",
+        nullable=False,
+        doc="standard | custom",
+    )
+
+    custom_price: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        doc="Custom enterprise price in paise",
+    )
+
+    custom_duration_months: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        doc="Custom billing duration in months",
+    )
+
+    never_expires: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+        doc="If true, ends_at is ignored",
+    )
+
+    admin_notes: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+        doc="Admin internal notes",
     )
 
     # UTC timestamps
