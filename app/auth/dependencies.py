@@ -2,12 +2,15 @@ from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
+from datetime import datetime
 
 from app.core.db_session import get_db
 from app.users.models import User
 from app.admin.models import GlobalSettings
 from app.meta_api.models import MetaAdAccount, UserMetaAdAccount
 from app.auth.sessions import get_active_session
+from app.plans.subscription_models import Subscription
+from app.plans.models import Plan
 
 
 # =================================================
@@ -25,6 +28,50 @@ ADMIN_EMAILS = {
 async def _get_global_settings(db: AsyncSession) -> GlobalSettings | None:
     result = await db.execute(select(GlobalSettings).limit(1))
     return result.scalar_one_or_none()
+
+
+# -------------------------------------------------
+# INTERNAL: LOAD ACTIVE SUBSCRIPTION (AUTO EXPIRE)
+# -------------------------------------------------
+async def _load_active_subscription(db: AsyncSession, user: User) -> dict | None:
+    now = datetime.utcnow()
+
+    stmt = (
+        select(Subscription, Plan)
+        .join(Plan, Plan.id == Subscription.plan_id)
+        .where(Subscription.user_id == user.id)
+        .where(Subscription.status.in_(["active", "trial", "grace"]))
+        .order_by(Subscription.created_at.desc())
+        .limit(1)
+    )
+    res = await db.execute(stmt)
+    row = res.first()
+
+    if not row:
+        return None
+
+    sub, plan = row[0], row[1]
+
+    # Auto-expire if past ends_at and not never_expires
+    if sub.ends_at and not sub.never_expires and sub.ends_at < now:
+        sub.status = "expired"
+        sub.is_active = False
+        await db.commit()
+        return None
+
+    return {
+        "id": str(sub.id),
+        "status": sub.status,
+        "plan_id": sub.plan_id,
+        "plan_name": plan.name,
+        "max_ai_campaigns": plan.max_ai_campaigns,
+        "max_ad_accounts": plan.max_ad_accounts,
+        "manual_allowed": plan.manual_allowed,
+        "auto_allowed": plan.auto_allowed,
+        "starts_at": sub.starts_at,
+        "ends_at": sub.ends_at,
+        "never_expires": sub.never_expires,
+    }
 
 
 # -------------------------------------------------
@@ -104,14 +151,28 @@ async def get_current_user(
                 detail="Impersonated user not found",
             )
 
-        # 🔒 FORCE USER MODE (READ-ONLY)
         target_user.role = "user"
         target_user._is_impersonated = True
         target_user._impersonated_by = user.email
         target_user._impersonation_mode = "read_only"
         target_user._write_blocked = True
 
+        # No subscription enforcement in impersonation mode
+        target_user._subscription = None
         return target_user
+
+    # -------------------------------------------------
+    # SUBSCRIPTION ENFORCEMENT (NON-ADMIN USERS)
+    # -------------------------------------------------
+    sub = await _load_active_subscription(db, user)
+    user._subscription = sub
+
+    if user.role != "admin":
+        if not sub:
+            raise HTTPException(
+                status_code=402,
+                detail="No active subscription",
+            )
 
     return user
 
@@ -136,11 +197,8 @@ async def get_session_context(
     ad_accounts = result.scalars().all()
 
     return {
-        # 🔥 ROOT FLAGS (FRONTEND NEEDS THESE)
         "is_admin": user.role == "admin",
         "admin_view": False,
-
-        # 👤 USER CONTEXT
         "user": {
             "id": str(user.id),
             "email": user.email,
@@ -150,9 +208,8 @@ async def get_session_context(
             "impersonation_mode": getattr(user, "_impersonation_mode", None),
             "impersonated_by": getattr(user, "_impersonated_by", None),
             "write_blocked": getattr(user, "_write_blocked", False),
+            "subscription": user._subscription,
         },
-
-        # 📊 AD ACCOUNTS
         "ad_accounts": [
             {
                 "id": str(acct.id),
@@ -205,7 +262,6 @@ async def forbid_impersonated_writes(
     return user
 
 
-# Backward alias
 require_admin_user = require_admin
 
 
