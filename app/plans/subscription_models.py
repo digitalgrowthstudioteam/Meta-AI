@@ -150,7 +150,12 @@ class Subscription(Base):
             postgresql_where=(status.in_(["trial", "active", "grace"])),
         ),
     )
-
+    
+    custom_duration_days: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+        doc="Custom duration in days (optional, adds on top of months)",
+    )
 
 class SubscriptionAddon(Base):
     __tablename__ = "subscription_addons"
