@@ -1,8 +1,9 @@
 # ================================
-# app/billing/service.py (UNLIMITED SUBSCRIPTIONS)
+# app/billing/service.py (RECURRING TOTAL_COUNT=1199, OPTION-2)
 # ================================
 
 import razorpay
+import time
 from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -99,11 +100,14 @@ class BillingService:
         if not plan.razorpay_monthly_plan_id:
             raise RuntimeError("Missing Razorpay monthly plan mapping")
 
+        start_at = int(time.time()) + 90  # start after user authorization
+
         rp_sub = self.client.subscription.create(
             {
                 "plan_id": plan.razorpay_monthly_plan_id,
+                "total_count": 1199,
                 "customer_notify": 1,
-                "total_count": 1199,  # explicitly infinite billing
+                "start_at": start_at,
                 "notes": {
                     "user_id": str(user.id),
                     "plan_id": str(plan.id),
@@ -119,7 +123,7 @@ class BillingService:
             status="pending",
             billing_cycle="monthly",
             razorpay_subscription_id=razorpay_subscription_id,
-            starts_at=datetime.utcnow(),
+            starts_at=datetime.utcfromtimestamp(start_at),
             ends_at=None,
             is_active=False,
             is_trial=False,
