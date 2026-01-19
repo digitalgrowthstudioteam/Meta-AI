@@ -8,43 +8,37 @@
   <h2>Test LIVE Subscription</h2>
   <button id="btn">Start Subscription</button>
 
-  <script>
-    document.getElementById("btn").onclick = async function() {
-      const resp = await fetch("https://meta-ai.digitalgrowthstudio.in/api/billing/subscription/recurring?plan_id=2", {
-        method: "POST",
-        credentials: "include", // important for cookie auth
-      });
+<script>
+document.getElementById("btn").onclick = async () => {
 
-      if (!resp.ok) {
-        alert("API error: " + resp.status);
-        return;
-      }
+  const resp = await fetch("https://meta-ai.digitalgrowthstudio.in/api/billing/subscription/recurring?plan_id=2", {
+    method: "POST",
+    credentials: "include", // <--- sends session cookie
+  });
 
-      const data = await resp.json();
-      console.log("API Response:", data);
+  console.log("STATUS:", resp.status);
 
-      if (!data.razorpay_subscription_id) {
-        alert("Missing razorpay_subscription_id");
-        return;
-      }
+  if (!resp.ok) {
+    const tx = await resp.text();
+    alert("Error " + resp.status + ": " + tx);
+    return;
+  }
 
-      const options = {
-        key: data.key,
-        subscription_id: data.razorpay_subscription_id,
-        name: "Meta AI",
-        description: data.plan_name + " Plan",
-        handler: function (response){
-          console.log("Success:", response);
-          alert("Payment Done! Wait for webhook to process backend.");
-        },
-        theme: {
-          color: "#2B6CB0"
-        }
-      };
+  const data = await resp.json();
+  console.log(data);
 
-      const rzp = new Razorpay(options);
-      rzp.open();
-    };
-  </script>
+  const options = {
+    key: data.key,
+    subscription_id: data.razorpay_subscription_id,
+    name: "Meta AI",
+    description: data.plan_name,
+    handler: function (response) {
+      alert("SUCCESS: " + JSON.stringify(response));
+    }
+  };
+
+  new Razorpay(options).open();
+};
+</script>
 </body>
 </html>
