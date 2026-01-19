@@ -1,13 +1,5 @@
-from datetime import datetime, date, timedelta
-from sqlalchemy import (
-    String,
-    DateTime,
-    Boolean,
-    ForeignKey,
-    Date,
-    Integer,
-    Index,
-)
+from datetime import datetime, date
+from sqlalchemy import String, DateTime, Boolean, ForeignKey, Date, Integer, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
@@ -18,11 +10,13 @@ from app.plans.models import Plan
 
 class Subscription(Base):
     """
-    Subscription lifecycle (UTC timestamps stored):
+    Subscription lifecycle:
 
-    trial  → active → grace → expired
+    trial → active → grace → expired → cancelled
 
-    Grace period is applied only after paid expiry (3 days).
+    Billing cycles:
+      - monthly (Razorpay recurring)
+      - yearly (Prepaid order)
     """
 
     __tablename__ = "subscriptions"
@@ -40,7 +34,6 @@ class Subscription(Base):
         index=True,
     )
 
-    # Links to Plan
     plan_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("plans.id", ondelete="RESTRICT"),
@@ -48,7 +41,6 @@ class Subscription(Base):
         index=True,
     )
 
-    # Links to Payment (nullable for trial)
     payment_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("payments.id", ondelete="SET NULL"),
@@ -56,52 +48,58 @@ class Subscription(Base):
         index=True,
     )
 
-    # Status: trial | active | grace | expired
+    # trial | active | grace | expired | cancelled
     status: Mapped[str] = mapped_column(
         String,
         nullable=False,
     )
 
-    # UTC timestamps (converted to IST for display)
+    # billing cycle: monthly | yearly | trial
+    billing_cycle: Mapped[str] = mapped_column(
+        String,
+        nullable=False,
+        doc="monthly | yearly | trial",
+    )
+
+    # UTC timestamps
     starts_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     ends_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
-    # Trial fields (UTC aligned)
+    # TRIAL
     is_trial: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    trial_start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
-    trial_end_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    trial_start: Mapped[date | None] = mapped_column(Date, nullable=True)
+    trial_end: Mapped[date | None] = mapped_column(Date, nullable=True)
 
-    # Grace period (UTC)
+    # Grace
     grace_ends_at: Mapped[datetime | None] = mapped_column(
         DateTime,
         nullable=True,
-        doc="After ends_at + grace period, subscription moves to expired",
     )
 
-    # Snapshot of plan limits at purchase time
+    # Cancel
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # Razorpay recurring link
+    razorpay_subscription_id: Mapped[str | None] = mapped_column(
+        String,
+        nullable=True,
+        index=True,
+        doc="Set only for monthly recurring",
+    )
+
+    # snapshot limits
     ai_campaign_limit_snapshot: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
         default=0,
     )
 
-    # Convenience flags
-    is_active: Mapped[bool] = mapped_column(
-        Boolean,
-        default=True,
-        nullable=False,
-    )
-
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_by_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     assigned_by_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        default=datetime.utcnow,
-        nullable=False,
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
-    # Relationship
     plan = relationship(Plan, lazy="selectin")
 
     addons = relationship(
@@ -122,11 +120,6 @@ class Subscription(Base):
 
 
 class SubscriptionAddon(Base):
-    """
-    Add-on slots for agency accounts.
-    Example: extra AI campaigns = +5 Slots
-    """
-
     __tablename__ = "subscription_addons"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -149,19 +142,15 @@ class SubscriptionAddon(Base):
         index=True,
     )
 
-    # Add-ons always represent extra AI slots
     extra_ai_campaigns: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
-    # Consumption audit (one-time lock)
     consumed_by_campaign_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("campaigns.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
-        doc="Campaign that consumed this slot (immutable once set)",
     )
 
-    # UTC timestamps
     purchased_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
 
@@ -175,6 +164,3 @@ class SubscriptionAddon(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     subscription = relationship(Subscription, back_populates="addons", lazy="selectin")
-
-    def compute_default_expiry(self) -> datetime:
-        return self.purchased_at + timedelta(days=30)
