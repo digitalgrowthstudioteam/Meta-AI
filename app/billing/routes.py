@@ -1,3 +1,7 @@
+# ================================
+# app/billing/routes.py
+# ================================
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,7 +25,7 @@ router = APIRouter(prefix="/billing", tags=["Billing"])
 
 
 # =====================================================
-# INTERNAL — LOAD ACTIVE PRICING CONFIG
+# INTERNAL — ACTIVE PRICING
 # =====================================================
 async def _get_active_pricing(db: AsyncSession) -> AdminPricingConfig:
     config = await db.scalar(
@@ -35,16 +39,15 @@ async def _get_active_pricing(db: AsyncSession) -> AdminPricingConfig:
 
 
 # =====================================================
-# PHASE-1: CREATE RAZORPAY SUBSCRIPTION (MONTHLY)
+# RECURRING MONTHLY SUBSCRIPTION (NON-ENTERPRISE)
 # =====================================================
-@router.post("/razorpay/subscription/create")
-async def create_razorpay_subscription(
+@router.post("/subscription/monthly/recurring")
+async def create_recurring_subscription(
     *,
-    plan_id: int = Query(..., description="Plan ID"),
+    plan_id: int = Query(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
-    # Check plan exists
     plan = await db.scalar(
         select(Plan).where(
             Plan.id == plan_id,
@@ -54,76 +57,152 @@ async def create_razorpay_subscription(
     if not plan:
         raise HTTPException(400, "Invalid or inactive plan")
 
-    # Check auto billing eligibility
-    if not plan.auto_allowed:
-        raise HTTPException(400, "Plan does not support recurring billing")
+    plan_key = plan.name.lower()
+    if plan_key == "free":
+        raise HTTPException(400, "FREE plan cannot be purchased")
 
-    # Check Razorpay plan mapping
+    if plan_key == "enterprise":
+        raise HTTPException(400, "Enterprise is manual only")
+
+    if not plan.auto_allowed:
+        raise HTTPException(400, "Recurring billing disabled for this plan")
+
     if not plan.razorpay_monthly_plan_id:
-        raise HTTPException(400, "Missing Razorpay monthly plan mapping for this plan")
+        raise HTTPException(400, "Missing Razorpay mapping for recurring")
 
     service = BillingService()
 
-    # Create subscription via service
-    try:
-        payment = await service.create_subscription_recurring(
-            db=db,
-            user=current_user,
-            plan_id=plan.id,
-        )
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    sub = await service.create_subscription_recurring(
+        db=db,
+        user=current_user,
+        plan_id=plan.id,
+    )
 
     return {
-        "payment_id": str(payment.id),
-        "razorpay_subscription_id": payment.razorpay_subscription_id,
+        "subscription_id": str(sub.id),
+        "razorpay_subscription_id": sub.razorpay_subscription_id,
         "plan_id": plan.id,
         "plan_name": plan.name,
-        "billing_cycle": payment.billing_cycle,
+        "billing_cycle": sub.billing_cycle,
         "key": service.public_key,
     }
 
 
 # =====================================================
-# CREATE RAZORPAY ORDER (ONE-TIME)
+# MANUAL MONTHLY SUBSCRIPTION (LOAD PRICE FROM ADMIN)
 # =====================================================
-@router.post("/razorpay/order")
-async def create_razorpay_order(
+@router.post("/subscription/monthly/manual")
+async def create_manual_monthly_subscription(
     *,
-    amount: int = Query(..., gt=0, description="Amount in paise"),
-    payment_for: str = Query(..., min_length=3),
-    related_reference_id: Optional[int] = None,
+    plan_id: int = Query(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
-    allowed_types = {"subscription", "addon", "manual_campaign"}
-    if payment_for not in allowed_types:
-        raise HTTPException(status_code=400, detail="Invalid payment_for type")
+    plan = await db.scalar(
+        select(Plan).where(
+            Plan.id == plan_id,
+            Plan.is_active.is_(True),
+        )
+    )
+    if not plan:
+        raise HTTPException(400, "Invalid or inactive plan")
+
+    plan_key = plan.name.lower()
+    if plan_key == "free":
+        raise HTTPException(400, "FREE plan cannot be purchased")
+
+    pricing = await _get_active_pricing(db)
+
+    if plan_key not in pricing.plan_pricing:
+        raise HTTPException(400, "Pricing not configured in admin")
+
+    plan_price_config = pricing.plan_pricing[plan_key]
+    if "monthly" not in plan_price_config:
+        raise HTTPException(400, "Monthly price not configured for this plan")
+
+    amount = int(plan_price_config["monthly"])  # paise
 
     service = BillingService()
-
     payment = await service.create_order(
         db=db,
         user=current_user,
         amount=amount,
-        payment_for=payment_for,
-        related_reference_id=related_reference_id,
+        payment_for="subscription_monthly",
+        related_reference_id=plan.id,
     )
 
     return {
         "payment_id": str(payment.id),
         "razorpay_order_id": payment.razorpay_order_id,
-        "amount": payment.amount,
-        "currency": payment.currency,
+        "plan_id": plan.id,
+        "plan_name": plan.name,
+        "billing_cycle": "monthly",
+        "amount": amount,
+        "currency": pricing.currency,
         "key": service.public_key,
     }
 
 
 # =====================================================
-# VERIFY PAYMENT (CLIENT CALLBACK)
+# MANUAL YEARLY SUBSCRIPTION (LOAD PRICE FROM ADMIN)
+# =====================================================
+@router.post("/subscription/yearly/manual")
+async def create_manual_yearly_subscription(
+    *,
+    plan_id: int = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    plan = await db.scalar(
+        select(Plan).where(
+            Plan.id == plan_id,
+            Plan.is_active.is_(True),
+        )
+    )
+    if not plan:
+        raise HTTPException(400, "Invalid or inactive plan")
+
+    plan_key = plan.name.lower()
+    if plan_key == "free":
+        raise HTTPException(400, "FREE plan cannot be purchased")
+
+    pricing = await _get_active_pricing(db)
+
+    if plan_key not in pricing.plan_pricing:
+        raise HTTPException(400, "Pricing not configured in admin")
+
+    plan_price_config = pricing.plan_pricing[plan_key]
+    if "yearly" not in plan_price_config:
+        raise HTTPException(400, "Yearly price not configured for this plan")
+
+    amount = int(plan_price_config["yearly"])  # paise
+
+    service = BillingService()
+    payment = await service.create_order(
+        db=db,
+        user=current_user,
+        amount=amount,
+        payment_for="subscription_yearly",
+        related_reference_id=plan.id,
+    )
+
+    return {
+        "payment_id": str(payment.id),
+        "razorpay_order_id": payment.razorpay_order_id,
+        "plan_id": plan.id,
+        "plan_name": plan.name,
+        "billing_cycle": "yearly",
+        "amount": amount,
+        "currency": pricing.currency,
+        "key": service.public_key,
+    }
+
+
+# =====================================================
+# VERIFY PAYMENT (MANUAL)
 # =====================================================
 @router.post("/razorpay/verify")
-async def verify_razorpay_payment(
+async def verify_manual_payment(
     *,
     razorpay_order_id: str,
     razorpay_payment_id: str,
@@ -132,22 +211,17 @@ async def verify_razorpay_payment(
     current_user: User = Depends(require_user),
 ):
     service = BillingService()
-
     payment = await service.verify_payment(
         db=db,
         razorpay_order_id=razorpay_order_id,
         razorpay_payment_id=razorpay_payment_id,
         razorpay_signature=razorpay_signature,
     )
-
-    return {
-        "status": payment.status,
-        "paid_at": payment.paid_at.isoformat() if payment.paid_at else None,
-    }
+    return {"status": payment.status}
 
 
 # =====================================================
-# PURCHASE CAMPAIGN SLOTS (PRICING-DRIVEN)
+# CAMPAIGN SLOT PURCHASE (UNCHANGED)
 # =====================================================
 @router.post("/campaign-slots/buy")
 async def buy_campaign_slots(
@@ -160,20 +234,12 @@ async def buy_campaign_slots(
 
     packs = pricing.slot_packs.values()
     selected = next(
-        (
-            p for p in packs
-            if quantity >= p["min_qty"]
-            and (
-                "max_qty" not in p
-                or p["max_qty"] is None
-                or quantity <= p["max_qty"]
-            )
-        ),
+        (p for p in packs if quantity >= p["min_qty"]
+         and ("max_qty" not in p or p["max_qty"] is None or quantity <= p["max_qty"])),
         None,
     )
-
     if not selected:
-        raise HTTPException(400, "No pricing pack matches quantity")
+        raise HTTPException(400, "Invalid slot quantity")
 
     total_amount = selected["price"] * quantity
 
@@ -189,14 +255,14 @@ async def buy_campaign_slots(
     return {
         "payment_id": str(payment.id),
         "razorpay_order_id": payment.razorpay_order_id,
-        "amount": payment.amount,
-        "currency": payment.currency,
+        "amount": total_amount,
+        "currency": pricing.currency,
         "valid_days": selected["valid_days"],
     }
 
 
 # =====================================================
-# FINALIZE SLOT PURCHASE (POST-PAYMENT HOOK)
+# FINALIZE SLOTS (POST PAYMENT)
 # =====================================================
 @router.post("/campaign-slots/finalize")
 async def finalize_campaign_slots(
@@ -210,20 +276,12 @@ async def finalize_campaign_slots(
 
     packs = pricing.slot_packs.values()
     selected = next(
-        (
-            p for p in packs
-            if quantity >= p["min_qty"]
-            and (
-                "max_qty" not in p
-                or p["max_qty"] is None
-                or quantity <= p["max_qty"]
-            )
-        ),
+        (p for p in packs if quantity >= p["min_qty"]
+         and ("max_qty" not in p or p["max_qty"] is None or quantity <= p["max_qty"])),
         None,
     )
-
     if not selected:
-        raise HTTPException(400, "Invalid pricing pack")
+        raise HTTPException(400, "Invalid pack")
 
     now = datetime.utcnow()
     expires_at = now + timedelta(days=selected["valid_days"])
@@ -236,19 +294,14 @@ async def finalize_campaign_slots(
         expires_at=expires_at,
         payment_id=payment_id,
     )
-
     db.add(addon)
     await db.commit()
 
-    return {
-        "status": "slots_added",
-        "quantity": quantity,
-        "expires_at": expires_at.isoformat(),
-    }
+    return {"status": "slots_added", "expires_at": expires_at.isoformat()}
 
 
 # =====================================================
-# LIST USER INVOICES
+# INVOICES
 # =====================================================
 @router.get("/invoices")
 async def list_invoices(
@@ -260,9 +313,7 @@ async def list_invoices(
         .where(Invoice.user_id == current_user.id)
         .order_by(Invoice.created_at.desc())
     )
-
     invoices = result.scalars().all()
-
     return [
         {
             "id": str(inv.id),
@@ -294,18 +345,13 @@ async def download_invoice(
             Invoice.user_id == current_user.id,
         )
     )
-
     if not invoice:
-        raise HTTPException(status_code=404, detail="Invoice not found")
+        raise HTTPException(404, "Invoice not found")
 
     pdf_bytes = InvoicePDFService.generate_pdf(invoice)
 
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={
-            "Content-Disposition": (
-                f'attachment; filename="{invoice.invoice_number}.pdf"'
-            )
-        },
+        headers={"Content-Disposition": f'attachment; filename="{invoice.invoice_number}.pdf"'},
     )
