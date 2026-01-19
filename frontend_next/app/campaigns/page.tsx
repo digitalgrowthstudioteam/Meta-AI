@@ -172,17 +172,16 @@ export default function CampaignsPage() {
   };
 
   /* -----------------------------------
-   * TOGGLE AI
+   * TOGGLE AI (with enforcement errors)
    * ----------------------------------- */
   const toggleAI = async (campaign: Campaign) => {
     if (togglingId) return;
     const nextValue = !campaign.ai_active;
     setTogglingId(campaign.id);
 
+    // optimistic UI
     setCampaigns((prev) =>
-      prev.map((c) =>
-        c.id === campaign.id ? { ...c, ai_active: nextValue } : c
-      )
+      prev.map((c) => (c.id === campaign.id ? { ...c, ai_active: nextValue } : c))
     );
 
     try {
@@ -193,22 +192,36 @@ export default function CampaignsPage() {
       });
 
       if (!res.ok) {
+        // revert UI
         setCampaigns((prev) =>
           prev.map((c) =>
             c.id === campaign.id ? { ...c, ai_active: !nextValue } : c
           )
         );
-        toast.error("Action failed");
+
+        let msg = "Action failed";
+
+        try {
+          const body = await res.json();
+          if (typeof body === "string") msg = body;
+          else if (body.detail?.message) msg = body.detail.message;
+          else if (body.detail) msg = body.detail;
+          else if (body.message) msg = body.message;
+        } catch {}
+
+        toast.error(msg);
         return;
       }
 
       toast.success(nextValue ? "AI activated" : "AI deactivated");
     } catch {
+      // revert UI on network error
       setCampaigns((prev) =>
         prev.map((c) =>
           c.id === campaign.id ? { ...c, ai_active: !nextValue } : c
         )
       );
+      toast.error("Network error");
     } finally {
       setTogglingId(null);
     }
