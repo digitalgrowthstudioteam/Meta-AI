@@ -1,5 +1,5 @@
 # ================================
-# app/billing/service.py (UPDATED)
+# app/billing/service.py (UNLIMITED SUBSCRIPTIONS)
 # ================================
 
 import razorpay
@@ -27,9 +27,6 @@ class BillingService:
         )
         self.public_key = settings.RAZORPAY_KEY_ID
 
-    # ------------------------------------------------------
-    # INTERNAL — LOAD ACTIVE PRICING CONFIG
-    # ------------------------------------------------------
     async def _get_active_pricing(self, db: AsyncSession) -> AdminPricingConfig:
         config = await db.scalar(
             select(AdminPricingConfig)
@@ -40,29 +37,20 @@ class BillingService:
             raise RuntimeError("No active pricing configuration")
         return config
 
-    # ------------------------------------------------------
-    # INTERNAL — RESOLVE PRICE FROM CONFIG
-    # ------------------------------------------------------
     async def _resolve_plan_price(
         self,
         *,
         db: AsyncSession,
         plan: Plan,
-        billing_cycle: str,  # monthly | yearly
+        billing_cycle: str,
     ) -> int:
-        """
-        Pricing rules:
-        - FREE: no price, not payable
-        - ENTERPRISE: manual only
-        - all others read from AdminPricingConfig.plan_pricing
-        """
         plan_key = plan.name.lower()
 
         if plan_key == "free":
             raise RuntimeError("FREE plan cannot be purchased")
 
         if plan_key == "enterprise":
-            raise RuntimeError("Enterprise pricing is manual only (no auto purchase)")
+            raise RuntimeError("Enterprise pricing is manual only")
 
         pricing = await self._get_active_pricing(db)
 
@@ -73,19 +61,16 @@ class BillingService:
 
         if billing_cycle == "monthly":
             if "monthly_price" not in p:
-                raise RuntimeError("Monthly price missing for this plan")
+                raise RuntimeError("Monthly price missing for plan")
             return p["monthly_price"]
 
         if billing_cycle == "yearly":
             if "yearly_price" not in p:
-                raise RuntimeError("Yearly price missing for this plan")
+                raise RuntimeError("Yearly price missing for plan")
             return p["yearly_price"]
 
-        raise RuntimeError("Invalid billing_cycle")
+        raise RuntimeError("Invalid billing cycle")
 
-    # ------------------------------------------------------
-    # RECURRING MONTHLY SUBSCRIPTION (STARTER/PRO/AGENCY)
-    # ------------------------------------------------------
     async def create_subscription_recurring(
         self,
         *,
@@ -114,13 +99,14 @@ class BillingService:
         if not plan.razorpay_monthly_plan_id:
             raise RuntimeError("Missing Razorpay monthly plan mapping")
 
-        # Create Razorpay subscription
         rp_sub = self.client.subscription.create(
             {
                 "plan_id": plan.razorpay_monthly_plan_id,
                 "customer_notify": 1,
-                "quantity": 1,
-                "total_count": 0,
+                "notes": {
+                    "user_id": str(user.id),
+                    "plan_id": str(plan.id),
+                }
             }
         )
 
@@ -144,20 +130,15 @@ class BillingService:
         db.add(sub)
         await db.commit()
         await db.refresh(sub)
-
         return sub
 
-    # ------------------------------------------------------
-    # MANUAL ORDER — MONTHLY / YEARLY / ADDONS
-    # (BACKEND COMPUTES PRICE)
-    # ------------------------------------------------------
     async def create_order_manual_subscription(
         self,
         *,
         db: AsyncSession,
         user: User,
         plan_id: int,
-        billing_cycle: str,  # monthly | yearly
+        billing_cycle: str,
     ) -> Payment:
 
         plan = await db.scalar(
@@ -213,9 +194,6 @@ class BillingService:
         await db.refresh(payment)
         return payment
 
-    # ------------------------------------------------------
-    # PAYMENT VERIFY — RAZORPAY ORDER
-    # ------------------------------------------------------
     async def verify_payment(
         self,
         *,
@@ -254,9 +232,6 @@ class BillingService:
 
         return payment
 
-    # ------------------------------------------------------
-    # POST PAYMENT — ACTIVATE MANUAL MONTHLY/YEARLY
-    # ------------------------------------------------------
     async def _post_payment_subscription_logic(
         self,
         *,
