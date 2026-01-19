@@ -38,7 +38,7 @@ type Invoice = {
 
 type AIAction = any;
 
-type Tab = "profile" | "meta" | "campaigns" | "billing" | "ai";
+type Tab = "profile" | "meta" | "campaigns" | "billing" | "ai" | "subscription";
 
 export default function AdminUserDetailPage() {
   const params = useParams();
@@ -111,6 +111,7 @@ export default function AdminUserDetailPage() {
         <TabButton tab="campaigns" current={tab} setTab={setTab} />
         <TabButton tab="billing" current={tab} setTab={setTab} />
         <TabButton tab="ai" current={tab} setTab={setTab} />
+        <TabButton tab="subscription" current={tab} setTab={setTab} />
       </div>
 
       {tab === "profile" && (
