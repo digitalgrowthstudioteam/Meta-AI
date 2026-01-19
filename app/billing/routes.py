@@ -1,5 +1,5 @@
 # ================================
-# app/billing/routes.py (UPDATED)
+# app/billing/routes.py (UPDATED WITH ALIASES)
 # ================================
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -88,6 +88,37 @@ async def create_recurring_subscription(
 
 
 # =====================================================
+# 🔁 ALIASES FOR BACKWARD COMPATIBILITY
+# =====================================================
+@router.post("/razorpay/subscription/create")
+async def alias_subscription_create(
+    *,
+    plan_id: int = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    return await create_recurring_subscription(
+        plan_id=plan_id,
+        db=db,
+        current_user=current_user,
+    )
+
+
+@router.post("/razorpay/subscriptions/create")
+async def alias_subscriptions_create(
+    *,
+    plan_id: int = Query(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    return await create_recurring_subscription(
+        plan_id=plan_id,
+        db=db,
+        current_user=current_user,
+    )
+
+
+# =====================================================
 # MANUAL MONTHLY/YEARLY SUBSCRIPTION
 # =====================================================
 @router.post("/subscription/manual")
@@ -111,7 +142,6 @@ async def create_manual_subscription(
     if plan_key == "free":
         raise HTTPException(400, "FREE plan cannot be purchased")
 
-    # Enterprise is allowed here, just not recurring
     service = BillingService()
 
     payment = await service.create_order_manual_subscription(
@@ -289,5 +319,5 @@ async def download_invoice(
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename=\"{invoice.invoice_number}.pdf\"'},
+        headers={"Content-Disposition": f'attachment; filename="{invoice.invoice_number}.pdf"'},
     )
