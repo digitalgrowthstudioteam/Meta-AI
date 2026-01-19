@@ -78,10 +78,10 @@ async def verify_login(
 
         trial = Subscription(
             user_id=user.id,
-            plan_id=0,               # trial pseudo-plan
+            plan_id=1,               # FREE plan as trial base
             payment_id=None,
             status="trial",
-            billing_cycle="trial",   # REQUIRED field
+            billing_cycle="trial",
             starts_at=trial_start,
             ends_at=trial_end,
             is_trial=True,
@@ -91,7 +91,7 @@ async def verify_login(
             ai_campaign_limit_snapshot=3,
             created_by_admin=False,
             assigned_by_admin=False,
-            razorpay_subscription_id=None,   # nullable
+            razorpay_subscription_id=None,
         )
 
         db.add(trial)
