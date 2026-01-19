@@ -13,6 +13,7 @@ from app.billing.service import BillingService
 from app.billing.invoice_models import Invoice
 from app.billing.invoice_service import InvoicePDFService
 from app.admin.models_pricing import AdminPricingConfig
+from app.plans.models import Plan
 from app.plans.subscription_models import SubscriptionAddon
 
 
@@ -34,7 +35,7 @@ async def _get_active_pricing(db: AsyncSession) -> AdminPricingConfig:
 
 
 # =====================================================
-# PHASE-1: CREATE RECURRING SUBSCRIPTION (MONTHLY)
+# PHASE-1: CREATE RAZORPAY SUBSCRIPTION (MONTHLY)
 # =====================================================
 @router.post("/razorpay/subscription/create")
 async def create_razorpay_subscription(
@@ -43,26 +44,48 @@ async def create_razorpay_subscription(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
+    # Check plan exists
+    plan = await db.scalar(
+        select(Plan).where(
+            Plan.id == plan_id,
+            Plan.is_active.is_(True)
+        )
+    )
+    if not plan:
+        raise HTTPException(400, "Invalid or inactive plan")
+
+    # Check auto billing eligibility
+    if not plan.auto_allowed:
+        raise HTTPException(400, "Plan does not support recurring billing")
+
+    # Check Razorpay plan mapping
+    if not plan.razorpay_monthly_plan_id:
+        raise HTTPException(400, "Missing Razorpay monthly plan mapping for this plan")
+
     service = BillingService()
 
+    # Create subscription via service
     try:
-        sub = await service.create_subscription_recurring(
+        payment = await service.create_subscription_recurring(
             db=db,
             user=current_user,
-            plan_id=plan_id,
+            plan_id=plan.id,
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
     return {
-        "subscription_id": str(sub.id),
-        "razorpay_subscription_id": sub.razorpay_subscription_id,
+        "payment_id": str(payment.id),
+        "razorpay_subscription_id": payment.razorpay_subscription_id,
+        "plan_id": plan.id,
+        "plan_name": plan.name,
+        "billing_cycle": payment.billing_cycle,
         "key": service.public_key,
     }
 
 
 # =====================================================
-# CREATE RAZORPAY ORDER
+# CREATE RAZORPAY ORDER (ONE-TIME)
 # =====================================================
 @router.post("/razorpay/order")
 async def create_razorpay_order(
@@ -73,11 +96,6 @@ async def create_razorpay_order(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
-    """
-    Creates Razorpay order.
-    Idempotent.
-    """
-
     allowed_types = {"subscription", "addon", "manual_campaign"}
     if payment_for not in allowed_types:
         raise HTTPException(status_code=400, detail="Invalid payment_for type")
@@ -141,11 +159,9 @@ async def buy_campaign_slots(
     pricing = await _get_active_pricing(db)
 
     packs = pricing.slot_packs.values()
-
     selected = next(
         (
-            p
-            for p in packs
+            p for p in packs
             if quantity >= p["min_qty"]
             and (
                 "max_qty" not in p
@@ -195,8 +211,7 @@ async def finalize_campaign_slots(
     packs = pricing.slot_packs.values()
     selected = next(
         (
-            p
-            for p in packs
+            p for p in packs
             if quantity >= p["min_qty"]
             and (
                 "max_qty" not in p
