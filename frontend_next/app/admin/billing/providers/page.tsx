@@ -24,7 +24,7 @@ export default function BillingProvidersPage() {
 
   const load = async () => {
     setLoading(true);
-    const r = await fetch("/api/admin/billing/providers/config");
+    const r = await fetch("/admin/billing/providers/config");
     const data = await r.json();
     setRows(data);
     setLoading(false);
@@ -42,7 +42,7 @@ export default function BillingProvidersPage() {
       return;
     }
 
-    await fetch("/api/admin/billing/providers/config", {
+    await fetch("/admin/billing/providers/config", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
