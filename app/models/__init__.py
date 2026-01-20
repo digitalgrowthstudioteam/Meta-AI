@@ -4,9 +4,10 @@
 # 1. Global Configuration (No dependencies)
 from app.admin.models import GlobalSettings
 
-# 2. Base dependencies (Payment, Invoice)
+# 2. Base dependencies (Payment, Invoice, Billing Providers)
 from app.billing.payment_models import Payment
 from app.billing.invoice_models import Invoice
+from app.billing.provider_models import BillingProvider  # <-- ADDED
 
 # 3. Plans and Subscriptions (depend on Payment)
 from app.plans.models import Plan
