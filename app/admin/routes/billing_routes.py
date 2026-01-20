@@ -428,3 +428,53 @@ async def upsert_billing_provider_config(
 
     await db.commit()
     return {"status": "ok"}
+
+from sqlalchemy import select, update
+
+# =========================
+# BILLING PROVIDER CONFIG
+# =========================
+@router.get("/providers/config")
+async def get_billing_providers_config(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    assert_admin_permission(admin_user=current_user, permission="billing:read")
+
+    result = await db.execute(select(AdminAuditLog).where(AdminAuditLog.key == "billing_providers"))
+    row = result.scalar_one_or_none()
+
+    return row.value if row else {}
+
+
+@router.post("/providers/config")
+async def save_billing_providers_config(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    assert_admin_permission(admin_user=current_user, permission="billing:write")
+
+    existing = await db.execute(select(AdminAuditLog).where(AdminAuditLog.key == "billing_providers"))
+    row = existing.scalar_one_or_none()
+
+    if row:
+        await db.execute(
+            update(AdminAuditLog)
+            .where(AdminAuditLog.key == "billing_providers")
+            .values(value=payload, updated_at=datetime.utcnow())
+        )
+    else:
+        new_entry = AdminAuditLog(
+            id=uuid4(),
+            key="billing_providers",
+            value=payload,
+            created_at=datetime.utcnow(),
+        )
+        db.add(new_entry)
+
+    await db.commit()
+    return {"status": "saved"}
+
