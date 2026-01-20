@@ -4,7 +4,7 @@ export async function POST(req: NextRequest) {
   const cookie = req.headers.get("cookie") || "";
   const body = await req.json();
 
-  const r = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/billing/providers/test`, {
+  const r = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/billing/config/test`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
