@@ -340,3 +340,93 @@ async def admin_assign_subscription(
     await db.commit()
 
     return {"status": "assigned", "subscription_id": str(sub.id)}
+# ===============================
+# BILLING PROVIDER CONFIG
+# ===============================
+from app.billing.provider_models import BillingProvider
+from app.core.crypto import CryptoService
+
+
+@router.get("/providers/config")
+async def get_billing_providers_config(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    assert_admin_permission(admin_user=current_user, permission="billing:read")
+
+    q = select(BillingProvider).order_by(BillingProvider.created_at.desc())
+    result = await db.execute(q)
+    rows = result.scalars().all()
+
+    return [
+        {
+            "id": str(r.id),
+            "provider": r.provider,
+            "mode": r.mode,
+            "key_id": r.key_id,
+            "has_secret": bool(r.key_secret_encrypted),
+            "active": r.active,
+            "created_at": r.created_at.isoformat(),
+            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+        }
+        for r in rows
+    ]
+
+
+@router.post("/providers/config")
+async def upsert_billing_provider_config(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    assert_admin_permission(admin_user=current_user, permission="billing:write")
+
+    provider = payload.get("provider", "razorpay")
+    mode = payload.get("mode")
+    key_id = payload.get("key_id")
+    key_secret = payload.get("key_secret")  # plaintext
+    webhook_secret = payload.get("webhook_secret")
+
+    if mode not in ("TEST", "LIVE"):
+        raise HTTPException(400, detail="mode must be TEST or LIVE")
+
+    if not key_id or not key_secret:
+        raise HTTPException(400, detail="key_id and key_secret required")
+
+    # lookup existing
+    existing = await db.scalar(
+        select(BillingProvider)
+        .where(BillingProvider.provider == provider)
+        .where(BillingProvider.mode == mode)
+        .limit(1)
+    )
+
+    encrypted_secret = CryptoService.encrypt_secret(key_secret)
+    encrypted_webhook = (
+        CryptoService.encrypt_secret(webhook_secret)
+        if webhook_secret else None
+    )
+
+    if existing:
+        existing.key_id = key_id
+        existing.key_secret_encrypted = encrypted_secret
+        existing.webhook_secret_encrypted = encrypted_webhook
+        existing.active = True
+        existing.updated_at = datetime.utcnow()
+    else:
+        row = BillingProvider(
+            provider=provider,
+            mode=mode,
+            key_id=key_id,
+            key_secret_encrypted=encrypted_secret,
+            webhook_secret_encrypted=encrypted_webhook,
+            active=True,
+        )
+        db.add(row)
+
+    await db.commit()
+    return {"status": "ok"}
+
+
