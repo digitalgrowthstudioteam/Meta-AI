@@ -16,15 +16,12 @@ from app.admin.models import AdminAuditLog
 
 router = APIRouter(prefix="/admin/billing", tags=["Admin Billing"])
 
-
 ALLOWED_ADMIN_ROLES = {"admin", "super_admin", "support_admin", "billing_admin"}
-
 
 def require_admin(user: User):
     if user.role not in ALLOWED_ADMIN_ROLES:
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
-
 
 # ===============================
 # USER SUBSCRIPTION DETAIL
@@ -111,7 +108,6 @@ async def get_user_subscription_detail(
         ],
     }
 
-
 # =========================
 # INVOICES
 # =========================
@@ -143,7 +139,6 @@ async def list_admin_invoices(
         for inv in invoices
     ]
 
-
 # =========================
 # RAZORPAY LOGS
 # =========================
@@ -172,7 +167,6 @@ async def list_razorpay_logs(
         for p in payments
     ]
 
-
 # =========================
 # SLOT CONTROLS
 # =========================
@@ -184,7 +178,6 @@ async def admin_extend_slot_expiry(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
-
     days = payload.get("days")
     reason = payload.get("reason")
     if not days or not reason:
@@ -196,9 +189,7 @@ async def admin_extend_slot_expiry(
 
     addon.expires_at = addon.expires_at + timedelta(days=int(days))
     await db.commit()
-
     return {"status": "extended", "expires_at": addon.expires_at.isoformat()}
-
 
 @router.post("/slots/{addon_id}/expire")
 async def admin_force_expire_slot(
@@ -208,7 +199,6 @@ async def admin_force_expire_slot(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
-
     reason = payload.get("reason")
     if not reason:
         raise HTTPException(status_code=400, detail="reason required")
@@ -219,9 +209,7 @@ async def admin_force_expire_slot(
 
     addon.expires_at = datetime.utcnow()
     await db.commit()
-
     return {"status": "expired"}
-
 
 @router.post("/slots/{addon_id}/adjust")
 async def admin_adjust_slot_quantity(
@@ -231,7 +219,6 @@ async def admin_adjust_slot_quantity(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
-
     new_quantity = payload.get("extra_ai_campaigns")
     reason = payload.get("reason")
 
@@ -244,9 +231,7 @@ async def admin_adjust_slot_quantity(
 
     addon.extra_ai_campaigns = int(new_quantity)
     await db.commit()
-
     return {"status": "adjusted", "extra_ai_campaigns": addon.extra_ai_campaigns}
-
 
 # =========================
 # ASSIGN SUBSCRIPTION
@@ -273,7 +258,6 @@ async def admin_assign_subscription(
     if not user_id or not plan_id or not pricing_mode:
         raise HTTPException(status_code=400, detail="user_id, plan_id, pricing_mode required")
 
-    # expire existing active/trial subs
     await db.execute(
         update(Subscription)
         .where(Subscription.user_id == UUID(user_id))
@@ -338,14 +322,17 @@ async def admin_assign_subscription(
 
     db.add(audit)
     await db.commit()
-
     return {"status": "assigned", "subscription_id": str(sub.id)}
+
 # ===============================
 # BILLING PROVIDER CONFIG
 # ===============================
 from app.billing.provider_models import BillingProvider
 from app.core.crypto import CryptoService
 
+@router.get("/providers/ping")
+async def providers_ping():
+    return {"status": "ok"}
 
 @router.get("/providers/config")
 async def get_billing_providers_config(
@@ -373,7 +360,6 @@ async def get_billing_providers_config(
         for r in rows
     ]
 
-
 @router.post("/providers/config")
 async def upsert_billing_provider_config(
     payload: dict,
@@ -386,7 +372,7 @@ async def upsert_billing_provider_config(
     provider = payload.get("provider", "razorpay")
     mode = payload.get("mode")
     key_id = payload.get("key_id")
-    key_secret = payload.get("key_secret")  # plaintext
+    key_secret = payload.get("key_secret")
     webhook_secret = payload.get("webhook_secret")
 
     if mode not in ("TEST", "LIVE"):
@@ -395,7 +381,6 @@ async def upsert_billing_provider_config(
     if not key_id or not key_secret:
         raise HTTPException(400, detail="key_id and key_secret required")
 
-    # lookup existing
     existing = await db.scalar(
         select(BillingProvider)
         .where(BillingProvider.provider == provider)
