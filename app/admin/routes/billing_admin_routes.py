@@ -14,7 +14,7 @@ from app.billing.payment_models import Payment
 from app.admin.rbac import assert_admin_permission
 from app.admin.models import AdminAuditLog
 
-router = APIRouter(prefix="/admin/billing", tags=["Admin Billing"])
+router = APIRouter(prefix="/billing", tags=["Admin Billing"])
 
 ALLOWED_ADMIN_ROLES = {"admin", "super_admin", "support_admin", "billing_admin"}
 
