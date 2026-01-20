@@ -6,15 +6,13 @@ from app.users.models import User
 # =========================
 def assert_admin_permission(*, admin_user: User, permission: str):
     """
-    Checks if the admin user has the specific required permission.
-    For now, super admins (role='admin') have all permissions.
+    Simple RBAC for admin features.
+    For now: role='admin' has all permissions.
     """
-    if user.role != "admin":
+    if not admin_user or admin_user.role != "admin":
         raise HTTPException(
-            status_code=403, 
-            detail=f"Missing permission: {required_permission}"
+            status_code=403,
+            detail=f"Missing permission: {permission}"
         )
-
-    # In the future, we can add granular permission checks here.
-    # For now, being an 'admin' grants everything.
+    
     return True
