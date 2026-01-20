@@ -24,7 +24,7 @@ export default function BillingProvidersPage() {
 
   const load = async () => {
     setLoading(true);
-    const r = await fetch("/admin/billing/providers/config");
+    const r = await fetch("/api/admin/billing/providers/config"); // 🔹 FIXED
     const data = await r.json();
     setRows(data);
     setLoading(false);
@@ -34,7 +34,7 @@ export default function BillingProvidersPage() {
     load();
   }, []);
 
-  const existing = rows.find(r => r.mode === mode);
+  const existing = rows.find((r) => r.mode === mode);
 
   const handleSave = async () => {
     if (!form.key_id || !form.key_secret) {
@@ -42,7 +42,7 @@ export default function BillingProvidersPage() {
       return;
     }
 
-    await fetch("/admin/billing/providers/config", {
+    await fetch("/api/admin/billing/providers/config", { // 🔹 FIXED
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -66,13 +66,17 @@ export default function BillingProvidersPage() {
       <div className="flex gap-2">
         <button
           onClick={() => setMode("TEST")}
-          className={`px-3 py-1 rounded ${mode === "TEST" ? "bg-blue-600 text-white" : "bg-gray-200"}`}
+          className={`px-3 py-1 rounded ${
+            mode === "TEST" ? "bg-blue-600 text-white" : "bg-gray-200"
+          }`}
         >
           TEST
         </button>
         <button
           onClick={() => setMode("LIVE")}
-          className={`px-3 py-1 rounded ${mode === "LIVE" ? "bg-blue-600 text-white" : "bg-gray-200"}`}
+          className={`px-3 py-1 rounded ${
+            mode === "LIVE" ? "bg-blue-600 text-white" : "bg-gray-200"
+          }`}
         >
           LIVE
         </button>
@@ -91,7 +95,7 @@ export default function BillingProvidersPage() {
               <input
                 className="border rounded px-3 py-1 w-full"
                 value={form.key_id}
-                onChange={e => setForm({ ...form, key_id: e.target.value })}
+                onChange={(e) => setForm({ ...form, key_id: e.target.value })}
                 placeholder={existing?.key_id || "rzp_test_xxx"}
               />
             </div>
@@ -102,18 +106,24 @@ export default function BillingProvidersPage() {
                 className="border rounded px-3 py-1 w-full"
                 type="password"
                 value={form.key_secret}
-                onChange={e => setForm({ ...form, key_secret: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, key_secret: e.target.value })
+                }
                 placeholder={existing?.has_secret ? "********" : "enter secret"}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium">Webhook Secret (optional)</label>
+              <label className="block text-sm font-medium">
+                Webhook Secret (optional)
+              </label>
               <input
                 className="border rounded px-3 py-1 w-full"
                 type="password"
                 value={form.webhook_secret}
-                onChange={e => setForm({ ...form, webhook_secret: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, webhook_secret: e.target.value })
+                }
                 placeholder="optional"
               />
             </div>
