@@ -3,7 +3,7 @@ from fastapi import APIRouter
 # Core Admin Routers
 from .dashboard_routes import router as dashboard_router
 from .user_routes import router as user_router
-from .billing_routes import router as billing_router
+from .billing_admin_routes import router as billing_router
 from .risk_routes import router as risk_router
 from .pricing_routes import router as pricing_router
 from .meta_routes import router as meta_router
