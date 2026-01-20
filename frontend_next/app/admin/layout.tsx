@@ -185,7 +185,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               <NavItem href="/admin/billing/config" pathname={pathname}>
                 Billing Config
               </NavItem>
-            
+
+                <NavItem href="/admin/billing/providers" pathname={pathname}>
+                Billing Providers
+              </NavItem>
+              
               <NavItem href="/admin/razorpay" pathname={pathname}>
                 Razorpay Logs
               </NavItem>
