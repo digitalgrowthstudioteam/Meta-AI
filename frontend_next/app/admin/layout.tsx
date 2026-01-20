@@ -182,10 +182,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                 Plans
               </NavItem>
             
-              <NavItem href="/admin/billing/config" pathname={pathname}>
-                Billing Config
-              </NavItem>
-
                 <NavItem href="/admin/billing/providers" pathname={pathname}>
                 Billing Providers
               </NavItem>
