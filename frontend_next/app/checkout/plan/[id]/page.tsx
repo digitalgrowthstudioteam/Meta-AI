@@ -1,105 +1,72 @@
 "use client";
 
-import { useSearchParams, useParams, useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 const MOCK_PLANS = {
-  starter: { name: "Starter", monthly: 499, yearly: 4999, aiLimit: 10 },
-  pro: { name: "Pro", monthly: 1499, yearly: 14999, aiLimit: 25 },
-  agency: { name: "Agency", monthly: 4999, yearly: 49999, aiLimit: 100 },
+  starter: { name: "Starter", monthly: 499, yearly: 4999 },
+  pro: { name: "Pro", monthly: 999, yearly: 9999 },
+  agency: { name: "Agency", monthly: 2999, yearly: 29999 },
+  enterprise: { name: "Enterprise" },
 };
 
-export default function CheckoutPage() {
-  const { id } = useParams();
-  const search = useSearchParams();
+export default function CheckoutPage({ params }: { params: { id: string } }) {
   const router = useRouter();
+  const planId = params.id;
+  const plan = MOCK_PLANS[planId as keyof typeof MOCK_PLANS];
 
-  const period = search.get("period") || "monthly";
-  const plan = MOCK_PLANS[id as keyof typeof MOCK_PLANS];
+  const searchParams = useSearchParams();
+  const cycle = (searchParams.get("cycle") as "monthly" | "yearly") || "monthly";
 
-  if (!plan) {
+  if (!plan || planId === "enterprise") {
     return (
-      <div className="p-6 text-red-600 text-sm">
-        Invalid plan selected.
+      <div className="p-6 rounded-lg bg-red-50 border text-red-700 text-sm">
+        Enterprise cannot be purchased online. Contact sales.
       </div>
     );
   }
 
-  const price = period === "monthly" ? plan.monthly : plan.yearly;
-  const suffix = period === "monthly" ? "/month" : "/year";
+  const amount = cycle === "monthly" ? plan.monthly : plan.yearly;
 
-  const handleConfirm = () => {
-    // Phase-2 mock: no payment, no backend
+  const onCheckout = () => {
     router.push("/billing/success");
   };
 
-  const handleCancel = () => {
-    router.push("/pricing");
-  };
-
   return (
-    <div className="p-6 space-y-8">
+    <div className="space-y-6 p-4 max-w-xl">
       <div>
         <h1 className="text-xl font-semibold text-gray-900">Checkout</h1>
-        <p className="text-sm text-gray-600">
-          Review your plan and proceed to payment.
-        </p>
+        <p className="text-sm text-gray-500">Review your plan before continuing</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="bg-white rounded-lg shadow-sm ring-1 ring-gray-900/5 p-6 space-y-4">
+        <div>
+          <div className="text-sm text-gray-500">Plan</div>
+          <div className="text-lg font-medium text-gray-900">{plan.name}</div>
+        </div>
 
-        {/* LEFT - PLAN SUMMARY */}
-        <div className="border rounded-lg p-6 bg-white shadow-sm space-y-4">
-          <h2 className="text-lg font-semibold text-gray-900">{plan.name} Plan</h2>
-
-          <p className="text-sm text-gray-600">
-            Billing: <span className="font-medium capitalize">{period}</span>
-          </p>
-
-          <p className="text-3xl font-bold text-gray-900">
-            ₹{price}
-            <span className="text-sm text-gray-500 ml-1">{suffix}</span>
-          </p>
-
-          <p className="text-xs text-gray-500">
-            AI Campaign Limit: {plan.aiLimit}
-          </p>
-
-          <div className="pt-4 border-t space-y-2 text-sm text-gray-600">
-            <p>✔ AI Campaign Optimization</p>
-            <p>✔ Priority Analytics</p>
-            <p>✔ Email Support</p>
+        <div>
+          <div className="text-sm text-gray-500">Billing Cycle</div>
+          <div className="text-base font-medium text-gray-900 capitalize">
+            {cycle}
           </div>
         </div>
 
-        {/* RIGHT - ORDER SUMMARY */}
-        <div className="border rounded-lg p-6 bg-white shadow-sm space-y-4">
-          <h2 className="text-lg font-semibold text-gray-900">Order Summary</h2>
-
-          <div className="flex justify-between text-sm">
-            <span>{plan.name} ({period})</span>
-            <span>₹{price}</span>
-          </div>
-
-          <div className="pt-4 border-t flex justify-between font-semibold text-gray-900">
-            <span>Total</span>
-            <span>₹{price}</span>
-          </div>
-
-          <button
-            onClick={handleConfirm}
-            className="w-full mt-4 rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-500"
-          >
-            Proceed to Payment
-          </button>
-
-          <button
-            onClick={handleCancel}
-            className="w-full rounded-md border px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Cancel
-          </button>
+        <div>
+          <div className="text-sm text-gray-500">Total</div>
+          <div className="text-3xl font-bold text-gray-900">₹{amount}</div>
         </div>
       </div>
+
+      <button
+        onClick={onCheckout}
+        className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+      >
+        Proceed to Payment
+      </button>
+
+      <p className="text-xs text-gray-400">
+        Phase-2 mock only — no backend integration yet
+      </p>
     </div>
   );
 }
