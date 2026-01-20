@@ -71,6 +71,25 @@ export default function BillingProvidersPage() {
     }
   };
 
+  const handleTest = async () => {
+    try {
+      const res = await fetch("/api/admin/billing/providers/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode }),
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        toast.success(`Connection OK (${mode})`);
+      } else {
+        toast.error(data?.error || "Test failed");
+      }
+    } catch {
+      toast.error("Failed to test connection");
+    }
+  };
+
   return (
     <div className="space-y-6 p-4">
       <div>
@@ -141,13 +160,22 @@ export default function BillingProvidersPage() {
             />
           </div>
 
-          {/* Save Button */}
-          <button
-            onClick={handleSave}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
-          >
-            Save
-          </button>
+          {/* Buttons */}
+          <div className="flex gap-2">
+            <button
+              onClick={handleSave}
+              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
+            >
+              Save
+            </button>
+
+            <button
+              onClick={handleTest}
+              className="rounded-md bg-gray-700 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-gray-600"
+            >
+              Test Connection
+            </button>
+          </div>
 
           <p className="text-xs text-gray-400">
             {existing ? "Configuration loaded." : "No configuration for this mode yet."}
