@@ -1,7 +1,7 @@
 """
 Application configuration
 (Environment-based + Admin-controlled globals)
-🔒 SINGLE SOURCE OF TRUTH (Option-A Compatible)
+🔒 SINGLE SOURCE OF TRUTH
 """
 
 import os
@@ -55,7 +55,7 @@ class Settings:
     META_REDIRECT_URI: str = os.getenv("META_REDIRECT_URI", "")
 
     # =================================================
-    # SMTP
+    # SMTP (HARD-FAIL IF NOT CORRECT)
     # =================================================
     SMTP_HOST: Optional[str] = os.getenv("SMTP_HOST", "smtp.gmail.com")
     SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
@@ -79,22 +79,23 @@ class Settings:
         or os.getenv("EMAILS_FROM_EMAIL")
     )
 
-    # =============================================================
-    # RAZORPAY (LEGACY FALLBACK ONLY — NOT USED IN MODE-A LOGIC)
-    # =============================================================
-    RAZORPAY_KEY_ID: str = os.getenv("RAZORPAY_KEY_ID", "") or ""
-    RAZORPAY_KEY_SECRET: str = os.getenv("RAZORPAY_KEY_SECRET", "") or ""
-    RAZORPAY_WEBHOOK_SECRET: str = os.getenv("RAZORPAY_WEBHOOK_SECRET", "") or ""
+    # =================================================
+    # RAZORPAY (MODE = ENV + DB OVERRIDE)
+    # =================================================
+    # TEST / LIVE mode selected via .env
+    RAZORPAY_MODE: str = os.getenv("RAZORPAY_MODE", "TEST").upper()
 
-    # Plans (Legacy mapping for recurring)
-    RAZORPAY_SUBSCRIPTION_PLAN_STARTER: str = os.getenv("RAZORPAY_SUBSCRIPTION_PLAN_STARTER", "")
-    RAZORPAY_SUBSCRIPTION_PLAN_PRO: str = os.getenv("RAZORPAY_SUBSCRIPTION_PLAN_PRO", "")
-    RAZORPAY_SUBSCRIPTION_PLAN_AGENCY: str = os.getenv("RAZORPAY_SUBSCRIPTION_PLAN_AGENCY", "")
+    # Base ENV keys (DB can override)
+    RAZORPAY_KEY_ID: str = os.getenv("RAZORPAY_KEY_ID", "")
+    RAZORPAY_KEY_SECRET: str = os.getenv("RAZORPAY_KEY_SECRET", "")
+
+    # Optional webhook secret
+    RAZORPAY_WEBHOOK_SECRET: str = os.getenv("RAZORPAY_WEBHOOK_SECRET", "")
 
     # =================================================
-    # BILLING MODE (ENV = FALLBACK, DB = ACTIVE MODE)
+    # BILLING MODE
     # =================================================
-    BILLING_MODE: str = os.getenv("BILLING_MODE", "subscriptions")  # legacy fallback
+    BILLING_MODE: str = os.getenv("BILLING_MODE", "subscriptions")  # subscriptions | prepaid
     BILLING_CURRENCY: str = os.getenv("BILLING_CURRENCY", "INR")
 
     # =================================================
