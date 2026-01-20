@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, desc
 from uuid import UUID, uuid4
 from datetime import datetime, timedelta
+import razorpay
 
 from app.core.db_session import get_db
 from app.auth.dependencies import require_user, forbid_impersonated_writes
@@ -13,6 +14,9 @@ from app.billing.invoice_models import Invoice
 from app.billing.payment_models import Payment
 from app.admin.rbac import assert_admin_permission
 from app.admin.models import AdminAuditLog
+from app.billing.provider_models import BillingProvider
+from app.core.crypto import CryptoService
+from app.core.config import settings
 
 router = APIRouter(prefix="/billing", tags=["Admin Billing"])
 
@@ -22,6 +26,13 @@ def require_admin(user: User):
     if user.role not in ALLOWED_ADMIN_ROLES:
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
+
+def mask_key(key: str) -> str:
+    if not key:
+        return ""
+    if len(key) <= 6:
+        return key[:2] + "***"
+    return key[:-6] + "***"
 
 # ===============================
 # USER SUBSCRIPTION DETAIL
@@ -327,8 +338,6 @@ async def admin_assign_subscription(
 # ===============================
 # BILLING PROVIDER CONFIG
 # ===============================
-from app.billing.provider_models import BillingProvider
-from app.core.crypto import CryptoService
 
 @router.get("/providers/ping")
 async def providers_ping():
@@ -351,7 +360,7 @@ async def get_billing_providers_config(
             "id": str(r.id),
             "provider": r.provider,
             "mode": r.mode,
-            "key_id": r.key_id,
+            "key_id": mask_key(r.key_id),
             "has_secret": bool(r.key_secret_encrypted),
             "active": r.active,
             "created_at": r.created_at.isoformat(),
@@ -380,6 +389,14 @@ async def upsert_billing_provider_config(
 
     if not key_id or not key_secret:
         raise HTTPException(400, detail="key_id and key_secret required")
+
+    # deactivate previous rows for EXACT-ONE rule
+    await db.execute(
+        update(BillingProvider)
+        .where(BillingProvider.provider == provider)
+        .where(BillingProvider.mode == mode)
+        .values(active=False)
+    )
 
     existing = await db.scalar(
         select(BillingProvider)
@@ -412,4 +429,91 @@ async def upsert_billing_provider_config(
         db.add(row)
 
     await db.commit()
+    return {"status": "ok"}
+
+# ===============================
+# NEW: GET ACTIVE CONFIG (ENV + DB)
+# ===============================
+@router.get("/config")
+async def get_active_billing_config(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    assert_admin_permission(admin_user=current_user, permission="billing:read")
+
+    mode = settings.RAZORPAY_MODE
+
+    row = await db.scalar(
+        select(BillingProvider)
+        .where(BillingProvider.provider == "razorpay")
+        .where(BillingProvider.mode == mode)
+        .where(BillingProvider.active.is_(True))
+        .limit(1)
+    )
+
+    if row:
+        return {
+            "provider": "razorpay",
+            "mode": mode,
+            "key_id": mask_key(row.key_id),
+            "has_secret": True,
+            "source": "db",
+        }
+
+    key_id = settings.RAZORPAY_KEY_ID
+    key_secret = settings.RAZORPAY_KEY_SECRET
+
+    if key_id and key_secret:
+        return {
+            "provider": "razorpay",
+            "mode": mode,
+            "key_id": mask_key(key_id),
+            "has_secret": True,
+            "source": "env",
+        }
+
+    raise HTTPException(404, detail="No active Razorpay config found")
+
+# ===============================
+# NEW: TEST CONNECTION (SELECTED_MODE)
+# ===============================
+@router.post("/config/test")
+async def test_billing_connection(
+    payload: dict,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    require_admin(current_user)
+    assert_admin_permission(admin_user=current_user, permission="billing:read")
+
+    mode = payload.get("mode")
+    if mode not in ("TEST", "LIVE"):
+        raise HTTPException(400, detail="mode must be TEST or LIVE")
+
+    row = await db.scalar(
+        select(BillingProvider)
+        .where(BillingProvider.provider == "razorpay")
+        .where(BillingProvider.mode == mode)
+        .where(BillingProvider.active.is_(True))
+        .limit(1)
+    )
+
+    if row:
+        key_id = row.key_id
+        key_secret = CryptoService.decrypt_secret(row.key_secret_encrypted)
+    else:
+        key_id = settings.RAZORPAY_KEY_ID
+        key_secret = settings.RAZORPAY_KEY_SECRET
+
+    if not key_id or not key_secret:
+        raise HTTPException(400, detail="No credentials available for test")
+
+    client = razorpay.Client(auth=(key_id, key_secret))
+
+    try:
+        client.payment.all(count=1)
+    except Exception as e:
+        raise HTTPException(400, detail=f"Razorpay test failed: {str(e)}")
+
     return {"status": "ok"}
