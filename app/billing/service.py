@@ -1,9 +1,10 @@
 # ================================
-# app/billing/service.py (RECURRING TOTAL_COUNT=1199, OPTION-2)
+# app/billing/service.py (ENV + DB Override for Razorpay)
+# MODE = ENV
 # ================================
 
-import razorpay
 import time
+import razorpay
 from datetime import datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,16 +18,80 @@ from app.plans.subscription_models import Subscription
 from app.plans.models import Plan
 from app.admin.models_pricing import AdminPricingConfig
 
+from app.billing.provider_models import BillingProvider
+from app.core.crypto import CryptoService
+
 
 class BillingService:
     def __init__(self):
-        if not settings.RAZORPAY_KEY_ID or not settings.RAZORPAY_KEY_SECRET:
-            raise RuntimeError("Razorpay keys not configured")
+        """
+        MODE = ENV → switching TEST/LIVE via .env
+        .env must define:
+            RAZORPAY_MODE=TEST or LIVE
+            RAZORPAY_KEY_ID=...
+            RAZORPAY_KEY_SECRET=...
 
-        self.client = razorpay.Client(
-            auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET)
+        DB override logic:
+            looks up BillingProvider(provider="razorpay", mode=<MODE>, active=True)
+            if found → override env keys
+        """
+
+        mode = settings.RAZORPAY_MODE.upper() if hasattr(settings, "RAZORPAY_MODE") else "TEST"
+        if mode not in ("TEST", "LIVE"):
+            raise RuntimeError("RAZORPAY_MODE must be TEST or LIVE")
+
+        # Load base from ENV
+        key_id = settings.RAZORPAY_KEY_ID or ""
+        key_secret = settings.RAZORPAY_KEY_SECRET or ""
+
+        # If DB override exists, it will be loaded by resolve_credentials()
+        # (lazy DB fetch happens outside __init__, so we store mode here)
+        self.mode = mode
+        self.env_key_id = key_id
+        self.env_key_secret = key_secret
+
+        if not key_id or not key_secret:
+            raise RuntimeError(
+                f"Missing base Razorpay ENV keys for mode={mode}. "
+                "Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET in .env"
+            )
+
+        # Initialize Razorpay client using ENV defaults (may be overridden later)
+        self.client = razorpay.Client(auth=(key_id, key_secret))
+        self.public_key = key_id
+
+    async def resolve_credentials(self, db: AsyncSession):
+        """
+        Returns final (key_id, key_secret) for Razorpay based on MODE=ENV.
+
+        Precedence:
+        1) ENV (.env)
+        2) DB override if exists for same mode
+        """
+        # Base from ENV
+        key_id = self.env_key_id
+        key_secret = self.env_key_secret
+
+        # Try DB override
+        row = await db.scalar(
+            select(BillingProvider)
+            .where(BillingProvider.provider == "razorpay")
+            .where(BillingProvider.mode == self.mode)
+            .where(BillingProvider.active.is_(True))
+            .limit(1)
         )
-        self.public_key = settings.RAZORPAY_KEY_ID
+
+        if row:
+            # Decrypt DB overrides
+            key_id = row.key_id
+            key_secret = CryptoService.decrypt_secret(row.key_secret_encrypted)
+
+        if not key_id or not key_secret:
+            raise RuntimeError(f"No Razorpay credentials found for mode={self.mode}")
+
+        # Re-init client using correct keys
+        self.client = razorpay.Client(auth=(key_id, key_secret))
+        self.public_key = key_id
 
     async def _get_active_pricing(self, db: AsyncSession) -> AdminPricingConfig:
         config = await db.scalar(
@@ -80,6 +145,8 @@ class BillingService:
         plan_id: int,
     ) -> Subscription:
 
+        await self.resolve_credentials(db=db)
+
         plan = await db.scalar(
             select(Plan).where(
                 Plan.id == plan_id,
@@ -90,7 +157,6 @@ class BillingService:
             raise RuntimeError("Invalid or inactive plan")
 
         plan_key = plan.name.lower()
-
         if plan_key in ("free", "enterprise"):
             raise RuntimeError("Plan does not support recurring billing")
 
@@ -100,7 +166,7 @@ class BillingService:
         if not plan.razorpay_monthly_plan_id:
             raise RuntimeError("Missing Razorpay monthly plan mapping")
 
-        start_at = int(time.time()) + 90  # start after user authorization
+        start_at = int(time.time()) + 90
 
         rp_sub = self.client.subscription.create(
             {
@@ -115,14 +181,12 @@ class BillingService:
             }
         )
 
-        razorpay_subscription_id = rp_sub["id"]
-
         sub = Subscription(
             user_id=user.id,
             plan_id=plan.id,
             status="pending",
             billing_cycle="monthly",
-            razorpay_subscription_id=razorpay_subscription_id,
+            razorpay_subscription_id=rp_sub["id"],
             starts_at=datetime.utcfromtimestamp(start_at),
             ends_at=None,
             is_active=False,
@@ -145,6 +209,8 @@ class BillingService:
         plan_id: int,
         billing_cycle: str,
     ) -> Payment:
+
+        await self.resolve_credentials(db=db)
 
         plan = await db.scalar(
             select(Plan).where(
@@ -208,6 +274,8 @@ class BillingService:
         razorpay_signature: str,
     ) -> Payment:
 
+        await self.resolve_credentials(db=db)
+
         payment = await db.scalar(
             select(Payment).where(Payment.razorpay_order_id == razorpay_order_id)
         )
@@ -234,7 +302,6 @@ class BillingService:
         await db.refresh(payment)
 
         await self._post_payment_subscription_logic(db=db, payment=payment)
-
         return payment
 
     async def _post_payment_subscription_logic(
