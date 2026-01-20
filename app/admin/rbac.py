@@ -4,7 +4,7 @@ from app.users.models import User
 # =========================
 # RBAC PERMISSION CHECKER
 # =========================
-def assert_admin_permission(user: User, required_permission: str):
+def assert_admin_permission(*, admin_user: User, permission: str):
     """
     Checks if the admin user has the specific required permission.
     For now, super admins (role='admin') have all permissions.
