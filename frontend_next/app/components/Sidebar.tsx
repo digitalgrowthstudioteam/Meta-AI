@@ -74,6 +74,10 @@ export default function Sidebar({
         <NavItem href="/campaigns" label="Campaigns" pathname={pathname} onClick={closeMobile} />
         <NavItem href="/ai-actions" label="AI Actions" pathname={pathname} onClick={closeMobile} />
         <NavItem href="/reports" label="Reports" pathname={pathname} onClick={closeMobile} />
+
+        {/* NEW: Pricing Page */}
+        <NavItem href="/pricing" label="Pricing" pathname={pathname} onClick={closeMobile} />
+
         <NavItem href="/billing" label="Billing" pathname={pathname} onClick={closeMobile} />
         <NavItem href="/settings" label="Settings" pathname={pathname} onClick={closeMobile} />
 
