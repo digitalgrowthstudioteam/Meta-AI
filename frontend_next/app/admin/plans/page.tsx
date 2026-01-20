@@ -8,14 +8,45 @@ type PlanRow = {
   monthly_price: number;
   yearly_price: number;
   currency: string;
+  ad_account_limit: number;
+  campaign_limit: number;
   is_custom?: boolean;
 };
 
 const mockPlans: PlanRow[] = [
-  { code: "starter", monthly_price: 999, yearly_price: 9999, currency: "INR" },
-  { code: "pro", monthly_price: 2499, yearly_price: 24999, currency: "INR" },
-  { code: "agency", monthly_price: 5999, yearly_price: 59999, currency: "INR" },
-  { code: "enterprise", monthly_price: 0, yearly_price: 0, currency: "INR", is_custom: true },
+  {
+    code: "starter",
+    monthly_price: 999,
+    yearly_price: 9999,
+    currency: "INR",
+    ad_account_limit: 1,
+    campaign_limit: 5,
+  },
+  {
+    code: "pro",
+    monthly_price: 2499,
+    yearly_price: 24999,
+    currency: "INR",
+    ad_account_limit: 3,
+    campaign_limit: 25,
+  },
+  {
+    code: "agency",
+    monthly_price: 5999,
+    yearly_price: 59999,
+    currency: "INR",
+    ad_account_limit: 10,
+    campaign_limit: 100,
+  },
+  {
+    code: "enterprise",
+    monthly_price: 0,
+    yearly_price: 0,
+    currency: "INR",
+    ad_account_limit: 50,
+    campaign_limit: 300,
+    is_custom: true,
+  },
 ];
 
 export default function AdminPlansPage() {
@@ -24,8 +55,7 @@ export default function AdminPlansPage() {
   const onChange = (index: number, field: keyof PlanRow, value: string | number) => {
     setPlans((prev) => {
       const copy = [...prev];
-      // convert number fields
-      if (field === "monthly_price" || field === "yearly_price") {
+      if (field === "monthly_price" || field === "yearly_price" || field === "ad_account_limit" || field === "campaign_limit") {
         copy[index][field] = Number(value);
       } else {
         copy[index][field] = value as any;
@@ -35,15 +65,15 @@ export default function AdminPlansPage() {
   };
 
   const onSave = () => {
-    toast.success("Pricing saved (Phase-2 mock only)");
+    toast.success("Plan configuration saved (Phase-2 mock only)");
   };
 
   return (
     <div className="space-y-6 p-4">
       <div>
-        <h1 className="text-xl font-semibold text-gray-900">Plan Pricing</h1>
+        <h1 className="text-xl font-semibold text-gray-900">Plan Pricing & Limits</h1>
         <p className="text-sm text-gray-500">
-          Manage pricing and billing settings for each plan level.
+          Manage pricing and usage limits for each subscription plan.
         </p>
       </div>
 
@@ -52,9 +82,11 @@ export default function AdminPlansPage() {
           <thead className="bg-gray-50">
             <tr>
               <th className="py-3 pl-4 pr-3 text-left font-medium text-gray-900 sm:pl-6">Plan</th>
-              <th className="px-3 py-3 text-left font-medium text-gray-900">Monthly Price</th>
-              <th className="px-3 py-3 text-left font-medium text-gray-900">Yearly Price</th>
+              <th className="px-3 py-3 text-left font-medium text-gray-900">Monthly</th>
+              <th className="px-3 py-3 text-left font-medium text-gray-900">Yearly</th>
               <th className="px-3 py-3 text-left font-medium text-gray-900">Currency</th>
+              <th className="px-3 py-3 text-left font-medium text-gray-900">Ad Accounts</th>
+              <th className="px-3 py-3 text-left font-medium text-gray-900">Campaign Limit</th>
             </tr>
           </thead>
 
@@ -66,10 +98,10 @@ export default function AdminPlansPage() {
                   {p.code}
                 </td>
 
-                {/* Monthly */}
+                {/* Monthly Price */}
                 <td className="px-3 py-4">
                   {p.is_custom ? (
-                    <span className="text-gray-500">Custom only</span>
+                    <span className="text-gray-500">Custom Only</span>
                   ) : (
                     <input
                       type="number"
@@ -80,10 +112,10 @@ export default function AdminPlansPage() {
                   )}
                 </td>
 
-                {/* Yearly */}
+                {/* Yearly Price */}
                 <td className="px-3 py-4">
                   {p.is_custom ? (
-                    <span className="text-gray-500">Custom only</span>
+                    <span className="text-gray-500">Custom Only</span>
                   ) : (
                     <input
                       type="number"
@@ -106,6 +138,26 @@ export default function AdminPlansPage() {
                     <option value="USD">USD</option>
                   </select>
                 </td>
+
+                {/* Ad Account Limit */}
+                <td className="px-3 py-4">
+                  <input
+                    type="number"
+                    value={p.ad_account_limit}
+                    onChange={(e) => onChange(idx, "ad_account_limit", e.target.value)}
+                    className="w-24 rounded border border-gray-300 px-2 py-1 text-sm"
+                  />
+                </td>
+
+                {/* Campaign Limit */}
+                <td className="px-3 py-4">
+                  <input
+                    type="number"
+                    value={p.campaign_limit}
+                    onChange={(e) => onChange(idx, "campaign_limit", e.target.value)}
+                    className="w-24 rounded border border-gray-300 px-2 py-1 text-sm"
+                  />
+                </td>
               </tr>
             ))}
           </tbody>
@@ -121,9 +173,7 @@ export default function AdminPlansPage() {
         </div>
       </div>
 
-      <p className="text-xs text-gray-400">
-        Phase-2 mock only — backend integration in Phase-4.
-      </p>
+      <p className="text-xs text-gray-400">Phase-2 mock only — backend integration comes later.</p>
     </div>
   );
 }
