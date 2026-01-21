@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 # Core Admin Routers
+from .plan_routes import router as plan_router
 from .dashboard_routes import router as dashboard_router
 from .user_routes import router as user_router
 from .billing_admin_routes import router as billing_router
@@ -20,3 +21,5 @@ router.include_router(risk_router)
 router.include_router(pricing_router)
 router.include_router(meta_router)
 router.include_router(audit_router)
+router.include_router(plan_router)
+
