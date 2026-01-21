@@ -1,72 +1,125 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
+import { apiFetch } from "@/app/lib/fetcher";
 
 type PlanRow = {
+  id: number;
+  name: string;
+  monthly_price: number;
+  yearly_price: number | null;
+  currency: string;
+  max_ad_accounts: number | null;
+  max_ai_campaigns: number;
+  auto_allowed: boolean;
+  manual_allowed: boolean;
+  yearly_allowed: boolean;
+  is_hidden: boolean;
+  is_active: boolean;
+  is_custom?: boolean;
+};
+
+// Local editable shape (UI-level)
+type EditablePlan = {
+  id: number;
   code: string;
   monthly_price: number;
   yearly_price: number;
   currency: string;
   ad_account_limit: number;
   campaign_limit: number;
-  is_custom?: boolean;
+  is_custom: boolean;
 };
 
-const mockPlans: PlanRow[] = [
-  {
-    code: "starter",
-    monthly_price: 999,
-    yearly_price: 9999,
-    currency: "INR",
-    ad_account_limit: 1,
-    campaign_limit: 5,
-  },
-  {
-    code: "pro",
-    monthly_price: 2499,
-    yearly_price: 24999,
-    currency: "INR",
-    ad_account_limit: 3,
-    campaign_limit: 25,
-  },
-  {
-    code: "agency",
-    monthly_price: 5999,
-    yearly_price: 59999,
-    currency: "INR",
-    ad_account_limit: 10,
-    campaign_limit: 100,
-  },
-  {
-    code: "enterprise",
-    monthly_price: 0,
-    yearly_price: 0,
-    currency: "INR",
-    ad_account_limit: 50,
-    campaign_limit: 300,
-    is_custom: true,
-  },
-];
-
 export default function AdminPlansPage() {
-  const [plans, setPlans] = useState<PlanRow[]>(mockPlans);
+  const [plans, setPlans] = useState<EditablePlan[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const onChange = (index: number, field: keyof PlanRow, value: string | number) => {
-    setPlans((prev) => {
-      const copy = [...prev];
-      if (field === "monthly_price" || field === "yearly_price" || field === "ad_account_limit" || field === "campaign_limit") {
-        copy[index][field] = Number(value);
-      } else {
-        copy[index][field] = value as any;
+  // =========================================
+  // FETCH PLANS FROM BACKEND
+  // =========================================
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await apiFetch("/admin/plans");
+        if (!res.ok) {
+          toast.error("Failed to load plans");
+          return;
+        }
+        const data: PlanRow[] = await res.json();
+
+        const mapped = data.map((p) => ({
+          id: p.id,
+          code: p.name.toLowerCase(),
+          monthly_price: Math.round(p.monthly_price / 100), // paise → rupees
+          yearly_price: p.yearly_price ? Math.round(p.yearly_price / 100) : 0,
+          currency: "INR",
+          ad_account_limit: p.max_ad_accounts ?? 0,
+          campaign_limit: p.max_ai_campaigns ?? 0,
+          is_custom: p.name.toLowerCase() === "enterprise",
+        }));
+
+        setPlans(mapped);
+      } catch (err) {
+        toast.error("Error loading plans");
+      } finally {
+        setLoading(false);
       }
-      return copy;
+    };
+
+    load();
+  }, []);
+
+  // =========================================
+  // UPDATE LOCAL STATE ON EDIT
+  // =========================================
+  const onChange = (index: number, field: keyof EditablePlan, value: string | number) => {
+    setPlans((prev) => {
+      const next = [...prev];
+      (next[index] as any)[field] = field.includes("price") || field.includes("limit")
+        ? Number(value)
+        : value;
+      return next;
     });
   };
 
-  const onSave = () => {
-    toast.success("Plan configuration saved (Phase-2 mock only)");
+  // =========================================
+  // SAVE CHANGES TO BACKEND
+  // =========================================
+  const onSave = async () => {
+    try {
+      toast.loading("Saving...", { id: "saving" });
+
+      for (const p of plans) {
+        const body = {
+          monthly_price: p.monthly_price * 100, // rupees → paise
+          yearly_price: p.yearly_price ? p.yearly_price * 100 : null,
+          max_ad_accounts: p.ad_account_limit,
+          max_ai_campaigns: p.campaign_limit,
+        };
+
+        const res = await apiFetch(`/admin/plans/${p.id}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || "Update failed");
+        }
+      }
+
+      toast.success("Plans updated successfully", { id: "saving" });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save", { id: "saving" });
+    }
   };
+
+  if (loading) {
+    return <div className="p-4 text-sm text-gray-600">Loading plans...</div>;
+  }
 
   return (
     <div className="space-y-6 p-4">
@@ -84,7 +137,6 @@ export default function AdminPlansPage() {
               <th className="py-3 pl-4 pr-3 text-left font-medium text-gray-900 sm:pl-6">Plan</th>
               <th className="px-3 py-3 text-left font-medium text-gray-900">Monthly</th>
               <th className="px-3 py-3 text-left font-medium text-gray-900">Yearly</th>
-              <th className="px-3 py-3 text-left font-medium text-gray-900">Currency</th>
               <th className="px-3 py-3 text-left font-medium text-gray-900">Ad Accounts</th>
               <th className="px-3 py-3 text-left font-medium text-gray-900">Campaign Limit</th>
             </tr>
@@ -92,13 +144,11 @@ export default function AdminPlansPage() {
 
           <tbody className="divide-y divide-gray-200 bg-white">
             {plans.map((p, idx) => (
-              <tr key={p.code}>
-                {/* Plan Label */}
+              <tr key={p.id}>
                 <td className="whitespace-nowrap py-4 pl-4 pr-3 font-medium text-gray-900 sm:pl-6 capitalize">
                   {p.code}
                 </td>
 
-                {/* Monthly Price */}
                 <td className="px-3 py-4">
                   {p.is_custom ? (
                     <span className="text-gray-500">Custom Only</span>
@@ -107,12 +157,11 @@ export default function AdminPlansPage() {
                       type="number"
                       value={p.monthly_price}
                       onChange={(e) => onChange(idx, "monthly_price", e.target.value)}
-                      className="w-28 rounded border border-gray-300 px-2 py-1 text-sm"
+                      className="w-24 rounded border border-gray-300 px-2 py-1 text-sm"
                     />
                   )}
                 </td>
 
-                {/* Yearly Price */}
                 <td className="px-3 py-4">
                   {p.is_custom ? (
                     <span className="text-gray-500">Custom Only</span>
@@ -121,25 +170,11 @@ export default function AdminPlansPage() {
                       type="number"
                       value={p.yearly_price}
                       onChange={(e) => onChange(idx, "yearly_price", e.target.value)}
-                      className="w-28 rounded border border-gray-300 px-2 py-1 text-sm"
+                      className="w-24 rounded border border-gray-300 px-2 py-1 text-sm"
                     />
                   )}
                 </td>
 
-                {/* Currency */}
-                <td className="px-3 py-4">
-                  <select
-                    value={p.currency}
-                    onChange={(e) => onChange(idx, "currency", e.target.value)}
-                    disabled={p.is_custom}
-                    className="w-24 rounded border border-gray-300 px-2 py-1 text-sm disabled:bg-gray-100"
-                  >
-                    <option value="INR">INR</option>
-                    <option value="USD">USD</option>
-                  </select>
-                </td>
-
-                {/* Ad Account Limit */}
                 <td className="px-3 py-4">
                   <input
                     type="number"
@@ -149,7 +184,6 @@ export default function AdminPlansPage() {
                   />
                 </td>
 
-                {/* Campaign Limit */}
                 <td className="px-3 py-4">
                   <input
                     type="number"
@@ -172,8 +206,6 @@ export default function AdminPlansPage() {
           </button>
         </div>
       </div>
-
-      <p className="text-xs text-gray-400">Phase-2 mock only — backend integration comes later.</p>
     </div>
   );
 }
