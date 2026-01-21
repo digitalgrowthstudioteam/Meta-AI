@@ -1,64 +1,94 @@
 "use client";
 
-import { useState } from "react";
-import { CreditCard, CheckCircle, AlertCircle, Clock } from "lucide-react";
+import { useEffect, useState } from "react";
+import { CreditCard, CheckCircle, AlertCircle, Clock, Loader2, XCircle } from "lucide-react";
+import { apiFetch } from "../lib/fetcher";
 
-/* ----------------------------------
- * MOCK DATA (Phase 2 only)
- * ---------------------------------- */
-const mockSession = {
-  user: {
-    id: "user_123",
-    email: "demo@example.com",
-    is_admin: false,
-    is_impersonated: false,
-  },
-};
+function formatDate(dateStr?: string | null) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
 
-const mockPlan = {
-  plan_name: "Starter",
-  plan_code: "starter",
-  expires_at: "2025-12-31",
-  ai_campaign_limit: 10,
-  ai_active_campaigns: 3,
-};
-
-/* In Phase-2, invoices must be empty */
-const mockInvoices: any[] = [];
-
-/* ----------------------------------
- * PAGE
- * ---------------------------------- */
 export default function BillingPage() {
-  const [session] = useState(mockSession);
-  const [plan] = useState(mockPlan);
-  const [invoices] = useState(mockInvoices);
+  const [loading, setLoading] = useState(true);
+  const [canceling, setCanceling] = useState(false);
+  const [sub, setSub] = useState<any>(null);
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
-  const usagePct =
-    plan && plan.ai_campaign_limit > 0
-      ? Math.min(
-          (plan.ai_active_campaigns / plan.ai_campaign_limit) * 100,
-          100
-        )
-      : 0;
+  async function loadData() {
+    try {
+      setLoading(true);
+      setError(null);
 
-  if (!session) {
+      const sres = await apiFetch("/billing/status");
+      const sinfo = await sres.json();
+
+      const ires = await apiFetch("/billing/invoices");
+      const iinfo = await ires.json();
+
+      setSub(sinfo.subscription || null);
+      setInvoices(Array.isArray(iinfo) ? iinfo : []);
+    } catch (e) {
+      setError("Failed to load billing data.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleCancel() {
+    if (!confirm("Cancel subscription at cycle end?")) return;
+
+    try {
+      setCanceling(true);
+      setError(null);
+
+      const res = await apiFetch("/billing/cancel", { method: "POST" });
+      if (!res.ok) throw new Error("Cancel failed");
+
+      await loadData();
+    } catch (e) {
+      setError("Cancellation failed.");
+    } finally {
+      setCanceling(false);
+    }
+  }
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  if (loading) {
     return (
-      <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
-        Session expired. Please login again.
+      <div className="flex items-center justify-center py-12 text-gray-600">
+        <Loader2 className="h-5 w-5 animate-spin mr-2" />
+        Loading billing info...
       </div>
     );
   }
 
+  if (error) {
+    return (
+      <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
+        {error}
+      </div>
+    );
+  }
+
+  const active = !!sub;
+  const planName = sub?.plan_name || "Free";
+  const expires = sub?.ends_at ? formatDate(sub.ends_at) : null;
+  const status = sub?.status || "none";
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-gray-900">
-          Billing & Subscription
-        </h1>
-        <p className="text-sm text-gray-500">
-          Manage your plan, track usage, and view payment history.
-        </p>
+        <h1 className="text-xl font-semibold text-gray-900">Billing & Subscription</h1>
+        <p className="text-sm text-gray-500">Manage your plan and invoices.</p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -71,7 +101,7 @@ export default function BillingPage() {
                   Current Plan
                 </h2>
                 <p className="mt-2 text-3xl font-bold text-gray-900">
-                  {plan?.plan_name || "Free Tier"}
+                  {planName}
                 </p>
               </div>
               <div className="p-2 bg-indigo-50 rounded-lg">
@@ -80,81 +110,64 @@ export default function BillingPage() {
             </div>
 
             <p className="mt-4 text-sm text-gray-500">
-              {plan?.expires_at
-                ? `Valid until ${new Date(plan.expires_at).toLocaleDateString()}`
-                : "No active expiration"}
+              {expires ? `Renews on ${expires}` : "No renewal date"}
+            </p>
+
+            <p className="mt-1 text-xs text-gray-400">
+              Status: <span className="font-medium text-gray-700">{status}</span>
             </p>
           </div>
 
-          <button
-            disabled
-            className="mt-6 w-full rounded-md bg-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm cursor-not-allowed"
-          >
-            Checkout Disabled (Phase 2)
-          </button>
+          {active ? (
+            <button
+              onClick={handleCancel}
+              disabled={canceling}
+              className="mt-6 w-full rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 disabled:opacity-50"
+            >
+              {canceling ? "Processing..." : "Cancel Subscription"}
+            </button>
+          ) : (
+            <p className="mt-6 text-sm text-gray-400 italic">
+              No active subscription
+            </p>
+          )}
         </div>
 
-        {/* USAGE CARD */}
+        {/* INVOICE CARD */}
         <div className="bg-white shadow-sm ring-1 ring-gray-900/5 sm:rounded-lg p-6 flex flex-col">
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">
-            AI Usage Limits
+            Invoices
           </h2>
 
-          <div className="flex-1 space-y-6">
-            <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span className="font-medium text-gray-900">
-                  Active AI Campaigns
-                </span>
-                <span className="text-gray-500">
-                  {plan?.ai_active_campaigns} / {plan?.ai_campaign_limit}
-                </span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2.5">
-                <div
-                  className={`h-2.5 rounded-full ${
-                    usagePct > 90 ? "bg-red-500" : "bg-indigo-600"
-                  }`}
-                  style={{ width: `${usagePct}%` }}
-                ></div>
-              </div>
-              {usagePct >= 100 && (
-                <p className="mt-2 text-xs text-red-600 flex items-center gap-1">
-                  <AlertCircle className="h-3 w-3" /> Limit reached. Upgrade to add
-                  more.
-                </p>
-              )}
-            </div>
-
-            <div className="pt-4 border-t border-gray-100">
-              <ul className="space-y-2 text-sm text-gray-600">
-                <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-green-500" />
-                  Priority Support
-                </li>
-                <li className="flex items-center gap-2">
-                  <CheckCircle className="h-4 w-4 text-green-500" />
-                  Advanced Analytics
-                </li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* INVOICE HISTORY */}
-      <div className="bg-white shadow-sm ring-1 ring-gray-900/5 sm:rounded-lg overflow-hidden">
-        <div className="px-4 py-5 sm:p-6">
-          <h3 className="text-base font-semibold leading-6 text-gray-900 mb-4">
-            Invoice History
-          </h3>
-
           {invoices.length === 0 ? (
-            <div className="text-center py-8 bg-gray-50 rounded-lg border border-dashed">
-              <Clock className="mx-auto h-8 w-8 text-gray-400 mb-2" />
-              <p className="text-sm text-gray-500">No invoices found.</p>
+            <div className="flex-1 flex flex-col justify-center items-center text-sm text-gray-500 py-4">
+              <Clock className="h-6 w-6 mb-2 text-gray-400" />
+              No invoices yet.
             </div>
-          ) : null}
+          ) : (
+            <ul className="space-y-2 text-sm">
+              {invoices.slice(0, 3).map((inv) => (
+                <li key={inv.id} className="flex justify-between">
+                  <span>{inv.invoice_number}</span>
+                  <a
+                    href={inv.download_url}
+                    className="text-indigo-600 hover:text-indigo-500"
+                  >
+                    Download
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {invoices.length > 3 && (
+            <a
+              href="/billing/invoices"
+              className="mt-4 text-sm text-indigo-600 hover:text-indigo-500"
+            >
+              View all invoices →
+            </a>
+          )}
         </div>
       </div>
     </div>
