@@ -90,7 +90,6 @@ async def handle_subscription_pending(payload, db: AsyncSession):
     sub = payload["payload"]["subscription"]["entity"]
     rp_id = sub["id"]
 
-    # Find existing subscription by razorpay_subscription_id
     existing = await db.scalar(
         select(Subscription).where(
             Subscription.razorpay_subscription_id == rp_id
@@ -98,13 +97,11 @@ async def handle_subscription_pending(payload, db: AsyncSession):
     )
 
     if existing:
-        # idempotent update
         existing.status = "pending"
         existing.is_active = False
         await db.commit()
         return {"status": "pending_updated"}
 
-    # If no existing record, create minimal pending record
     pending_sub = Subscription(
         user_id=sub.get("notes", {}).get("user_id"),
         plan_id=sub.get("notes", {}).get("plan_id"),
@@ -328,21 +325,50 @@ async def handle_payment_captured(payload, db: AsyncSession):
 
 
 # ======================================================
-# payment.failed
+# payment.failed  (UPDATED FOR PHASE-6)
 # ======================================================
 async def handle_payment_failed(payload, db: AsyncSession):
     pay = payload["payload"]["payment"]["entity"]
     rp_payment_id = pay["id"]
+    rp_sub_id = pay.get("subscription_id")  # recurring link
 
     payment = await db.scalar(
         select(Payment).where(Payment.razorpay_payment_id == rp_payment_id)
     )
-    if not payment:
-        return {"status": "ignored"}
 
-    payment.status = "failed"
-    await db.commit()
-    return {"status": "failed"}
+    if payment:
+        payment.status = "failed"
+        await db.commit()
+
+    if not rp_sub_id:
+        return {"status": "failed_no_subscription"}
+
+    current_sub = await db.scalar(
+        select(Subscription).where(
+            Subscription.razorpay_subscription_id == rp_sub_id
+        )
+    )
+
+    if not current_sub:
+        return {"status": "failed_no_sub_record"}
+
+    now = ist_now_utc()
+
+    # ACTIVE → GRACE
+    if current_sub.status == "active":
+        current_sub.status = "grace"
+        current_sub.grace_ends_at = now + timedelta(days=3)
+        current_sub.is_active = False
+        await db.commit()
+        return {"status": "active_to_grace"}
+
+    # GRACE → EXTEND WINDOW
+    if current_sub.status == "grace":
+        current_sub.grace_ends_at = now + timedelta(days=3)
+        await db.commit()
+        return {"status": "grace_extended"}
+
+    return {"status": "failed_ignored"}
 
 
 # ======================================================
