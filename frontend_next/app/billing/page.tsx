@@ -3,11 +3,8 @@
 import { useEffect, useState } from "react";
 import {
   CreditCard,
-  CheckCircle,
-  AlertCircle,
   Clock,
   Loader2,
-  XCircle,
 } from "lucide-react";
 import { apiFetch } from "../lib/fetcher";
 
@@ -148,19 +145,16 @@ export default function BillingPage() {
               </div>
             </div>
 
-            {/* Renewal Date */}
             <p className="mt-4 text-sm text-gray-500">
               {expires ? `Renews on ${expires}` : "No renewal date"}
             </p>
 
-            {/* Grace Period */}
             {sub?.in_grace && (
               <p className="mt-1 text-xs text-amber-600">
                 In grace period (ends {formatDate(sub.grace_ends_at)})
               </p>
             )}
 
-            {/* Cancellation Note */}
             {sub?.cancelled_at && (
               <p className="mt-1 text-xs text-red-600 font-medium">
                 Will not renew after end of period
@@ -168,7 +162,7 @@ export default function BillingPage() {
             )}
           </div>
 
-          {status === "active" || status === "trial" || status === "grace" ? (
+          {(status === "active" || status === "trial" || status === "grace") ? (
             <button
               onClick={handleCancel}
               disabled={canceling}
@@ -183,7 +177,7 @@ export default function BillingPage() {
           )}
         </div>
 
-        {/* INVOICE CARD */}
+        {/* INVOICES CARD */}
         <div className="bg-white shadow-sm ring-1 ring-gray-900/5 sm:rounded-lg p-6 flex flex-col">
           <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">
             Invoices
@@ -219,6 +213,35 @@ export default function BillingPage() {
             </a>
           )}
         </div>
+      </div>
+
+      {/* RENEWAL HISTORY TIMELINE */}
+      <div className="bg-white shadow-sm ring-1 ring-gray-900/5 sm:rounded-lg p-6">
+        <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">
+          Renewal History
+        </h2>
+
+        {invoices.length === 0 ? (
+          <p className="text-sm text-gray-500 italic">
+            No renewal events recorded yet.
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {[...invoices]
+              .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+              .map((inv) => (
+                <div key={inv.id} className="relative pl-6">
+                  <div className="absolute left-0 top-1 h-2 w-2 rounded-full bg-indigo-600"></div>
+                  <p className="text-sm font-medium text-gray-900">
+                    {inv.currency} {inv.amount / 100}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {formatDate(inv.created_at)} • {inv.invoice_number}
+                  </p>
+                </div>
+              ))}
+          </div>
+        )}
       </div>
     </div>
   );
