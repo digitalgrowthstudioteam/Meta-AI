@@ -17,7 +17,7 @@ from app.billing.invoice_models import Invoice
 from app.billing.invoice_service import InvoicePDFService
 from app.admin.models_pricing import AdminPricingConfig
 from app.plans.models import Plan
-from app.plans.subscription_models import SubscriptionAddon
+from app.plans.subscription_models import Subscription, SubscriptionAddon
 
 router = APIRouter(prefix="/billing", tags=["Billing"])
 
