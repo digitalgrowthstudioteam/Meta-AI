@@ -17,9 +17,8 @@ router = APIRouter(prefix="/admin", tags=["Admin"])
 router.include_router(dashboard_router)
 router.include_router(user_router)
 router.include_router(billing_router)
-router.include_router(risk_router)
+router.include_router(plan_router)       # ← Move here
 router.include_router(pricing_router)
+router.include_router(risk_router)
 router.include_router(meta_router)
 router.include_router(audit_router)
-router.include_router(plan_router)
-
