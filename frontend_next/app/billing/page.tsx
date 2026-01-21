@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CreditCard, CheckCircle, AlertCircle, Clock, Loader2, XCircle } from "lucide-react";
+import {
+  CreditCard,
+  CheckCircle,
+  AlertCircle,
+  Clock,
+  Loader2,
+  XCircle,
+} from "lucide-react";
 import { apiFetch } from "../lib/fetcher";
 
 function formatDate(dateStr?: string | null) {
@@ -11,6 +18,32 @@ function formatDate(dateStr?: string | null) {
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const yyyy = d.getFullYear();
   return `${dd}/${mm}/${yyyy}`;
+}
+
+function StatusChip({ status }: { status: string }) {
+  const map: any = {
+    active: "bg-green-100 text-green-700",
+    trial: "bg-blue-100 text-blue-700",
+    grace: "bg-amber-100 text-amber-700",
+    expired: "bg-gray-100 text-gray-700",
+    cancelled: "bg-red-100 text-red-700",
+  };
+
+  const label = {
+    active: "Active",
+    trial: "Trial",
+    grace: "Grace",
+    expired: "Expired",
+    cancelled: "Cancelled",
+  }[status] || status;
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${map[status] || "bg-gray-100 text-gray-600"}`}
+    >
+      {label}
+    </span>
+  );
 }
 
 export default function BillingPage() {
@@ -79,7 +112,6 @@ export default function BillingPage() {
     );
   }
 
-  const active = !!sub;
   const planName = sub?.plan_name || "Free";
   const expires = sub?.ends_at ? formatDate(sub.ends_at) : null;
   const status = sub?.status || "none";
@@ -87,8 +119,12 @@ export default function BillingPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-semibold text-gray-900">Billing & Subscription</h1>
-        <p className="text-sm text-gray-500">Manage your plan and invoices.</p>
+        <h1 className="text-xl font-semibold text-gray-900">
+          Billing & Subscription
+        </h1>
+        <p className="text-sm text-gray-500">
+          Manage your plan and invoices.
+        </p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -103,22 +139,36 @@ export default function BillingPage() {
                 <p className="mt-2 text-3xl font-bold text-gray-900">
                   {planName}
                 </p>
+                <div className="mt-2">
+                  <StatusChip status={status} />
+                </div>
               </div>
               <div className="p-2 bg-indigo-50 rounded-lg">
                 <CreditCard className="h-6 w-6 text-indigo-600" />
               </div>
             </div>
 
+            {/* Renewal Date */}
             <p className="mt-4 text-sm text-gray-500">
               {expires ? `Renews on ${expires}` : "No renewal date"}
             </p>
 
-            <p className="mt-1 text-xs text-gray-400">
-              Status: <span className="font-medium text-gray-700">{status}</span>
-            </p>
+            {/* Grace Period */}
+            {sub?.in_grace && (
+              <p className="mt-1 text-xs text-amber-600">
+                In grace period (ends {formatDate(sub.grace_ends_at)})
+              </p>
+            )}
+
+            {/* Cancellation Note */}
+            {sub?.cancelled_at && (
+              <p className="mt-1 text-xs text-red-600 font-medium">
+                Will not renew after end of period
+              </p>
+            )}
           </div>
 
-          {active ? (
+          {status === "active" || status === "trial" || status === "grace" ? (
             <button
               onClick={handleCancel}
               disabled={canceling}
