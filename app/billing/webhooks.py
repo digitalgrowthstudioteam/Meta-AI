@@ -53,6 +53,9 @@ async def razorpay_webhook(
     payload = json.loads(body.decode())
     event = payload.get("event")
 
+    if event == "subscription.pending":
+        return await handle_subscription_pending(payload, db)
+
     if event == "subscription.activated":
         return await handle_subscription_activated(payload, db)
 
@@ -78,6 +81,46 @@ async def razorpay_webhook(
         return await handle_payment_failed(payload, db)
 
     return {"status": "ignored", "reason": "unsupported_event"}
+
+
+# ======================================================
+# subscription.pending
+# ======================================================
+async def handle_subscription_pending(payload, db: AsyncSession):
+    sub = payload["payload"]["subscription"]["entity"]
+    rp_id = sub["id"]
+
+    # Find existing subscription by razorpay_subscription_id
+    existing = await db.scalar(
+        select(Subscription).where(
+            Subscription.razorpay_subscription_id == rp_id
+        )
+    )
+
+    if existing:
+        # idempotent update
+        existing.status = "pending"
+        existing.is_active = False
+        await db.commit()
+        return {"status": "pending_updated"}
+
+    # If no existing record, create minimal pending record
+    pending_sub = Subscription(
+        user_id=sub.get("notes", {}).get("user_id"),
+        plan_id=sub.get("notes", {}).get("plan_id"),
+        status="pending",
+        billing_cycle="monthly",
+        starts_at=ist_now_utc(),
+        ends_at=None,
+        grace_ends_at=None,
+        is_trial=False,
+        is_active=False,
+        razorpay_subscription_id=rp_id,
+    )
+
+    db.add(pending_sub)
+    await db.commit()
+    return {"status": "pending_created"}
 
 
 # ======================================================
