@@ -53,6 +53,7 @@ from app.admin.ai_force_deactivate_routes import router as admin_ai_force_router
 from app.auth.session_routes import router as session_router
 from app.auth.session_routes import api_router as session_api_router
 from app.billing.routes import router as billing_router
+from app.plans.public_routes import router as public_plans_router
 
 # =========================
 # APP INITIALIZATION
@@ -117,6 +118,7 @@ app.include_router(admin_billing_timeline_router, prefix="/api")
 app.include_router(admin_user_ai_router, prefix="/api")
 app.include_router(admin_ai_limit_router, prefix="/api")
 app.include_router(admin_ai_force_router, prefix="/api")
+app.include_router(public_plans_router, prefix="/api")
 
 # =========================
 # AUTO-ADMIN PROMOTION LOGIC
