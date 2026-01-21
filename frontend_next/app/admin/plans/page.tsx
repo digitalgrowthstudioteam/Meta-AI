@@ -2,31 +2,25 @@
 
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { apiFetch } from "@/app/lib/fetcher";
+import { apiFetch } from "../../lib/fetcher";
 
 type PlanRow = {
   id: number;
   name: string;
   monthly_price: number;
   yearly_price: number | null;
-  currency: string;
   max_ad_accounts: number | null;
   max_ai_campaigns: number;
-  auto_allowed: boolean;
-  manual_allowed: boolean;
   yearly_allowed: boolean;
   is_hidden: boolean;
   is_active: boolean;
-  is_custom?: boolean;
 };
 
-// Local editable shape (UI-level)
 type EditablePlan = {
   id: number;
   code: string;
   monthly_price: number;
   yearly_price: number;
-  currency: string;
   ad_account_limit: number;
   campaign_limit: number;
   is_custom: boolean;
@@ -36,9 +30,6 @@ export default function AdminPlansPage() {
   const [plans, setPlans] = useState<EditablePlan[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // =========================================
-  // FETCH PLANS FROM BACKEND
-  // =========================================
   useEffect(() => {
     const load = async () => {
       try {
@@ -52,9 +43,8 @@ export default function AdminPlansPage() {
         const mapped = data.map((p) => ({
           id: p.id,
           code: p.name.toLowerCase(),
-          monthly_price: Math.round(p.monthly_price / 100), // paise → rupees
+          monthly_price: Math.round(p.monthly_price / 100),
           yearly_price: p.yearly_price ? Math.round(p.yearly_price / 100) : 0,
-          currency: "INR",
           ad_account_limit: p.max_ad_accounts ?? 0,
           campaign_limit: p.max_ai_campaigns ?? 0,
           is_custom: p.name.toLowerCase() === "enterprise",
@@ -71,29 +61,22 @@ export default function AdminPlansPage() {
     load();
   }, []);
 
-  // =========================================
-  // UPDATE LOCAL STATE ON EDIT
-  // =========================================
   const onChange = (index: number, field: keyof EditablePlan, value: string | number) => {
     setPlans((prev) => {
       const next = [...prev];
-      (next[index] as any)[field] = field.includes("price") || field.includes("limit")
-        ? Number(value)
-        : value;
+      (next[index] as any)[field] =
+        field.includes("price") || field.includes("limit") ? Number(value) : value;
       return next;
     });
   };
 
-  // =========================================
-  // SAVE CHANGES TO BACKEND
-  // =========================================
   const onSave = async () => {
     try {
       toast.loading("Saving...", { id: "saving" });
 
       for (const p of plans) {
         const body = {
-          monthly_price: p.monthly_price * 100, // rupees → paise
+          monthly_price: p.monthly_price * 100,
           yearly_price: p.yearly_price ? p.yearly_price * 100 : null,
           max_ad_accounts: p.ad_account_limit,
           max_ai_campaigns: p.campaign_limit,
