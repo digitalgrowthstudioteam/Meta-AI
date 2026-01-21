@@ -321,3 +321,77 @@ async def download_invoice(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{invoice.invoice_number}.pdf"'},
     )
+
+# =====================================================
+# BILLING STATUS (USER-SIDE)
+# =====================================================
+@router.get("/status")
+async def billing_status(
+    current_user: User = Depends(require_user),
+):
+    sub = getattr(current_user, "_subscription", None)
+    if not sub:
+        return {"subscription": None}
+    return {"subscription": sub}
+
+
+# =====================================================
+# CANCEL SUBSCRIPTION (END OF CYCLE)
+# =====================================================
+@router.post("/cancel")
+async def cancel_subscription(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    # Load latest active/trial/grace subscription
+    result = await db.execute(
+        select(Subscription)
+        .where(
+            Subscription.user_id == current_user.id,
+            Subscription.status.in_(["active", "trial", "grace"]),
+        )
+        .order_by(Subscription.created_at.desc())
+        .limit(1)
+    )
+    sub = result.scalar_one_or_none()
+    if not sub:
+        raise HTTPException(400, "No active subscription to cancel")
+
+    now = datetime.utcnow()
+    cancelled_at_iso = now.isoformat()
+
+    # Recurring via Razorpay (monthly)
+    if sub.razorpay_subscription_id:
+        service = BillingService()
+        await service.resolve_credentials(db=db)
+
+        # Cancel at cycle end (user keeps access until ends_at)
+        try:
+            service.client.subscription.cancel(
+                sub.razorpay_subscription_id,
+                {"cancel_at_cycle_end": 1},
+            )
+        except Exception as e:
+            raise HTTPException(500, f"Razorpay cancel failed: {e}")
+
+        # Mark cancellation timestamp, but don't change status yet
+        sub.cancelled_at = now
+        await db.commit()
+
+        return {
+            "status": "scheduled_for_cycle_end",
+            "billing_type": "recurring",
+            "ends_at": sub.ends_at.isoformat() if sub.ends_at else None,
+            "cancelled_at": cancelled_at_iso,
+        }
+
+    # Manual (yearly prepaid etc) — manual_cycle_end (no immediate cutoff)
+    sub.cancelled_at = now
+    await db.commit()
+
+    return {
+        "status": "scheduled_for_cycle_end",
+        "billing_type": "manual",
+        "ends_at": sub.ends_at.isoformat() if sub.ends_at else None,
+        "cancelled_at": cancelled_at_iso,
+    }
