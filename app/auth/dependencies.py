@@ -32,6 +32,7 @@ async def _get_global_settings(db: AsyncSession) -> GlobalSettings | None:
 
 # -------------------------------------------------
 # INTERNAL: LOAD ACTIVE SUBSCRIPTION (AUTO EXPIRE)
+# + Extended Stripe-style metadata
 # -------------------------------------------------
 async def _load_active_subscription(db: AsyncSession, user: User) -> dict | None:
     now = datetime.utcnow()
@@ -52,12 +53,27 @@ async def _load_active_subscription(db: AsyncSession, user: User) -> dict | None
 
     sub, plan = row[0], row[1]
 
-    # Auto-expire if past ends_at and not never_expires
+    # Auto-expire if ends_at passed & not never-expires
     if sub.ends_at and not sub.never_expires and sub.ends_at < now:
         sub.status = "expired"
         sub.is_active = False
         await db.commit()
         return None
+
+    # Extended Stripe-style metadata
+    in_grace = (sub.status == "grace")
+    days_remaining = None
+    remaining_grace_days = None
+    is_expiring = False
+
+    if sub.ends_at:
+        delta = sub.ends_at - now
+        days_remaining = max(delta.days, 0)
+        is_expiring = (0 <= days_remaining <= 3)
+
+    if sub.grace_ends_at:
+        grace_delta = sub.grace_ends_at - now
+        remaining_grace_days = max(grace_delta.days, 0)
 
     return {
         "id": str(sub.id),
@@ -70,7 +86,14 @@ async def _load_active_subscription(db: AsyncSession, user: User) -> dict | None
         "auto_allowed": plan.auto_allowed,
         "starts_at": sub.starts_at,
         "ends_at": sub.ends_at,
+        "grace_ends_at": sub.grace_ends_at,
         "never_expires": sub.never_expires,
+
+        # Stripe-style extended fields:
+        "days_remaining": days_remaining,
+        "remaining_grace_days": remaining_grace_days,
+        "in_grace": in_grace,
+        "is_expiring": is_expiring,
     }
 
 
@@ -163,6 +186,7 @@ async def get_current_user(
 
     # -------------------------------------------------
     # SUBSCRIPTION ENFORCEMENT (NON-ADMIN USERS)
+    # Stripe-style grace logic (Option-C)
     # -------------------------------------------------
     sub = await _load_active_subscription(db, user)
     user._subscription = sub
