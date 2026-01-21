@@ -38,16 +38,20 @@ export default function AdminPlansPage() {
           toast.error("Failed to load plans");
           return;
         }
+
         const data: PlanRow[] = await res.json();
 
-        const mapped = data.map((p) => ({
+        // Ignore FREE plan from UI
+        const filtered = data.filter((p) => p.name.toLowerCase() !== "free");
+
+        const mapped = filtered.map((p) => ({
           id: p.id,
           code: p.name.toLowerCase(),
           monthly_price: Math.round(p.monthly_price / 100),
           yearly_price: p.yearly_price ? Math.round(p.yearly_price / 100) : 0,
           ad_account_limit: p.max_ad_accounts ?? 0,
           campaign_limit: p.max_ai_campaigns ?? 0,
-          is_custom: p.name.toLowerCase() === "enterprise",
+          is_custom: p.name.toLowerCase() === "enterprise"
         }));
 
         setPlans(mapped);
@@ -65,7 +69,9 @@ export default function AdminPlansPage() {
     setPlans((prev) => {
       const next = [...prev];
       (next[index] as any)[field] =
-        field.includes("price") || field.includes("limit") ? Number(value) : value;
+        field.includes("price") || field.includes("limit")
+          ? Number(value)
+          : value;
       return next;
     });
   };
@@ -79,13 +85,13 @@ export default function AdminPlansPage() {
           monthly_price: p.monthly_price * 100,
           yearly_price: p.yearly_price ? p.yearly_price * 100 : null,
           max_ad_accounts: p.ad_account_limit,
-          max_ai_campaigns: p.campaign_limit,
+          max_ai_campaigns: p.campaign_limit
         };
 
         const res = await apiFetch(`/admin/plans/${p.id}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
+          body: JSON.stringify(body)
         });
 
         if (!res.ok) {
@@ -131,7 +137,6 @@ export default function AdminPlansPage() {
                 <td className="whitespace-nowrap py-4 pl-4 pr-3 font-medium text-gray-900 sm:pl-6 capitalize">
                   {p.code}
                 </td>
-
                 <td className="px-3 py-4">
                   {p.is_custom ? (
                     <span className="text-gray-500">Custom Only</span>
@@ -144,7 +149,6 @@ export default function AdminPlansPage() {
                     />
                   )}
                 </td>
-
                 <td className="px-3 py-4">
                   {p.is_custom ? (
                     <span className="text-gray-500">Custom Only</span>
@@ -157,7 +161,6 @@ export default function AdminPlansPage() {
                     />
                   )}
                 </td>
-
                 <td className="px-3 py-4">
                   <input
                     type="number"
@@ -166,7 +169,6 @@ export default function AdminPlansPage() {
                     className="w-24 rounded border border-gray-300 px-2 py-1 text-sm"
                   />
                 </td>
-
                 <td className="px-3 py-4">
                   <input
                     type="number"
