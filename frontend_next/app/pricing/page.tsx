@@ -44,6 +44,9 @@ export default function PricingPage() {
     return <div className="p-4 text-sm text-gray-600">Loading plans...</div>;
   }
 
+  // 🔥 Hide FREE plan here
+  const visiblePlans = plans.filter(p => p.code !== "free");
+
   return (
     <div className="space-y-8 p-4">
       <div>
@@ -70,7 +73,7 @@ export default function PricingPage() {
               ? "bg-blue-600 text-white"
               : "bg-gray-100 text-gray-700"
           }`}
-          disabled={!plans.some((p) => p.yearly_allowed)}
+          disabled={!visiblePlans.some((p) => p.yearly_allowed)}
         >
           Yearly
         </button>
@@ -78,7 +81,7 @@ export default function PricingPage() {
 
       {/* Pricing Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {plans.map((plan) => {
+        {visiblePlans.map((plan) => {
           const pricePaise =
             billingCycle === "monthly" || !plan.yearly_allowed
               ? plan.monthly_price
