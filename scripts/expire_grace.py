@@ -2,25 +2,22 @@
 """
 Auto-expire grace subscriptions.
 
-Logic:
- - status = 'grace'
- - grace_ends_at < now()
- => status='expired', is_active=False
+Fix: convert timezone-aware UTC -> naive UTC for PG.
 """
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from app.core.db_session import AsyncSessionLocal
 from app.plans.subscription_models import Subscription
 
 
 async def expire_grace_subscriptions():
-    now = datetime.now(timezone.utc)
+    # PG stores timestamps as naive UTC → use naive datetime.utcnow()
+    now = datetime.utcnow()
 
     async with AsyncSessionLocal() as db:
-        # find grace subs that passed grace window
         stmt = (
             select(Subscription)
             .where(Subscription.status == "grace")
