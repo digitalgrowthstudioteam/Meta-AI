@@ -4,13 +4,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db_session import get_db
 from app.auth.dependencies import require_user
 from app.users.models import User
-from app.admin.plan_service import PlanService
-from app.core.config import settings
+from app.admin.rbac import assert_admin_permission
+from app.plans.models import Plan
 
 router = APIRouter(prefix="/plans", tags=["Admin Plans"])
 
 ALLOWED_ADMIN_ROLES = {"admin", "super_admin", "support_admin", "billing_admin"}
-
 
 def require_admin(user: User):
     if user.role not in ALLOWED_ADMIN_ROLES:
@@ -24,27 +23,27 @@ async def list_plans(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
-    plans = await PlanService.list_plans(db)
+    assert_admin_permission(admin_user=current_user, permission="billing:read")
 
-    currency = settings.BILLING_CURRENCY or "INR"
+    result = await db.execute(
+        Plan.__table__.select().order_by(Plan.id.asc())
+    )
+    rows = result.fetchall()
 
     return [
         {
-            "id": p.id,
-            "name": p.name,
-            "code": p.name.lower().replace(" ", "_"),
-            "monthly_price": p.monthly_price,
-            "yearly_price": p.yearly_price,
-            "max_ad_accounts": p.max_ad_accounts,
-            "max_ai_campaigns": p.max_ai_campaigns,
-            "is_active": p.is_active,
-            "is_hidden": p.is_hidden,
-            "auto_allowed": p.auto_allowed,
-            "manual_allowed": p.manual_allowed,
-            "yearly_allowed": p.yearly_allowed,
-            "currency": currency,
+            "id": r.id,
+            "name": r.name,
+            "code": r.name.lower(),
+            "monthly_price": r.monthly_price,
+            "yearly_price": r.yearly_price,
+            "max_ad_accounts": r.max_ad_accounts,
+            "max_ai_campaigns": r.max_ai_campaigns,
+            "yearly_allowed": r.yearly_allowed,
+            "is_hidden": r.is_hidden,
+            "is_active": r.is_active,
         }
-        for p in plans
+        for r in rows
     ]
 
 
@@ -56,5 +55,23 @@ async def update_plan(
     current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
-    await PlanService.update_plan(db, plan_id, payload)
+    assert_admin_permission(admin_user=current_user, permission="billing:write")
+
+    result = await db.get(Plan, plan_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Plan not found")
+
+    if "monthly_price" in payload:
+        result.monthly_price = int(payload["monthly_price"])
+
+    if "yearly_price" in payload:
+        result.yearly_price = int(payload["yearly_price"]) if payload["yearly_price"] else None
+
+    if "max_ad_accounts" in payload:
+        result.max_ad_accounts = int(payload["max_ad_accounts"])
+
+    if "max_ai_campaigns" in payload:
+        result.max_ai_campaigns = int(payload["max_ai_campaigns"])
+
+    await db.commit()
     return {"status": "ok"}
