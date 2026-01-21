@@ -37,7 +37,7 @@ export default function PricingPage() {
   }, []);
 
   const handleSelect = (planCode: string) => {
-    router.push(`/checkout/plan/${planCode}?period=${billingCycle}`);
+    router.push(`/checkout/plan/${planCode}?cycle=${billingCycle}`);
   };
 
   if (loading) {
