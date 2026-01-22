@@ -324,7 +324,7 @@ async def download_invoice(
 
 
 # =====================================================
-# BILLING STATUS (USER-SIDE) — UPDATED FOR TRIAL
+# BILLING STATUS (USER-SIDE) — TRIAL + GRACE + EXPIRE
 # =====================================================
 @router.get("/status")
 async def billing_status(
@@ -339,39 +339,57 @@ async def billing_status(
         .join(Plan, Plan.id == Subscription.plan_id)
         .where(
             Subscription.user_id == current_user.id,
-            Subscription.status.in_(["active", "trial", "grace"]),
+            Subscription.is_active.is_(True),
         )
         .order_by(Subscription.created_at.desc())
         .limit(1)
     )
-
     row = result.first()
 
     if not row:
         return {
-            "subscription": None,
             "status": "none",
+            "block": {"soft_block": False, "hard_block": False},
+            "trial_days_left": None,
+            "grace_days_left": None,
+            "trial_ends_at": None,
+            "grace_ends_at": None,
         }
 
     sub, plan = row[0], row[1]
 
-    # Trial metadata
+    # -------- STATE CALC --------
+    status = sub.status
     trial_days_left = None
+    grace_days_left = None
+
     if sub.status == "trial" and sub.trial_end:
-        trial_days_left = (sub.trial_end - today).days
+        trial_days_left = max((sub.trial_end - today).days, 0)
+
+    if sub.status == "grace" and sub.grace_ends_at:
+        grace_days_left = max((sub.grace_ends_at.date() - today).days, 0)
+
+        if grace_days_left <= 0:
+            status = "expired"
+
+    # -------- OUTPUT --------
+    block = {
+        "soft_block": status in ("grace", "expired"),
+        "hard_block": status == "expired",
+    }
 
     return {
-        "subscription": {
-            "id": str(sub.id),
-            "status": sub.status,
-            "plan_id": sub.plan_id,
-            "plan_name": plan.name,
-            "is_trial": sub.status == "trial",
-            "trial_start": sub.trial_start,
-            "trial_end": sub.trial_end,
-            "trial_days_left": trial_days_left,
-            "ends_at": sub.ends_at,
-        }
+        "status": status,
+        "plan": {
+            "id": sub.plan_id,
+            "name": plan.name,
+            "billing_cycle": sub.billing_cycle,
+        },
+        "trial_days_left": trial_days_left,
+        "grace_days_left": grace_days_left,
+        "trial_ends_at": sub.trial_end,
+        "grace_ends_at": sub.grace_ends_at,
+        "block": block,
     }
 
 
