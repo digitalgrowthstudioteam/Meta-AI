@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { apiFetch } from "../../../lib/fetcher";
+import { apiFetch } from "@/app/lib/fetcher";
 
 type PublicPlan = {
   id: number;
@@ -29,7 +29,7 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     const loadPlans = async () => {
       try {
-        const res = await apiFetch("/api/public/plans");
+        const res = await apiFetch("/api/public/plans", { credentials: "include" });
         const data = await res.json();
         setPlans(data || []);
       } catch (err) {
@@ -77,6 +77,7 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
     });
 
   const onCheckout = async () => {
+    if (!plan) return;
     setBusy(true);
 
     const loaded = await loadRazorpayScript();
@@ -89,7 +90,10 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
     try {
       const backendResp = await apiFetch(
         `/api/billing/subscription/manual?plan_id=${plan.id}&cycle=${cycle}`,
-        { method: "POST" }
+        {
+          method: "POST",
+          credentials: "include"
+        }
       );
 
       if (!backendResp.ok) {
@@ -113,6 +117,7 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
           try {
             const verifyResp = await apiFetch("/api/billing/razorpay/verify", {
               method: "POST",
+              credentials: "include",
               body: JSON.stringify({
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
@@ -134,11 +139,7 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
           ondismiss: function () {
             router.push("/billing/failure");
           },
-        },
-        customer: {
-          name: "Billing User",
-          email: "billing@example.com",
-        },
+        }
       };
 
       const rzp = new (window as any).Razorpay(options);
@@ -181,7 +182,7 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
 
       <button
         onClick={onCheckout}
-        disabled={busy}
+        disabled={busy || !plan}
         className="w-full rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50"
       >
         {busy ? "Processing..." : "Proceed to Payment"}
