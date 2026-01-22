@@ -12,6 +12,7 @@ from app.core.db_session import get_db
 from app.auth.dependencies import (
     get_current_user,
     forbid_impersonated_writes,
+    require_user,
 )
 from app.users.models import User
 from app.campaigns.service import CampaignService
@@ -158,7 +159,6 @@ async def campaigns_usage(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
-    # Fetch active subscription
     sub = await db.scalar(
         select(Subscription)
         .where(
@@ -177,7 +177,6 @@ async def campaigns_usage(
             "ai_campaigns_limit": 0,
         }
 
-    # Count total campaigns (non archived)
     campaigns_used = await db.scalar(
         select(func.count(Campaign.id)).where(
             Campaign.user_id == current_user.id,
@@ -185,7 +184,6 @@ async def campaigns_usage(
         )
     ) or 0
 
-    # Count only AI-enabled campaigns (OPTION C2)
     ai_campaigns_used = await db.scalar(
         select(func.count(Campaign.id)).where(
             Campaign.user_id == current_user.id,
@@ -216,7 +214,6 @@ async def toggle_ai(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(forbid_impersonated_writes),
 ):
-    # === Load campaign first ===
     campaign = await CampaignService.get_campaign(
         db=db,
         user_id=current_user.id,
@@ -228,7 +225,6 @@ async def toggle_ai(
             detail="Campaign not found",
         )
 
-    # === ENFORCEMENT ONLY WHEN ENABLING AI ===
     if payload.enable:
         try:
             await PlanEnforcementService.assert_ai_allowed(
