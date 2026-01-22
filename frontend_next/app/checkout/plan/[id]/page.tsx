@@ -104,7 +104,7 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
       const data = await backendResp.json();
       const key = data.key;
 
-      const options: any = {
+      const rzp = new (window as any).Razorpay({
         key,
         name: "Meta-AI Billing",
         description: `${plan.name} (${cycle})`,
@@ -115,14 +115,15 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
         },
         handler: async function (response: any) {
           try {
-            const verifyResp = await apiFetch("/api/billing/razorpay/verify", {
+            const form = new FormData();
+            form.append("razorpay_order_id", response.razorpay_order_id);
+            form.append("razorpay_payment_id", response.razorpay_payment_id);
+            form.append("razorpay_signature", response.razorpay_signature);
+
+            const verifyResp = await fetch("/api/billing/razorpay/verify", {
               method: "POST",
+              body: form,
               credentials: "include",
-              body: JSON.stringify({
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-              }),
             });
 
             if (verifyResp.ok) {
@@ -139,10 +140,9 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
           ondismiss: function () {
             router.push("/billing/failure");
           },
-        }
-      };
+        },
+      });
 
-      const rzp = new (window as any).Razorpay(options);
       rzp.open();
     } catch (err) {
       console.error("Checkout failed:", err);
