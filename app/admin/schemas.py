@@ -49,3 +49,27 @@ class AdminPricingConfigResponse(AdminPricingConfigBase):
     created_by_admin_id: UUID
     created_at: datetime
     activated_at: Optional[datetime] = None
+
+# =====================================================
+# PHASE 10 — USAGE OVERRIDES (NEW)
+# =====================================================
+
+class UsageOverrideUpsert(BaseModel):
+    key: str  # campaigns | ad_accounts | team_members | credits
+    value: int
+    expires_at: datetime | None = None
+    reason: str
+
+
+class UsageOverrideDelete(BaseModel):
+    key: str
+    reason: str
+
+
+class UsageOverrideResponse(BaseModel):
+    key: str
+    value: int
+    expires_at: datetime | None
+    updated_by: UUID | None
+    updated_at: datetime | None
+
