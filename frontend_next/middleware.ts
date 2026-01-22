@@ -2,19 +2,20 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 const PUBLIC_PATHS = ["/", "/login", "/verify"];
-
-// 🔓 Razorpay/Webhook bypass
 const WEBHOOK_PATHS = ["/billing/webhook"];
+
+// Pages allowed when trial expired
+const TRIAL_ALLOWED = ["/billing", "/logout"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // 🔓 Allow webhook paths through without auth or redirects
+  // 🔓 Allow webhook paths through without auth
   if (WEBHOOK_PATHS.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
 
-  // System/static/assets → always allow
+  // System/static/assets bypass
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/static") ||
@@ -30,12 +31,13 @@ export function middleware(request: NextRequest) {
   // Cookies
   const sessionCookie = request.cookies.get("meta_ai_session")?.value;
   const roleCookie = request.cookies.get("meta_ai_role")?.value;
+  const trialCookie = request.cookies.get("meta_ai_trial_status")?.value;
+  const isTrialExpired = trialCookie === "expired";
 
   // =====================================================
   // 🔒 ADMIN PROTECTION
   // =====================================================
   if (pathname.startsWith("/admin")) {
-    // Not logged in → go login
     if (!sessionCookie) {
       const loginUrl = request.nextUrl.clone();
       loginUrl.pathname = "/login";
@@ -43,24 +45,20 @@ export function middleware(request: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
 
-    // Role not loaded yet (first request) → allow & backend will set role cookie
-    if (!roleCookie) {
-      return NextResponse.next();
-    }
+    // First load → allow context to set role cookie
+    if (!roleCookie) return NextResponse.next();
 
-    // Logged in but not admin → redirect to dashboard
     if (roleCookie !== "admin") {
       const dashUrl = request.nextUrl.clone();
       dashUrl.pathname = "/dashboard";
       return NextResponse.redirect(dashUrl);
     }
 
-    // Admin authenticated
     return NextResponse.next();
   }
 
   // =====================================================
-  // 🔐 PUBLIC ROUTES
+  // 🔐 AUTH PROTECTION FOR USER
   // =====================================================
   if (!sessionCookie && !PUBLIC_PATHS.includes(pathname)) {
     const loginUrl = request.nextUrl.clone();
@@ -69,7 +67,22 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // If logged in but on login/home → send to dashboard
+  // =====================================================
+  // 🎯 TRIAL ENFORCEMENT (PHASE-8)
+  // =====================================================
+  if (sessionCookie && isTrialExpired) {
+    const allowed = TRIAL_ALLOWED.some((p) => pathname.startsWith(p));
+    if (!allowed) {
+      const billingUrl = request.nextUrl.clone();
+      billingUrl.pathname = "/billing";
+      billingUrl.searchParams.set("upgrade", "1");
+      return NextResponse.redirect(billingUrl);
+    }
+  }
+
+  // =====================================================
+  // ↪️ POST-LOGIN REDIRECT
+  // =====================================================
   if (sessionCookie && (pathname === "/" || pathname === "/login")) {
     const dashUrl = request.nextUrl.clone();
     dashUrl.pathname = "/dashboard";
@@ -79,9 +92,6 @@ export function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
-// =====================================================
-// ⚙️ CONFIG (exclude APIs, static assets & webhook)
-// =====================================================
 export const config = {
   matcher: [
     "/((?!_next|static|favicon.ico|manifest|robots.txt|sitemap|api|billing/webhook).*)",
