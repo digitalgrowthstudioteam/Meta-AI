@@ -135,6 +135,12 @@ class Subscription(Base):
         default=0,
     )
 
+    ad_account_limit_snapshot: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
+
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_by_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     assigned_by_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
