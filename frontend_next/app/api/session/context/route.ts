@@ -29,7 +29,8 @@ export async function GET(req: NextRequest) {
   const adminViewCookie = req.cookies.get("admin_view")?.value;
 
   // Determine admin role
-  const isAdmin = data?.user?.role === "admin" || data?.user?.is_admin === true;
+  const isAdmin =
+    data?.user?.role === "admin" || data?.user?.is_admin === true;
 
   data.is_admin = isAdmin;
   data.admin_view =
@@ -52,17 +53,34 @@ export async function GET(req: NextRequest) {
   }
 
   // =====================================================
-  //  🔑 ROLE COOKIE MANAGEMENT (drives middleware)
+  // 🔑 FRONTEND COOKIES (DRIVE MIDDLEWARE)
   // =====================================================
-
   const response = NextResponse.json(data, { status: res.status });
 
+  // ---- ROLE COOKIE ----
   if (!data.user) {
-    // No session → remove cookie
     response.cookies.delete("meta_ai_role");
   } else {
-    // Set role cookie for middleware/admin logic
     response.cookies.set("meta_ai_role", isAdmin ? "admin" : "user", {
+      httpOnly: false,
+      sameSite: "lax",
+      path: "/",
+    });
+  }
+
+  // ---- TRIAL STATUS COOKIE (PHASE-8) ----
+  let trialStatus = "none";
+
+  const sub = data?.user?.subscription;
+  if (sub) {
+    if (sub.status === "trial") trialStatus = "active";
+    else if (sub.status === "expired" && sub.is_trial === true) trialStatus = "expired";
+  }
+
+  if (!data.user) {
+    response.cookies.delete("meta_ai_trial_status");
+  } else {
+    response.cookies.set("meta_ai_trial_status", trialStatus, {
       httpOnly: false,
       sameSite: "lax",
       path: "/",
