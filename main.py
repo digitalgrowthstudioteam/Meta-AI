@@ -32,6 +32,7 @@ from app.meta_insights.routes import router as meta_insights_router
 from app.reports.routes import router as reports_router
 from app.dashboard.routes import router as dashboard_router
 from app.ai_engine.routes import router as ai_router
+from app.usage.routes import router as usage_router
 
 # 🔥 REAL admin router (merged)
 from app.admin.routes import router as admin_main_router
@@ -95,6 +96,7 @@ app.include_router(session_api_router, prefix="/api")  # enables /api/session/co
 app.include_router(campaigns_router, prefix="/api")
 app.include_router(billing_router, prefix="/api")
 app.include_router(webhook_router, prefix="/api")
+app.include_router(usage_router, prefix="/api")
 
 # Admin Core
 app.include_router(admin_main_router, prefix="/api")       # contains /admin/*
