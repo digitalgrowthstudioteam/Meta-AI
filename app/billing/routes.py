@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from datetime import datetime, timedelta, date
 from uuid import UUID
 
@@ -14,6 +14,8 @@ from app.billing.invoice_service import InvoicePDFService
 from app.admin.models_pricing import AdminPricingConfig
 from app.plans.models import Plan
 from app.plans.subscription_models import Subscription, SubscriptionAddon
+from app.campaigns.models import Campaign
+from app.meta_api.models import UserMetaAdAccount
 
 router = APIRouter(prefix="/billing", tags=["Billing"])
 
@@ -320,6 +322,72 @@ async def download_invoice(
 
 
 # =====================================================
+# PHASE 9 — USAGE SUMMARY (NEW)
+# =====================================================
+@router.get("/usage")
+async def billing_usage(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    result = await db.execute(
+        select(Subscription).where(
+            Subscription.user_id == current_user.id,
+            Subscription.is_active.is_(True),
+        )
+        .order_by(Subscription.created_at.desc())
+        .limit(1)
+    )
+    sub = result.scalar_one_or_none()
+
+    if not sub:
+        return {
+            "campaigns": {"used": 0, "limit": 0},
+            "ad_accounts": {"used": 0, "limit": 0},
+            "ai_campaigns": {"used": 0, "limit": 0},
+        }
+
+    # Campaigns Used
+    campaigns_used = await db.scalar(
+        select(func.count(Campaign.id)).where(
+            Campaign.user_id == current_user.id,
+            Campaign.is_archived.is_(False),
+        )
+    ) or 0
+
+    # Ad Accounts Used
+    ad_accounts_used = await db.scalar(
+        select(func.count(UserMetaAdAccount.meta_ad_account_id)).where(
+            UserMetaAdAccount.user_id == current_user.id,
+            UserMetaAdAccount.is_selected.is_(True),
+        )
+    ) or 0
+
+    # AI Campaigns Used
+    ai_campaigns_used = await db.scalar(
+        select(func.count(Campaign.id)).where(
+            Campaign.user_id == current_user.id,
+            Campaign.ai_active.is_(True),
+            Campaign.is_archived.is_(False),
+        )
+    ) or 0
+
+    return {
+        "campaigns": {
+            "used": campaigns_used,
+            "limit": sub.campaign_limit_snapshot or 0,
+        },
+        "ad_accounts": {
+            "used": ad_accounts_used,
+            "limit": sub.ad_account_limit_snapshot or 0,
+        },
+        "ai_campaigns": {
+            "used": ai_campaigns_used,
+            "limit": sub.ai_campaign_limit_snapshot or 0,
+        },
+    }
+
+
+# =====================================================
 # BILLING STATUS (USER-SIDE) — FINAL PHASE-8 LOGIC
 # =====================================================
 @router.get("/status")
@@ -372,7 +440,6 @@ async def billing_status(
     # ===========================
     if status == "active" and sub.ends_at:
         if now > sub.ends_at:
-            # Enter grace (soft block)
             status = "grace"
             grace_deadline = sub.ends_at + timedelta(days=3)
         else:
@@ -430,6 +497,7 @@ async def cancel_subscription(
         .where(
             Subscription.user_id == current_user.id,
             Subscription.status.in_(["active", "trial", "grace"]),
+
         )
         .order_by(Subscription.created_at.desc())
         .limit(1)
