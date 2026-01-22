@@ -29,41 +29,26 @@ type AdAccount = {
 };
 
 type SessionContext = {
-  user: {
+  user?: {
     id: string;
     email: string;
     is_admin: boolean;
     is_impersonated: boolean;
-  };
+  } | null;
   ad_accounts?: AdAccount[];
+  active_ad_account_id?: string | null;
 };
-
-/* -----------------------------------
- * COOKIE HELPERS
- * ----------------------------------- */
-const COOKIE_KEY = "selected_ad_account";
-
-function getCookie(name: string): string | null {
-  if (typeof document === "undefined") return null;
-  const match = document.cookie.match(new RegExp("(^| )" + name + "=([^;]+)"));
-  return match ? match[2] : null;
-}
-
-function setCookie(name: string, value: string) {
-  if (typeof document === "undefined") return;
-  document.cookie = `${name}=${value}; path=/; max-age=31536000`;
-}
 
 /* -----------------------------------
  * PAGE
  * ----------------------------------- */
 export default function CampaignsPage() {
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [session, setSession] = useState<SessionContext | null>(null);
 
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [usage, setUsage] = useState<Usage | null>(null);
-  const [loadingUsage, setLoadingUsage] = useState(false);
 
+  const [loadingUsage, setLoadingUsage] = useState(false);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -108,21 +93,10 @@ export default function CampaignsPage() {
   };
 
   /* -----------------------------------
-   * SELECTED ACCOUNT
-   * ----------------------------------- */
-  const getSelectedAccountId = () => {
-    const cookieId = getCookie(COOKIE_KEY);
-    if (cookieId) return cookieId;
-    const first = session?.ad_accounts?.[0]?.id ?? null;
-    if (first) setCookie(COOKIE_KEY, first);
-    return first;
-  };
-
-  /* -----------------------------------
    * LOAD CAMPAIGNS
    * ----------------------------------- */
   const loadCampaigns = async () => {
-    const selected = getSelectedAccountId();
+    const selected = session?.active_ad_account_id;
     if (!selected) return;
 
     try {
@@ -157,7 +131,10 @@ export default function CampaignsPage() {
   /* -----------------------------------
    * EFFECTS
    * ----------------------------------- */
-  useEffect(() => { loadSession(); }, []);
+  useEffect(() => {
+    loadSession();
+  }, []);
+
   useEffect(() => {
     if (!session) return;
     loadUsage();
@@ -165,24 +142,29 @@ export default function CampaignsPage() {
   }, [session, statusFilter, aiFilter, objectiveFilter, page]);
 
   /* -----------------------------------
-   * SWITCH ACCOUNT
+   * SWITCH ACCOUNT (COOKIE-BASED)
    * ----------------------------------- */
-  const switchAdAccount = (accountId: string) => {
-    setCookie(COOKIE_KEY, accountId);
-    setPage(1);
-    loadCampaigns();
+  const switchAdAccount = async (accountId: string) => {
+    try {
+      await apiFetch(`/api/session/set-active`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ account_id: accountId }),
+      });
+      await loadSession();
+      setPage(1);
+    } catch {
+      toast.error("Failed to switch account");
+    }
   };
 
   /* -----------------------------------
-   * SYNC CAMPAIGNS
+   * SYNC CAMPAIGNS — COOKIE ONLY
    * ----------------------------------- */
   const syncCampaigns = async () => {
-    const selected = getSelectedAccountId();
-    if (!selected) return;
-
     setSyncing(true);
     try {
-      await apiFetch(`/api/campaigns/sync?account_id=${selected}`, {
+      await apiFetch(`/api/campaigns/sync`, {
         method: "POST",
         cache: "no-store",
       });
@@ -197,16 +179,17 @@ export default function CampaignsPage() {
   };
 
   /* -----------------------------------
-   * TOGGLE AI (with enforcement errors)
+   * TOGGLE AI
    * ----------------------------------- */
   const toggleAI = async (campaign: Campaign) => {
     if (togglingId) return;
     const nextValue = !campaign.ai_active;
     setTogglingId(campaign.id);
 
-    // optimistic UI
     setCampaigns((prev) =>
-      prev.map((c) => (c.id === campaign.id ? { ...c, ai_active: nextValue } : c))
+      prev.map((c) =>
+        c.id === campaign.id ? { ...c, ai_active: nextValue } : c
+      )
     );
 
     try {
@@ -217,18 +200,17 @@ export default function CampaignsPage() {
       });
 
       if (!res.ok) {
-        // revert
         setCampaigns((prev) =>
-          prev.map((c) => (c.id === campaign.id ? { ...c, ai_active: !nextValue } : c))
+          prev.map((c) =>
+            c.id === campaign.id ? { ...c, ai_active: !nextValue } : c
+          )
         );
 
         let msg = "Action failed";
         try {
           const body = await res.json();
-          if (typeof body === "string") msg = body;
-          else if (body.detail?.message) msg = body.detail.message;
+          if (body.detail?.message) msg = body.detail.message;
           else if (body.detail) msg = body.detail;
-          else if (body.message) msg = body.message;
         } catch {}
 
         toast.error(msg);
@@ -238,9 +220,10 @@ export default function CampaignsPage() {
       await loadUsage();
       toast.success(nextValue ? "AI activated" : "AI deactivated");
     } catch {
-      // revert on network failure
       setCampaigns((prev) =>
-        prev.map((c) => (c.id === campaign.id ? { ...c, ai_active: !nextValue } : c))
+        prev.map((c) =>
+          c.id === campaign.id ? { ...c, ai_active: !nextValue } : c
+        )
       );
       toast.error("Network error");
     } finally {
@@ -265,14 +248,17 @@ export default function CampaignsPage() {
    * RENDER
    * ----------------------------------- */
   if (!session?.ad_accounts) {
-    return <div className="p-6 text-sm text-gray-500">Loading context...</div>;
+    return (
+      <div className="p-6 text-sm text-gray-500">
+        Loading context...
+      </div>
+    );
   }
 
-  const selectedId = getSelectedAccountId();
+  const selectedId = session.active_ad_account_id;
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto px-6 py-10">
-
       {/* HEADER */}
       <div>
         <h1 className="text-lg font-semibold text-gray-900">Campaigns</h1>
@@ -287,21 +273,24 @@ export default function CampaignsPage() {
       {/* USAGE SECTION */}
       {usage && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Total Campaigns */}
           <div className="bg-white border rounded-lg p-4 shadow-sm">
-            <p classpath="text-xs text-gray-500">Campaigns</p>
+            <p className="text-xs text-gray-500">Campaigns</p>
             <p className="text-base font-medium text-gray-900">
               {formatLimit(usage.campaigns_used, usage.campaigns_limit)}
             </p>
             <div className="w-full h-2 rounded bg-gray-200 mt-2">
               <div
                 className="h-2 rounded bg-blue-600"
-                style={{ width: `${percent(usage.campaigns_used, usage.campaigns_limit)}%` }}
+                style={{
+                  width: `${percent(
+                    usage.campaigns_used,
+                    usage.campaigns_limit
+                  )}%`,
+                }}
               />
             </div>
           </div>
 
-          {/* AI Campaigns */}
           <div className="bg-white border rounded-lg p-4 shadow-sm">
             <p className="text-xs text-gray-500">AI Campaigns</p>
             <p className="text-base font-medium text-gray-900">
@@ -310,7 +299,12 @@ export default function CampaignsPage() {
             <div className="w-full h-2 rounded bg-gray-200 mt-2">
               <div
                 className="h-2 rounded bg-blue-600"
-                style={{ width: `${percent(usage.ai_campaigns_used, usage.ai_campaigns_limit)}%` }}
+                style={{
+                  width: `${percent(
+                    usage.ai_campaigns_used,
+                    usage.ai_campaigns_limit
+                  )}%`,
+                }}
               />
             </div>
           </div>
@@ -319,7 +313,6 @@ export default function CampaignsPage() {
 
       {/* FILTER PANEL */}
       <div className="bg-white p-4 rounded-lg border shadow-sm grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
-
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
@@ -388,10 +381,18 @@ export default function CampaignsPage() {
           <table className="min-w-full divide-y divide-gray-300 text-sm">
             <thead className="bg-gray-50">
               <tr>
-                <th className="py-3.5 pl-4 pr-3 text-left font-semibold text-gray-900 sm:pl-6">Campaign</th>
-                <th className="px-3 py-3.5 text-left font-semibold text-gray-900">Objective</th>
-                <th className="px-3 py-3.5 text-left font-semibold text-gray-900">Status</th>
-                <th className="px-3 py-3.5 text-left font-semibold text-gray-900">AI Optimization</th>
+                <th className="py-3.5 pl-4 pr-3 text-left font-semibold text-gray-900 sm:pl-6">
+                  Campaign
+                </th>
+                <th className="px-3 py-3.5 text-left font-semibold text-gray-900">
+                  Objective
+                </th>
+                <th className="px-3 py-3.5 text-left font-semibold text-gray-900">
+                  Status
+                </th>
+                <th className="px-3 py-3.5 text-left font-semibold text-gray-900">
+                  AI Optimization
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
