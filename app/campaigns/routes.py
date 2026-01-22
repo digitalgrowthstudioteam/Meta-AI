@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from app.campaigns.models import Campaign
 from app.meta_api.models import MetaAdAccount, UserMetaAdAccount, MetaOAuthToken
@@ -19,6 +19,7 @@ from app.campaigns.schemas import CampaignResponse, ToggleAIRequest
 
 # === AI ENFORCEMENT IMPORTS ===
 from app.plans.enforcement import PlanEnforcementService, EnforcementError
+from app.plans.subscription_models import Subscription
 
 router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
 
@@ -144,6 +145,61 @@ async def sync_campaigns_from_meta(
         )
         for c in synced
     ]
+
+
+# =========================================================
+# PHASE-9 — USAGE SUMMARY (OPTION C2)
+# =========================================================
+@router.get(
+    "/usage",
+    status_code=status.HTTP_200_OK,
+)
+async def campaigns_usage(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user),
+):
+    # Fetch active subscription
+    sub = await db.scalar(
+        select(Subscription)
+        .where(
+            Subscription.user_id == current_user.id,
+            Subscription.status.in_(["trial", "active"]),
+        )
+        .order_by(Subscription.created_at.desc())
+        .limit(1)
+    )
+
+    if not sub:
+        return {
+            "campaigns_used": 0,
+            "campaigns_limit": 0,
+            "ai_campaigns_used": 0,
+            "ai_campaigns_limit": 0,
+        }
+
+    # Count total campaigns (non archived)
+    campaigns_used = await db.scalar(
+        select(func.count(Campaign.id)).where(
+            Campaign.user_id == current_user.id,
+            Campaign.is_archived.is_(False),
+        )
+    ) or 0
+
+    # Count only AI-enabled campaigns (OPTION C2)
+    ai_campaigns_used = await db.scalar(
+        select(func.count(Campaign.id)).where(
+            Campaign.user_id == current_user.id,
+            Campaign.ai_active.is_(True),
+            Campaign.is_archived.is_(False),
+        )
+    ) or 0
+
+    return {
+        "campaigns_used": campaigns_used,
+        "campaigns_limit": sub.campaign_limit_snapshot or 0,
+        "ai_campaigns_used": ai_campaigns_used,
+        "ai_campaigns_limit": sub.ai_campaign_limit_snapshot or 0,
+    }
 
 
 # =========================================================
