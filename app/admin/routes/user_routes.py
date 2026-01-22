@@ -148,3 +148,93 @@ async def get_user_detail(
         "invoices": invoices,
         "ai_actions": [],
     }
+
+from app.admin.schemas import (
+    UsageOverrideUpsert,
+    UsageOverrideDelete,
+    UsageOverrideResponse,
+)
+from app.plans.override_service import UsageOverrideService
+from app.admin.rbac import assert_admin_permission
+
+
+# =========================
+# PHASE 10 — GET OVERRIDES
+# =========================
+@router.get("/users/{user_id}/usage")
+async def get_user_usage_overrides(
+    user_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user)
+):
+    require_admin(current_user)
+    assert_admin_permission(admin_user=current_user, permission="users:read")
+
+    await db.get(User, user_id) or HTTPException(status_code=404, detail="User not found")
+
+    overrides = await UsageOverrideService.get_overrides_for_user(
+        db=db,
+        user_id=user_id,
+    )
+
+    return overrides
+
+
+# =========================
+# PHASE 10 — UPSERT OVERRIDE
+# =========================
+@router.post("/users/{user_id}/usage")
+async def upsert_user_usage_override(
+    user_id: UUID,
+    payload: UsageOverrideUpsert,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user)
+):
+    require_admin(current_user)
+    assert_admin_permission(admin_user=current_user, permission="users:write")
+
+    await db.get(User, user_id) or HTTPException(status_code=404, detail="User not found")
+
+    override = await UsageOverrideService.upsert_override(
+        db=db,
+        admin_user_id=current_user.id,
+        user_id=user_id,
+        key=payload.key,
+        value=payload.value,
+        expires_at=payload.expires_at,
+        reason=payload.reason,
+    )
+
+    return {
+        "key": override.key,
+        "value": override.value,
+        "expires_at": override.expires_at,
+        "updated_by": str(override.updated_by) if override.updated_by else None,
+        "updated_at": override.updated_at.isoformat() if override.updated_at else None,
+    }
+
+
+# =========================
+# PHASE 10 — RESET OVERRIDE
+# =========================
+@router.delete("/users/{user_id}/usage")
+async def delete_user_usage_override(
+    user_id: UUID,
+    payload: UsageOverrideDelete,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_user)
+):
+    require_admin(current_user)
+    assert_admin_permission(admin_user=current_user, permission="users:write")
+
+    await db.get(User, user_id) or HTTPException(status_code=404, detail="User not found")
+
+    await UsageOverrideService.delete_override(
+        db=db,
+        admin_user_id=current_user.id,
+        user_id=user_id,
+        key=payload.key,
+        reason=payload.reason,
+    )
+    return {"status": "deleted"}
+
