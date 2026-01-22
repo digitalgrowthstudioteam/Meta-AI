@@ -25,7 +25,7 @@ export default function PricingPage() {
     const loadPlans = async () => {
       try {
         // IMPORTANT: Updated for correct backend path + cookies
-        const res = await apiFetch("/api/public/plans");
+        const res = await apiFetch("/public/plans");
         const data = await res.json();
         setPlans(data || []);
       } catch (err) {
