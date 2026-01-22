@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiFetch } from "@/app/lib/fetcher";
+import { fetcher } from "../lib/fetcher";
 
 type PublicPlan = {
   name: string;
