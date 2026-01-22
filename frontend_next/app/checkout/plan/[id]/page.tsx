@@ -29,7 +29,7 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     const loadPlans = async () => {
       try {
-        const res = await apiFetch("/api/public/plans", { credentials: "include" });
+        const res = await apiFetch("/public/plans", { credentials: "include" });
         const data = await res.json();
         setPlans(data || []);
       } catch (err) {
