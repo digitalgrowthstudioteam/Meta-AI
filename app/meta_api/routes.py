@@ -24,7 +24,7 @@ from app.meta_api.models import (
     UserMetaAdAccount,
 )
 from app.plans.subscription_models import Subscription
-from app.plans.enforcement import EnforcementError
+from app.plans.enforcement import EnforcementError, PlanEnforcementService
 
 router = APIRouter(prefix="/meta", tags=["Meta"])
 
@@ -147,42 +147,19 @@ async def toggle_meta_ad_account(
     new_state = not link.is_selected
 
     # ----------------------------------------
-    # PHASE-9 — ENFORCEMENT WHEN TOGGLING ON
+    # PHASE-9 — ENFORCE ON TOGGLE-ON
     # ----------------------------------------
     if new_state is True:
-        # Count currently selected ad accounts
-        count_row = await db.execute(
-            select(func.count(UserMetaAdAccount.meta_ad_account_id)).where(
-                UserMetaAdAccount.user_id == user.id,
-                UserMetaAdAccount.is_selected.is_(True),
+        try:
+            await PlanEnforcementService.assert_ad_account_allowed(
+                db=db,
+                user_id=user.id,
             )
-        )
-        current_selected = count_row.scalar_one() or 0
-
-        # Fetch active subscription
-        sub = await db.execute(
-            select(Subscription).where(
-                Subscription.user_id == user.id,
-                Subscription.status.in_(["trial", "active"]),
-            )
-        )
-        subscription = sub.scalar_one_or_none()
-
-        if not subscription:
-            raise EnforcementError(
-                code="NO_SUBSCRIPTION",
-                message="No active plan.",
-                action="UPGRADE_PLAN",
-            )
-
-        limit = getattr(subscription, "ad_account_limit_snapshot", 0)
-
-        # Enforce
-        if current_selected >= limit:
-            raise EnforcementError(
-                code="AD_ACCOUNT_LIMIT_REACHED",
-                message="Upgrade to connect more Ad Accounts.",
-                action="UPGRADE_PLAN",
+        except EnforcementError as e:
+            # Convert to HTTPException with structured payload
+            raise HTTPException(
+                status_code=403,
+                detail=e.to_dict(),
             )
 
     # Toggle state
