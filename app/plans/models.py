@@ -3,7 +3,7 @@ from sqlalchemy import String, Integer, Boolean, DateTime
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.base import Base
-
+from app.plans.override_models import UserUsageOverride
 
 class Plan(Base):
     __tablename__ = "plans"
