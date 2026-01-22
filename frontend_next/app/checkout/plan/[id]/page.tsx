@@ -165,7 +165,7 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
         </div>
 
         <div>
-          <<div className="text-sm text-gray-500">Billing Cycle</div>
+          <div className="text-sm text-gray-500">Billing Cycle</div>
           <div className="text-base font-medium text-gray-900 capitalize">
             {cycle}
           </div>
