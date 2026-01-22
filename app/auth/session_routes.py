@@ -109,11 +109,28 @@ async def session_context(
             None,
         )
 
-        if not active_account and ad_accounts:
-            active_account = ad_accounts[0]
-            active_account_id = active_account["id"]
+        # ====================================================
+        # OPTION A — AUTO-SELECT FIRST ACCOUNT IF EXACTLY ONE
+        # ====================================================
+        if len(ad_accounts) == 1 and not cookie_active_id:
+            only = ad_accounts[0]
+            active_account = only
+            active_account_id = only["id"]
+
+            response.set_cookie(
+                key="active_account_id",
+                value=active_account_id,
+                httponly=False,
+                samesite="Lax",
+                path="/",
+            )
         else:
-            active_account_id = cookie_active_id
+            # === NORMAL SELECTION LOGIC ===
+            if not active_account and ad_accounts:
+                active_account = ad_accounts[0]
+                active_account_id = active_account["id"]
+            else:
+                active_account_id = cookie_active_id
 
     # ------------------------------------------------
     # SAFE FALLBACK FLAGS (FOR BROKEN/FRESH ACCOUNTS)
