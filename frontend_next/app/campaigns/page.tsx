@@ -15,6 +15,13 @@ type Campaign = {
   ai_active?: boolean;
 };
 
+type Usage = {
+  campaigns_used: number;
+  campaigns_limit: number;
+  ai_campaigns_used: number;
+  ai_campaigns_limit: number;
+};
+
 type AdAccount = {
   id: string;
   name: string;
@@ -54,6 +61,9 @@ export default function CampaignsPage() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [session, setSession] = useState<SessionContext | null>(null);
 
+  const [usage, setUsage] = useState<Usage | null>(null);
+  const [loadingUsage, setLoadingUsage] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -81,6 +91,19 @@ export default function CampaignsPage() {
       setSession(await res.json());
     } catch {
       setSession(null);
+    }
+  };
+
+  /* -----------------------------------
+   * LOAD USAGE
+   * ----------------------------------- */
+  const loadUsage = async () => {
+    setLoadingUsage(true);
+    try {
+      const res = await apiFetch("/api/campaigns/usage", { cache: "no-store" });
+      if (res.ok) setUsage(await res.json());
+    } finally {
+      setLoadingUsage(false);
     }
   };
 
@@ -137,6 +160,7 @@ export default function CampaignsPage() {
   useEffect(() => { loadSession(); }, []);
   useEffect(() => {
     if (!session) return;
+    loadUsage();
     loadCampaigns();
   }, [session, statusFilter, aiFilter, objectiveFilter, page]);
 
@@ -163,6 +187,7 @@ export default function CampaignsPage() {
         cache: "no-store",
       });
       await loadCampaigns();
+      await loadUsage();
       toast.success("Campaigns synced successfully");
     } catch {
       toast.error("Failed to sync campaigns");
@@ -192,15 +217,12 @@ export default function CampaignsPage() {
       });
 
       if (!res.ok) {
-        // revert UI
+        // revert
         setCampaigns((prev) =>
-          prev.map((c) =>
-            c.id === campaign.id ? { ...c, ai_active: !nextValue } : c
-          )
+          prev.map((c) => (c.id === campaign.id ? { ...c, ai_active: !nextValue } : c))
         );
 
         let msg = "Action failed";
-
         try {
           const body = await res.json();
           if (typeof body === "string") msg = body;
@@ -213,18 +235,30 @@ export default function CampaignsPage() {
         return;
       }
 
+      await loadUsage();
       toast.success(nextValue ? "AI activated" : "AI deactivated");
     } catch {
-      // revert UI on network error
+      // revert on network failure
       setCampaigns((prev) =>
-        prev.map((c) =>
-          c.id === campaign.id ? { ...c, ai_active: !nextValue } : c
-        )
+        prev.map((c) => (c.id === campaign.id ? { ...c, ai_active: !nextValue } : c))
       );
       toast.error("Network error");
     } finally {
       setTogglingId(null);
     }
+  };
+
+  /* -----------------------------------
+   * HELPERS
+   * ----------------------------------- */
+  const formatLimit = (used: number, limit: number) => {
+    if (!limit || limit === 0) return `${used} / ∞`;
+    return `${used} / ${limit}`;
+  };
+
+  const percent = (used: number, limit: number) => {
+    if (!limit || limit === 0) return 0;
+    return Math.min(Math.round((used / limit) * 100), 100);
   };
 
   /* -----------------------------------
@@ -249,6 +283,39 @@ export default function CampaignsPage() {
           </span>
         </p>
       </div>
+
+      {/* USAGE SECTION */}
+      {usage && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Total Campaigns */}
+          <div className="bg-white border rounded-lg p-4 shadow-sm">
+            <p classpath="text-xs text-gray-500">Campaigns</p>
+            <p className="text-base font-medium text-gray-900">
+              {formatLimit(usage.campaigns_used, usage.campaigns_limit)}
+            </p>
+            <div className="w-full h-2 rounded bg-gray-200 mt-2">
+              <div
+                className="h-2 rounded bg-blue-600"
+                style={{ width: `${percent(usage.campaigns_used, usage.campaigns_limit)}%` }}
+              />
+            </div>
+          </div>
+
+          {/* AI Campaigns */}
+          <div className="bg-white border rounded-lg p-4 shadow-sm">
+            <p className="text-xs text-gray-500">AI Campaigns</p>
+            <p className="text-base font-medium text-gray-900">
+              {formatLimit(usage.ai_campaigns_used, usage.ai_campaigns_limit)}
+            </p>
+            <div className="w-full h-2 rounded bg-gray-200 mt-2">
+              <div
+                className="h-2 rounded bg-blue-600"
+                style={{ width: `${percent(usage.ai_campaigns_used, usage.ai_campaigns_limit)}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* FILTER PANEL */}
       <div className="bg-white p-4 rounded-lg border shadow-sm grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
