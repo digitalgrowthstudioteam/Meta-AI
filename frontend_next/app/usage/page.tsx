@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiFetch } from "@/app/lib/fetcher";
+import { apiFetch } from "../lib/fetcher";
 
 type UsageSummary = {
   ad_accounts: { used: number; limit: number };
