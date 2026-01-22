@@ -3,7 +3,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, join
+from sqlalchemy import select
 
 from app.core.db_session import get_db
 from app.auth.dependencies import require_user
@@ -23,13 +23,16 @@ from app.ai_engine.routes.category_insights_routes import (
     router as category_insights_router,
 )
 
+# === AI ENFORCEMENT IMPORTS ===
+from app.plans.enforcement import PlanEnforcementService, EnforcementError
+
 router = APIRouter(
     prefix="/ai",
     tags=["AI"],
 )
 
 # -----------------------------------------------------
-# AI ACTIONS — STRICT USER + SELECTED AD ACCOUNT
+# AI ACTIONS — STRICT USER + SELECTED AD ACCOUNT + ENFORCEMENT
 # -----------------------------------------------------
 @router.get("/actions", response_model=List[AIActionSet])
 async def list_ai_actions(
@@ -56,17 +59,36 @@ async def list_ai_actions(
         return []
 
     # 🔒 fetch campaigns only for selected ad account
-    stmt = select(Campaign.id).where(
+    stmt = select(Campaign.id, Campaign).where(
         Campaign.ad_account_id == selected_ad_account_id,
         Campaign.is_archived.is_(False),
     )
     result = await db.execute(stmt)
-    allowed_campaign_ids = {row[0] for row in result.all()}
 
-    if not allowed_campaign_ids:
+    campaigns = result.all()
+    if not campaigns:
         return []
 
-    # run AI engine
+    allowed_campaign_ids = {row[0] for row in campaigns}
+    campaign_map = {row[0]: row[1] for row in campaigns}
+
+    # === 🔐 AI ENFORCEMENT PER USER BEFORE AI RUN ===
+    # We enforce on ANY ACTIVE CAMPAIGN (minimal blocking)
+    try:
+        # pick one representative campaign for limit enforcement
+        campaign = next(iter(campaign_map.values()))
+        await PlanEnforcementService.assert_ai_allowed(
+            db=db,
+            user_id=user.id,
+            campaign=campaign,
+        )
+    except EnforcementError as e:
+        raise HTTPException(
+            status_code=402,
+            detail=e.to_dict(),
+        )
+
+    # === run AI engine ===
     runner = AIDecisionRunner()
     action_sets = await runner.run_for_user(
         db=db,
@@ -82,6 +104,7 @@ async def list_ai_actions(
         approved_actions = []
 
         for action in action_set.actions:
+            # pass-through only actionable items
             if (
                 action.auto_execution_blocked
                 and action.requires_human_approval
@@ -104,7 +127,7 @@ async def list_ai_actions(
 
 
 # -----------------------------------------------------
-# APPROVE AI ACTION
+# APPROVE AI ACTION (NO DIRECT EXECUTION HERE)
 # -----------------------------------------------------
 @router.post("/actions/{action_id}/approve", status_code=200)
 async def approve_ai_action(
