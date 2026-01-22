@@ -1,7 +1,3 @@
-# ================================
-# app/billing/routes.py (UPDATED WITH TRIAL STATUS)
-# ================================
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -202,7 +198,7 @@ async def buy_campaign_slots(
     packs = pricing.slot_packs.values()
     selected = next(
         (p for p in packs if quantity >= p["min_qty"]
-         and ("max_qty" not in p or p["max_qty"] is None or quantity <= p["max_qty"]))),
+         and ("max_qty" not in p or p["max_qty"] is None or quantity <= p["max_qty"])),
         None,
     )
     if not selected:
@@ -243,7 +239,7 @@ async def finalize_campaign_slots(
     packs = pricing.slot_packs.values()
     selected = next(
         (p for p in packs if quantity >= p["min_qty"]
-         and ("max_qty" not in p or p["max_qty"] is None or quantity <= p["max_qty"]))),
+         and ("max_qty" not in p or p["max_qty"] is None or quantity <= p["max_qty"])),
         None,
     )
     if not selected:
@@ -319,12 +315,12 @@ async def download_invoice(
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{invoice.invoice_number}.pdf"'},
+        headers={"Content-Disposition": f'attachment; filename=\"{invoice.invoice_number}.pdf\""},
     )
 
 
 # =====================================================
-# BILLING STATUS (USER-SIDE) — TRIAL + GRACE + EXPIRE
+# BILLING STATUS (USER-SIDE) — FINAL PHASE-8 LOGIC
 # =====================================================
 @router.get("/status")
 async def billing_status(
@@ -349,34 +345,59 @@ async def billing_status(
     if not row:
         return {
             "status": "none",
-            "block": {"soft_block": False, "hard_block": False},
+            "plan": None,
             "trial_days_left": None,
             "grace_days_left": None,
             "trial_ends_at": None,
             "grace_ends_at": None,
+            "block": {"soft_block": False, "hard_block": False},
         }
 
     sub, plan = row[0], row[1]
-
-    # -------- STATE CALC --------
     status = sub.status
     trial_days_left = None
     grace_days_left = None
 
-    if sub.status == "trial" and sub.trial_end:
-        trial_days_left = max((sub.trial_end - today).days, 0)
-
-    if sub.status == "grace" and sub.grace_ends_at:
-        grace_days_left = max((sub.grace_ends_at.date() - today).days, 0)
-
-        if grace_days_left <= 0:
+    # ===========================
+    # TRIAL → HARD BLOCK AFTER END
+    # ===========================
+    if status == "trial" and sub.trial_end:
+        if today > sub.trial_end:
             status = "expired"
+        else:
+            trial_days_left = max((sub.trial_end - today).days, 0)
 
-    # -------- OUTPUT --------
-    block = {
-        "soft_block": status in ("grace", "expired"),
-        "hard_block": status == "expired",
-    }
+    # ===========================
+    # PAID → 3 DAY GRACE
+    # ===========================
+    if status == "active" and sub.ends_at:
+        if now > sub.ends_at:
+            # Enter grace (soft block)
+            status = "grace"
+            grace_deadline = sub.ends_at + timedelta(days=3)
+        else:
+            grace_deadline = None
+
+    elif status == "grace":
+        grace_deadline = sub.grace_ends_at or (sub.ends_at + timedelta(days=3)) if sub.ends_at else None
+
+    else:
+        grace_deadline = None
+
+    # ===========================
+    # GRACE EXPIRY → HARD BLOCK
+    # ===========================
+    if status == "grace" and grace_deadline:
+        if now > grace_deadline:
+            status = "expired"
+        else:
+            grace_days_left = max((grace_deadline.date() - today).days, 0)
+
+    # ===========================
+    # BLOCKING RULES
+    # ===========================
+    soft_block = status in ("grace", "expired")
+    hard_block = status == "expired"
 
     return {
         "status": status,
@@ -388,13 +409,16 @@ async def billing_status(
         "trial_days_left": trial_days_left,
         "grace_days_left": grace_days_left,
         "trial_ends_at": sub.trial_end,
-        "grace_ends_at": sub.grace_ends_at,
-        "block": block,
+        "grace_ends_at": grace_deadline,
+        "block": {
+            "soft_block": soft_block,
+            "hard_block": hard_block,
+        },
     }
 
 
 # =====================================================
-# CANCEL SUBSCRIPTION (END OF CYCLE)
+# CANCEL SUBSCRIPTION
 # =====================================================
 @router.post("/cancel")
 async def cancel_subscription(
@@ -417,11 +441,9 @@ async def cancel_subscription(
     now = datetime.utcnow()
     cancelled_at_iso = now.isoformat()
 
-    # Recurring via Razorpay (monthly)
     if sub.razorpay_subscription_id:
         service = BillingService()
         await service.resolve_credentials(db=db)
-
         try:
             service.client.subscription.cancel(
                 sub.razorpay_subscription_id,
@@ -440,7 +462,6 @@ async def cancel_subscription(
             "cancelled_at": cancelled_at_iso,
         }
 
-    # Manual (yearly prepaid etc)
     sub.cancelled_at = now
     await db.commit()
 
