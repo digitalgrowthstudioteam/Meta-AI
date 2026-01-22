@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
 
 from app.core.db_session import get_db
 from app.users.models import User
@@ -23,6 +23,8 @@ from app.meta_api.models import (
     MetaAdAccount,
     UserMetaAdAccount,
 )
+from app.plans.subscription_models import Subscription
+from app.plans.enforcement import EnforcementError
 
 router = APIRouter(prefix="/meta", tags=["Meta"])
 
@@ -144,6 +146,46 @@ async def toggle_meta_ad_account(
 
     new_state = not link.is_selected
 
+    # ----------------------------------------
+    # PHASE-9 — ENFORCEMENT WHEN TOGGLING ON
+    # ----------------------------------------
+    if new_state is True:
+        # Count currently selected ad accounts
+        count_row = await db.execute(
+            select(func.count(UserMetaAdAccount.meta_ad_account_id)).where(
+                UserMetaAdAccount.user_id == user.id,
+                UserMetaAdAccount.is_selected.is_(True),
+            )
+        )
+        current_selected = count_row.scalar_one() or 0
+
+        # Fetch active subscription
+        sub = await db.execute(
+            select(Subscription).where(
+                Subscription.user_id == user.id,
+                Subscription.status.in_(["trial", "active"]),
+            )
+        )
+        subscription = sub.scalar_one_or_none()
+
+        if not subscription:
+            raise EnforcementError(
+                code="NO_SUBSCRIPTION",
+                message="No active plan.",
+                action="UPGRADE_PLAN",
+            )
+
+        limit = getattr(subscription, "ad_account_limit_snapshot", 0)
+
+        # Enforce
+        if current_selected >= limit:
+            raise EnforcementError(
+                code="AD_ACCOUNT_LIMIT_REACHED",
+                message="Upgrade to connect more Ad Accounts.",
+                action="UPGRADE_PLAN",
+            )
+
+    # Toggle state
     await db.execute(
         update(UserMetaAdAccount)
         .where(
