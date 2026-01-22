@@ -72,3 +72,4 @@ export async function DELETE(
     return NextResponse.json(text, { status: res.status });
   }
 }
+
