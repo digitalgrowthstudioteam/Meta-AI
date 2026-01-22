@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+from sqlalchemy import select
 
 from uuid import UUID
 from datetime import datetime
@@ -15,8 +15,8 @@ from app.meta_api.models import MetaAdAccount, UserMetaAdAccount
 
 from app.admin.rbac import assert_admin_permission
 
-router = APIRouter()
 
+router = APIRouter()
 
 ALLOWED_ADMIN_ROLES = {"admin", "super_admin", "support_admin", "billing_admin"}
 
@@ -27,9 +27,9 @@ def require_admin(user: User):
     return user
 
 
-# =========================
+# =====================================================
 # USERS LIST
-# =========================
+# =====================================================
 @router.get("/users")
 async def list_users(
     db: AsyncSession = Depends(get_db),
@@ -61,21 +61,21 @@ async def list_users(
                     u.last_login_at.isoformat() if getattr(u, "last_login_at", None) else None
                 ),
                 "subscription_status": sub_status,
-                "ai_campaigns_active": 0,
+                "ai_campaigns_active": 0,  # future patchable
             }
         )
 
     return response
 
 
-# =========================
+# =====================================================
 # USER DETAIL
-# =========================
+# =====================================================
 @router.get("/users/{user_id}")
 async def get_user_detail(
     user_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_user)
+    current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
     assert_admin_permission(admin_user=current_user, permission="users:read")
@@ -141,7 +141,9 @@ async def get_user_detail(
             "email": user.email,
             "is_active": user.is_active,
             "created_at": user.created_at.isoformat(),
-            "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None,
+            "last_login_at": (
+                user.last_login_at.isoformat() if user.last_login_at else None
+            ),
         },
         "meta_accounts": meta_accounts,
         "campaigns": campaigns,
@@ -149,51 +151,52 @@ async def get_user_detail(
         "ai_actions": [],
     }
 
+
+# =====================================================
+# PHASE 10 — USAGE OVERRIDES
+# =====================================================
 from app.admin.schemas import (
     UsageOverrideUpsert,
     UsageOverrideDelete,
-    UsageOverrideResponse,
 )
 from app.plans.override_service import UsageOverrideService
-from app.admin.rbac import assert_admin_permission
 
 
-# =========================
-# PHASE 10 — GET OVERRIDES
-# =========================
+# GET CURRENT OVERRIDES
 @router.get("/users/{user_id}/usage")
 async def get_user_usage_overrides(
     user_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_user)
+    current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
     assert_admin_permission(admin_user=current_user, permission="users:read")
 
-    await db.get(User, user_id) or HTTPException(status_code=404, detail="User not found")
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
 
     overrides = await UsageOverrideService.get_overrides_for_user(
         db=db,
         user_id=user_id,
     )
-
     return overrides
 
 
-# =========================
-# PHASE 10 — UPSERT OVERRIDE
-# =========================
+# UPSERT OVERRIDE
 @router.post("/users/{user_id}/usage")
 async def upsert_user_usage_override(
     user_id: UUID,
     payload: UsageOverrideUpsert,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_user)
+    current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
     assert_admin_permission(admin_user=current_user, permission="users:write")
 
-    await db.get(User, user_id) or HTTPException(status_code=404, detail="User not found")
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
 
     override = await UsageOverrideService.upsert_override(
         db=db,
@@ -214,20 +217,20 @@ async def upsert_user_usage_override(
     }
 
 
-# =========================
-# PHASE 10 — RESET OVERRIDE
-# =========================
+# DELETE OVERRIDE
 @router.delete("/users/{user_id}/usage")
 async def delete_user_usage_override(
     user_id: UUID,
     payload: UsageOverrideDelete,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_user)
+    current_user: User = Depends(require_user),
 ):
     require_admin(current_user)
     assert_admin_permission(admin_user=current_user, permission="users:write")
 
-    await db.get(User, user_id) or HTTPException(status_code=404, detail="User not found")
+    user = await db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
 
     await UsageOverrideService.delete_override(
         db=db,
@@ -237,4 +240,3 @@ async def delete_user_usage_override(
         reason=payload.reason,
     )
     return {"status": "deleted"}
-
