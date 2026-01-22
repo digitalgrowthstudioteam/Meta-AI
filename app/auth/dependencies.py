@@ -2,7 +2,7 @@ from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, date
 
 from app.core.db_session import get_db
 from app.users.models import User
@@ -11,6 +11,7 @@ from app.meta_api.models import MetaAdAccount, UserMetaAdAccount
 from app.auth.sessions import get_active_session
 from app.plans.subscription_models import Subscription
 from app.plans.models import Plan
+from app.plans.trial_service import TrialService  # <-- NEW IMPORT
 
 
 # =================================================
@@ -31,12 +32,54 @@ async def _get_global_settings(db: AsyncSession) -> GlobalSettings | None:
 
 
 # -------------------------------------------------
-# INTERNAL: LOAD ACTIVE SUBSCRIPTION (AUTO EXPIRE)
+# INTERNAL: LOAD ACTIVE SUBSCRIPTION (AUTO EXPIRE + TRIAL LOGIC)
 # + Extended Stripe-style metadata
 # -------------------------------------------------
 async def _load_active_subscription(db: AsyncSession, user: User) -> dict | None:
     now = datetime.utcnow()
 
+    # ==============================
+    # PHASE-8: Trial Auto-Create
+    # ==============================
+    existing = await db.execute(
+        select(Subscription).where(
+            Subscription.user_id == user.id,
+            Subscription.status.in_(["active", "trial", "grace"]),
+        )
+    )
+    has_sub = existing.scalar_one_or_none()
+
+    if not has_sub:
+        sub = await TrialService.ensure_trial(db, user.id)
+        if sub:
+            plan = await db.scalar(select(Plan).where(Plan.id == sub.plan_id))
+            today = date.today()
+            days_left = (sub.trial_end - today).days if sub.trial_end else None
+
+            return {
+                "id": str(sub.id),
+                "status": sub.status,
+                "plan_id": sub.plan_id,
+                "plan_name": plan.name,
+                "max_ai_campaigns": plan.max_ai_campaigns,
+                "max_ad_accounts": plan.max_ad_accounts,
+                "manual_allowed": plan.manual_allowed,
+                "auto_allowed": plan.auto_allowed,
+                "starts_at": sub.starts_at,
+                "ends_at": None,
+                "grace_ends_at": None,
+                "never_expires": False,
+
+                # Stripe-style extended fields:
+                "days_remaining": days_left,
+                "remaining_grace_days": None,
+                "in_grace": False,
+                "is_expiring": False,
+            }
+
+    # ==============================
+    # LOAD ACTIVE/TRIAL/GRACE SUB
+    # ==============================
     stmt = (
         select(Subscription, Plan)
         .join(Plan, Plan.id == Subscription.plan_id)
@@ -53,27 +96,50 @@ async def _load_active_subscription(db: AsyncSession, user: User) -> dict | None
 
     sub, plan = row[0], row[1]
 
-    # Auto-expire if ends_at passed & not never-expires
+    # ==============================
+    # PHASE-8: Trial Expiry Check
+    # ==============================
+    if sub.status == "trial":
+        today = date.today()
+        if sub.trial_end and sub.trial_end < today:
+            sub.status = "expired"
+            sub.is_active = False
+            await db.commit()
+            return None
+
+    # ==============================
+    # NORMAL EXPIRY CHECK
+    # ==============================
     if sub.ends_at and not sub.never_expires and sub.ends_at < now:
         sub.status = "expired"
         sub.is_active = False
         await db.commit()
         return None
 
-    # Extended Stripe-style metadata
+    # ==============================
+    # STRIPE-STYLE METADATA
+    # ==============================
     in_grace = (sub.status == "grace")
     days_remaining = None
     remaining_grace_days = None
     is_expiring = False
 
+    # For paid cycles
     if sub.ends_at:
         delta = sub.ends_at - now
         days_remaining = max(delta.days, 0)
         is_expiring = (0 <= days_remaining <= 3)
 
+    # For grace cycles
     if sub.grace_ends_at:
         grace_delta = sub.grace_ends_at - now
         remaining_grace_days = max(grace_delta.days, 0)
+
+    # For trial cycles
+    if sub.status == "trial":
+        today = date.today()
+        days_remaining = (sub.trial_end - today).days if sub.trial_end else None
+        is_expiring = (days_remaining is not None and 0 <= days_remaining <= 1)
 
     return {
         "id": str(sub.id),
@@ -186,7 +252,6 @@ async def get_current_user(
 
     # -------------------------------------------------
     # SUBSCRIPTION ENFORCEMENT (NON-ADMIN USERS)
-    # Stripe-style grace logic (Option-C)
     # -------------------------------------------------
     sub = await _load_active_subscription(db, user)
     user._subscription = sub
