@@ -50,6 +50,16 @@ class User(Base):
         index=True,
     )
 
+    # --------------------------------------------------------
+    # NEW — GST Threshold Declaration (Buyer Side)
+    # --------------------------------------------------------
+    # When True => Buyer declares turnover < ₹20L (unregistered under GST)
+    buyer_turnover_below_threshold: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False,
+    )
+
     sessions = relationship(
         Session,
         back_populates="user",
