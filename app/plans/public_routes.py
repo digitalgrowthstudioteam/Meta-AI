@@ -14,6 +14,7 @@ async def public_plans(db: AsyncSession = Depends(get_db)):
     plans = result.scalars().all()
     return [
         {
+            "id": p.id,
             "name": p.name,
             "code": p.name.lower(),
             "monthly_price": p.monthly_price,
@@ -23,7 +24,6 @@ async def public_plans(db: AsyncSession = Depends(get_db)):
             "manual_allowed": p.manual_allowed,
             "currency": "INR",
             "ai_limit": p.max_ai_campaigns,
-            "id": p.id,
         }
         for p in plans
     ]
