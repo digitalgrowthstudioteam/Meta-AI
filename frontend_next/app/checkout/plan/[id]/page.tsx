@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { apiFetch } from "@/app/lib/fetcher";
+import { apiFetch } from "../../../lib/fetcher";
 
 type PublicPlan = {
   id: number;
@@ -29,7 +29,6 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     const loadPlans = async () => {
       try {
-        // IMPORTANT: UPDATED PATH
         const res = await apiFetch("/api/public/plans");
         const data = await res.json();
         setPlans(data || []);
@@ -88,7 +87,6 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
     }
 
     try {
-      // IMPORTANT: UPDATED PATH
       const backendResp = await apiFetch(
         `/api/billing/subscription/manual?plan_id=${plan.id}&cycle=${cycle}`,
         { method: "POST" }
@@ -145,7 +143,6 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
 
       const rzp = new (window as any).Razorpay(options);
       rzp.open();
-
     } catch (err) {
       console.error("Checkout failed:", err);
       router.push("/billing/failure");
@@ -168,7 +165,7 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
         </div>
 
         <div>
-          <div className="text-sm text-gray-500">Billing Cycle</div>
+          <<div className="text-sm text-gray-500">Billing Cycle</div>
           <div className="text-base font-medium text-gray-900 capitalize">
             {cycle}
           </div>
