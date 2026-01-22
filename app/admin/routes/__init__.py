@@ -8,6 +8,7 @@ from .risk_routes import router as risk_router
 from .pricing_routes import router as pricing_router
 from .meta_routes import router as meta_router
 from .audit_routes import router as audit_router
+from .company_billing_routes import router as company_billing_router
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -19,3 +20,4 @@ router.include_router(pricing_router)
 router.include_router(risk_router)
 router.include_router(meta_router)
 router.include_router(audit_router)
+router.include_router(company_billing_router)
