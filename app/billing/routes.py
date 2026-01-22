@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from datetime import datetime, timedelta, date
 from uuid import UUID
+from pydantic import BaseModel
 
 from app.core.db_session import get_db
 from app.auth.dependencies import require_user
@@ -164,23 +165,26 @@ async def create_manual_subscription(
 
 
 # =====================================================
-# VERIFY PAYMENT
+# VERIFY PAYMENT (JSON BODY — OPTION A)
 # =====================================================
+class RazorpayVerifyPayload(BaseModel):
+    razorpay_order_id: str
+    razorpay_payment_id: str
+    razorpay_signature: str
+
+
 @router.post("/razorpay/verify")
 async def verify_manual_payment(
-    *,
-    razorpay_order_id: str,
-    razorpay_payment_id: str,
-    razorpay_signature: str,
+    payload: RazorpayVerifyPayload = Body(...),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
     service = BillingService()
     payment = await service.verify_payment(
         db=db,
-        razorpay_order_id=razorpay_order_id,
-        razorpay_payment_id=razorpay_payment_id,
-        razorpay_signature=razorpay_signature,
+        razorpay_order_id=payload.razorpay_order_id,
+        razorpay_payment_id=payload.razorpay_payment_id,
+        razorpay_signature=payload.razorpay_signature,
     )
     return {"status": payment.status}
 
@@ -200,7 +204,7 @@ async def buy_campaign_slots(
     packs = pricing.slot_packs.values()
     selected = next(
         (p for p in packs if quantity >= p["min_qty"]
-         and ("max_qty" not in p or p["max_qty"] is None or quantity <= p["max_qty"])),
+         and ("max_qty" not in p or p["max_qty"] is None or quantity <= p["max_qty"]))),
         None,
     )
     if not selected:
@@ -241,7 +245,7 @@ async def finalize_campaign_slots(
     packs = pricing.slot_packs.values()
     selected = next(
         (p for p in packs if quantity >= p["min_qty"]
-         and ("max_qty" not in p or p["max_qty"] is None or quantity <= p["max_qty"])),
+         and ("max_qty" not in p or p["max_qty"] is None or quantity <= p["max_qty"]))),
         None,
     )
     if not selected:
