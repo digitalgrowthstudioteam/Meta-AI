@@ -16,8 +16,9 @@ from app.auth.dependencies import (
 from app.users.models import User
 from app.campaigns.service import CampaignService
 from app.campaigns.schemas import CampaignResponse, ToggleAIRequest
-from app.plans.enforcement import EnforcementError
 
+# === AI ENFORCEMENT IMPORTS ===
+from app.plans.enforcement import PlanEnforcementService, EnforcementError
 
 router = APIRouter(prefix="/campaigns", tags=["Campaigns"])
 
@@ -146,7 +147,7 @@ async def sync_campaigns_from_meta(
 
 
 # =========================================================
-# AI TOGGLE — WRITE → BLOCKED DURING IMPERSONATION
+# AI TOGGLE — WRITE → BLOCKED DURING IMPERSONATION + ENFORCED
 # =========================================================
 @router.post(
     "/{campaign_id}/ai-toggle",
@@ -159,8 +160,34 @@ async def toggle_ai(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(forbid_impersonated_writes),
 ):
+    # === Load campaign first ===
+    campaign = await CampaignService.get_campaign(
+        db=db,
+        user_id=current_user.id,
+        campaign_id=campaign_id,
+    )
+    if not campaign:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Campaign not found",
+        )
+
+    # === ENFORCEMENT ONLY WHEN ENABLING AI ===
+    if payload.enable:
+        try:
+            await PlanEnforcementService.assert_ai_allowed(
+                db=db,
+                user_id=current_user.id,
+                campaign=campaign,
+            )
+        except EnforcementError as e:
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail=e.to_dict(),
+            )
+
     try:
-        campaign = await CampaignService.toggle_ai(
+        updated = await CampaignService.toggle_ai(
             db=db,
             user_id=current_user.id,
             campaign_id=campaign_id,
@@ -168,15 +195,15 @@ async def toggle_ai(
         )
 
         return CampaignResponse(
-            id=campaign.id,
-            name=campaign.name,
-            objective=campaign.objective,
-            status=campaign.status,
-            ai_active=campaign.ai_active,
-            ai_activated_at=campaign.ai_activated_at,
-            category=campaign.category_map.final_category if campaign.category_map else None,
-            category_confidence=campaign.category_map.confidence_score if campaign.category_map else None,
-            category_source=campaign.category_map.source.value if campaign.category_map else None,
+            id=updated.id,
+            name=updated.name,
+            objective=updated.objective,
+            status=updated.status,
+            ai_active=updated.ai_active,
+            ai_activated_at=updated.ai_activated_at,
+            category=updated.category_map.final_category if updated.category_map else None,
+            category_confidence=updated.category_map.confidence_score if updated.category_map else None,
+            category_source=updated.category_map.source.value if updated.category_map else None,
         )
 
     except EnforcementError as e:
