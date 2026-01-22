@@ -30,6 +30,7 @@ from app.auth.tokens import (
 )
 from app.auth.sessions import create_session
 from app.users.models import User
+from app.plans.trial_service import TrialService
 
 
 # =========================================================
@@ -99,7 +100,6 @@ async def request_magic_login(
     now = datetime.utcnow()
     cutoff = now - timedelta(minutes=TOKEN_COOLDOWN_MINUTES)
 
-    # 🔥 Remove expired or old unused tokens
     await db.execute(
         delete(MagicLoginToken).where(
             MagicLoginToken.email == email,
@@ -109,7 +109,6 @@ async def request_magic_login(
     )
     await db.commit()
 
-    # 🔒 Count ONLY recent tokens (cooldown window)
     result = await db.execute(
         select(MagicLoginToken).where(
             MagicLoginToken.email == email,
@@ -174,6 +173,10 @@ async def verify_magic_login(
     await db.commit()
 
     user = await _get_or_create_user(db, magic_token.email)
+
+    # Phase-8: ensure FREE 7-day trial exists (idempotent)
+    await TrialService.ensure_trial(db, user.id)
+
     session = await create_session(db, user)
 
     user.last_login_at = datetime.utcnow()
