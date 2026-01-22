@@ -3,48 +3,80 @@ import type { NextRequest } from "next/server";
 
 /**
  * SESSION CONTEXT — SINGLE SOURCE OF TRUTH
+ *
+ * Responsibilities:
+ * - Fetch backend session context
+ * - Fetch billing status
+ * - Normalize + enrich user data
+ * - Set FE cookies:
+ *      meta_ai_role = admin/user
+ *      meta_ai_block = none|soft|hard
+ * - Drive middleware + topbar + overlay UX
  */
 export async function GET(req: NextRequest) {
   const cookie = req.headers.get("cookie") || "";
 
-  // Backend endpoint (must match login/session backend)
-  const backend = `${process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}/api/session/context`;
+  const API = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
-  const res = await fetch(backend, {
+  // ------------------------------
+  // 1) SESSION CONTEXT
+  // ------------------------------
+  const ctxRes = await fetch(`${API}/api/session/context`, {
     method: "GET",
     headers: { cookie },
     credentials: "include",
     cache: "no-store",
   });
 
-  const text = await res.text();
-  let data: any = {};
+  const ctxText = await ctxRes.text();
+  let ctx: any = {};
   try {
-    data = JSON.parse(text);
+    ctx = JSON.parse(ctxText);
   } catch {
-    data = {};
+    ctx = {};
   }
 
-  // Admin view toggle cookie (optional)
+  // ------------------------------
+  // 2) BILLING STATUS
+  // ------------------------------
+  let billing: any = null;
+  if (ctx?.user) {
+    try {
+      const billRes = await fetch(`${API}/billing/status`, {
+        method: "GET",
+        headers: { cookie },
+        credentials: "include",
+        cache: "no-store",
+      });
+      const txt = await billRes.text();
+      billing = JSON.parse(txt);
+    } catch {
+      billing = null;
+    }
+  }
+
+  // ------------------------------
+  // ADMIN ROLE + VIEW
+  // ------------------------------
   const adminViewCookie = req.cookies.get("admin_view")?.value;
-
-  // Determine admin role
   const isAdmin =
-    data?.user?.role === "admin" || data?.user?.is_admin === true;
+    ctx?.user?.role === "admin" || ctx?.user?.is_admin === true;
 
-  data.is_admin = isAdmin;
-  data.admin_view =
+  ctx.is_admin = isAdmin;
+  ctx.admin_view =
     isAdmin && adminViewCookie !== undefined
       ? adminViewCookie === "true"
       : isAdmin;
 
-  // Normalize ad_account for UI
-  if (!data.ad_account && data.ad_accounts && data.active_ad_account_id) {
-    const active = data.ad_accounts.find(
-      (a: any) => a.id === data.active_ad_account_id
+  // ------------------------------
+  // AD ACCOUNT NORMALIZATION
+  // ------------------------------
+  if (!ctx.ad_account && ctx.ad_accounts && ctx.active_ad_account_id) {
+    const active = ctx.ad_accounts.find(
+      (a: any) => a.id === ctx.active_ad_account_id
     );
     if (active) {
-      data.ad_account = {
+      ctx.ad_account = {
         id: active.id,
         name: active.name,
         meta_account_id: active.meta_account_id,
@@ -52,40 +84,54 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // ------------------------------
+  // BUILD RESPONSE
+  // ------------------------------
+  const response = NextResponse.json(
+    {
+      ...ctx,
+      billing,
+    },
+    {
+      status: ctxRes.status,
+    }
+  );
+
   // =====================================================
-  // 🔑 FRONTEND COOKIES (DRIVE MIDDLEWARE)
+  // 🍪 COOKIES — DRIVE MIDDLEWARE
   // =====================================================
-  const response = NextResponse.json(data, { status: res.status });
+
+  if (!ctx.user) {
+    // user logged out → clear cookies
+    response.cookies.delete("meta_ai_role");
+    response.cookies.delete("meta_ai_block");
+    return response;
+  }
 
   // ---- ROLE COOKIE ----
-  if (!data.user) {
-    response.cookies.delete("meta_ai_role");
-  } else {
-    response.cookies.set("meta_ai_role", isAdmin ? "admin" : "user", {
-      httpOnly: false,
-      sameSite: "lax",
-      path: "/",
-    });
+  response.cookies.set("meta_ai_role", isAdmin ? "admin" : "user", {
+    httpOnly: false,
+    sameSite: "lax",
+    path: "/",
+  });
+
+  // ---- BILLING BLOCK COOKIE ----
+  // billing.status = trial|active|grace|expired|none
+  // billing.block.soft_block = true/false
+  // billing.block.hard_block = true/false
+  let blockState = "none";
+
+  if (billing?.block?.hard_block) {
+    blockState = "hard";
+  } else if (billing?.block?.soft_block) {
+    blockState = "soft";
   }
 
-  // ---- TRIAL STATUS COOKIE (PHASE-8) ----
-  let trialStatus = "none";
-
-  const sub = data?.user?.subscription;
-  if (sub) {
-    if (sub.status === "trial") trialStatus = "active";
-    else if (sub.status === "expired" && sub.is_trial === true) trialStatus = "expired";
-  }
-
-  if (!data.user) {
-    response.cookies.delete("meta_ai_trial_status");
-  } else {
-    response.cookies.set("meta_ai_trial_status", trialStatus, {
-      httpOnly: false,
-      sameSite: "lax",
-      path: "/",
-    });
-  }
+  response.cookies.set("meta_ai_block", blockState, {
+    httpOnly: false,
+    sameSite: "lax",
+    path: "/",
+  });
 
   return response;
 }
