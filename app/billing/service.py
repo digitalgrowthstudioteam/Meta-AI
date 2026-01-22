@@ -354,6 +354,7 @@ class BillingService:
             starts_at=now,
             ends_at=ends_at,
             ai_campaign_limit_snapshot=plan.max_ai_campaigns or 0,
+            ad_account_limit_snapshot=plan.max_ad_accounts or 0,  # <<< PHASE-9 ADDITION
             is_active=True,
             is_trial=False,
             created_by_admin=False,
