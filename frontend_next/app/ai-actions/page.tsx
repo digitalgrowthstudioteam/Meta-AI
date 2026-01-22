@@ -10,6 +10,7 @@ import {
   CheckCircle
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { useRouter } from "next/navigation";
 import { apiFetch } from "../lib/fetcher";
 
 type AIAction = {
@@ -25,16 +26,28 @@ type AIAction = {
 };
 
 export default function AiActionsPage() {
+  const router = useRouter();
   const [actions, setActions] = useState<AIAction[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
 
+  const handleSubscriptionExpired = () => {
+    toast.error("Trial expired — upgrade to continue");
+    router.push("/billing");
+  };
+
   const loadActions = async () => {
     try {
       setLoading(true);
+
       const res = await apiFetch("/api/ai/actions/pending", {
         cache: "no-store",
       });
+
+      if (res.status === 402 || res.status === 403) {
+        handleSubscriptionExpired();
+        return;
+      }
 
       if (res.ok) {
         const json = await res.json();
@@ -55,15 +68,28 @@ export default function AiActionsPage() {
 
   const handleAction = async (actionId: string, decision: "APPLY" | "DISMISS") => {
     setProcessingId(actionId);
+
     try {
       const endpoint =
         decision === "APPLY"
           ? `/api/ai/actions/${actionId}/apply`
           : `/api/ai/actions/${actionId}/dismiss`;
 
-      await apiFetch(endpoint, { method: "POST" });
+      const res = await apiFetch(endpoint, { method: "POST" });
+
+      if (res.status === 402 || res.status === 403) {
+        handleSubscriptionExpired();
+        return;
+      }
+
+      if (!res.ok) {
+        toast.error("Failed to process action");
+        return;
+      }
+
       toast.success(decision === "APPLY" ? "Action applied" : "Action dismissed");
       setActions((prev) => prev.filter((a) => a.id !== actionId));
+
     } catch (error) {
       toast.error("Failed to process action");
     } finally {
