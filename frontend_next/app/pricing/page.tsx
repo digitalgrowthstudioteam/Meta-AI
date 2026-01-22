@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { fetcher } from "../../lib/fetcher";
+import { apiFetch } from "@/app/lib/fetcher";
 
 type PublicPlan = {
   name: string;
@@ -24,7 +24,9 @@ export default function PricingPage() {
   useEffect(() => {
     const loadPlans = async () => {
       try {
-        const data = await fetcher("/public/plans");
+        // IMPORTANT: Updated for correct backend path + cookies
+        const res = await apiFetch("/api/public/plans");
+        const data = await res.json();
         setPlans(data || []);
       } catch (err) {
         console.error("Failed to load plans", err);
@@ -44,8 +46,8 @@ export default function PricingPage() {
     return <div className="p-4 text-sm text-gray-600">Loading plans...</div>;
   }
 
-  // 🔥 Hide FREE plan here
-  const visiblePlans = plans.filter(p => p.code !== "free");
+  // hide FREE plan
+  const visiblePlans = plans.filter((p) => p.code !== "free");
 
   return (
     <div className="space-y-8 p-4">
@@ -66,6 +68,7 @@ export default function PricingPage() {
         >
           Monthly
         </button>
+
         <button
           onClick={() => setBillingCycle("yearly")}
           className={`px-4 py-2 rounded-md text-sm ${
