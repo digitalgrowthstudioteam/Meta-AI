@@ -1,12 +1,12 @@
 # ================================
-# app/billing/routes.py (UPDATED WITH ALIASES)
+# app/billing/routes.py (UPDATED WITH TRIAL STATUS)
 # ================================
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from uuid import UUID
 
 from app.core.db_session import get_db
@@ -202,7 +202,7 @@ async def buy_campaign_slots(
     packs = pricing.slot_packs.values()
     selected = next(
         (p for p in packs if quantity >= p["min_qty"]
-         and ("max_qty" not in p or p["max_qty"] is None or quantity <= p["max_qty"])),
+         and ("max_qty" not in p or p["max_qty"] is None or quantity <= p["max_qty"]))),
         None,
     )
     if not selected:
@@ -243,7 +243,7 @@ async def finalize_campaign_slots(
     packs = pricing.slot_packs.values()
     selected = next(
         (p for p in packs if quantity >= p["min_qty"]
-         and ("max_qty" not in p or p["max_qty"] is None or quantity <= p["max_qty"])),
+         and ("max_qty" not in p or p["max_qty"] is None or quantity <= p["max_qty"]))),
         None,
     )
     if not selected:
@@ -322,17 +322,57 @@ async def download_invoice(
         headers={"Content-Disposition": f'attachment; filename="{invoice.invoice_number}.pdf"'},
     )
 
+
 # =====================================================
-# BILLING STATUS (USER-SIDE)
+# BILLING STATUS (USER-SIDE) — UPDATED FOR TRIAL
 # =====================================================
 @router.get("/status")
 async def billing_status(
+    db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
-    sub = getattr(current_user, "_subscription", None)
-    if not sub:
-        return {"subscription": None}
-    return {"subscription": sub}
+    now = datetime.utcnow()
+    today = date.today()
+
+    result = await db.execute(
+        select(Subscription, Plan)
+        .join(Plan, Plan.id == Subscription.plan_id)
+        .where(
+            Subscription.user_id == current_user.id,
+            Subscription.status.in_(["active", "trial", "grace"]),
+        )
+        .order_by(Subscription.created_at.desc())
+        .limit(1)
+    )
+
+    row = result.first()
+
+    if not row:
+        return {
+            "subscription": None,
+            "status": "none",
+        }
+
+    sub, plan = row[0], row[1]
+
+    # Trial metadata
+    trial_days_left = None
+    if sub.status == "trial" and sub.trial_end:
+        trial_days_left = (sub.trial_end - today).days
+
+    return {
+        "subscription": {
+            "id": str(sub.id),
+            "status": sub.status,
+            "plan_id": sub.plan_id,
+            "plan_name": plan.name,
+            "is_trial": sub.status == "trial",
+            "trial_start": sub.trial_start,
+            "trial_end": sub.trial_end,
+            "trial_days_left": trial_days_left,
+            "ends_at": sub.ends_at,
+        }
+    }
 
 
 # =====================================================
@@ -343,7 +383,6 @@ async def cancel_subscription(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_user),
 ):
-    # Load latest active/trial/grace subscription
     result = await db.execute(
         select(Subscription)
         .where(
@@ -365,7 +404,6 @@ async def cancel_subscription(
         service = BillingService()
         await service.resolve_credentials(db=db)
 
-        # Cancel at cycle end (user keeps access until ends_at)
         try:
             service.client.subscription.cancel(
                 sub.razorpay_subscription_id,
@@ -374,7 +412,6 @@ async def cancel_subscription(
         except Exception as e:
             raise HTTPException(500, f"Razorpay cancel failed: {e}")
 
-        # Mark cancellation timestamp, but don't change status yet
         sub.cancelled_at = now
         await db.commit()
 
@@ -385,7 +422,7 @@ async def cancel_subscription(
             "cancelled_at": cancelled_at_iso,
         }
 
-    # Manual (yearly prepaid etc) — manual_cycle_end (no immediate cutoff)
+    # Manual (yearly prepaid etc)
     sub.cancelled_at = now
     await db.commit()
 
