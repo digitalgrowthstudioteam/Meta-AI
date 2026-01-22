@@ -35,7 +35,7 @@ async def _get_active_pricing(db: AsyncSession) -> AdminPricingConfig:
 
 
 # =====================================================
-# CREATE RECURRING MONTHLY SUBSCRIPTION (STARTER/PRO/AGENCY)
+# CREATE RECURRING MONTHLY SUBSCRIPTION
 # =====================================================
 @router.post("/subscription/recurring")
 async def create_recurring_subscription(
@@ -86,7 +86,7 @@ async def create_recurring_subscription(
 
 
 # =====================================================
-# 🔁 ALIASES FOR BACKWARD COMPATIBILITY
+# BACKWARD COMPATIBILITY
 # =====================================================
 @router.post("/razorpay/subscription/create")
 async def alias_subscription_create(
@@ -117,7 +117,7 @@ async def alias_subscriptions_create(
 
 
 # =====================================================
-# MANUAL MONTHLY/YEARLY SUBSCRIPTION
+# MANUAL SUBSCRIPTION
 # =====================================================
 @router.post("/subscription/manual")
 async def create_manual_subscription(
@@ -164,7 +164,7 @@ async def create_manual_subscription(
 
 
 # =====================================================
-# VERIFY PAYMENT (MANUAL)
+# VERIFY PAYMENT
 # =====================================================
 @router.post("/razorpay/verify")
 async def verify_manual_payment(
@@ -186,7 +186,7 @@ async def verify_manual_payment(
 
 
 # =====================================================
-# CAMPAIGN SLOT PURCHASE (UNCHANGED)
+# CAMPAIGN SLOT PURCHASE
 # =====================================================
 @router.post("/campaign-slots/buy")
 async def buy_campaign_slots(
@@ -226,7 +226,7 @@ async def buy_campaign_slots(
 
 
 # =====================================================
-# FINALIZE SLOTS (POST PAYMENT)
+# FINALIZE SLOTS
 # =====================================================
 @router.post("/campaign-slots/finalize")
 async def finalize_campaign_slots(
@@ -265,7 +265,7 @@ async def finalize_campaign_slots(
 
 
 # =====================================================
-# INVOICES
+# LIST INVOICES
 # =====================================================
 @router.get("/invoices")
 async def list_invoices(
@@ -317,12 +317,12 @@ async def download_invoice(
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename=\"{invoice.invoice_number}.pdf\""},
+        headers={"Content-Disposition": f'attachment; filename="{invoice.invoice_number}.pdf"'},
     )
 
 
 # =====================================================
-# PHASE 9 — USAGE SUMMARY (NEW)
+# USAGE SUMMARY
 # =====================================================
 @router.get("/usage")
 async def billing_usage(
@@ -346,7 +346,6 @@ async def billing_usage(
             "ai_campaigns": {"used": 0, "limit": 0},
         }
 
-    # Campaigns Used
     campaigns_used = await db.scalar(
         select(func.count(Campaign.id)).where(
             Campaign.user_id == current_user.id,
@@ -354,7 +353,6 @@ async def billing_usage(
         )
     ) or 0
 
-    # Ad Accounts Used
     ad_accounts_used = await db.scalar(
         select(func.count(UserMetaAdAccount.meta_ad_account_id)).where(
             UserMetaAdAccount.user_id == current_user.id,
@@ -362,7 +360,6 @@ async def billing_usage(
         )
     ) or 0
 
-    # AI Campaigns Used
     ai_campaigns_used = await db.scalar(
         select(func.count(Campaign.id)).where(
             Campaign.user_id == current_user.id,
@@ -388,7 +385,7 @@ async def billing_usage(
 
 
 # =====================================================
-# BILLING STATUS (USER-SIDE) — FINAL PHASE-8 LOGIC
+# BILLING STATUS → FIXED FOR FRONTEND
 # =====================================================
 @router.get("/status")
 async def billing_status(
@@ -412,12 +409,7 @@ async def billing_status(
 
     if not row:
         return {
-            "status": "none",
-            "plan": None,
-            "trial_days_left": None,
-            "grace_days_left": None,
-            "trial_ends_at": None,
-            "grace_ends_at": None,
+            "subscription": None,
             "block": {"soft_block": False, "hard_block": False},
         }
 
@@ -426,57 +418,46 @@ async def billing_status(
     trial_days_left = None
     grace_days_left = None
 
-    # ===========================
-    # TRIAL → HARD BLOCK AFTER END
-    # ===========================
     if status == "trial" and sub.trial_end:
         if today > sub.trial_end:
             status = "expired"
         else:
             trial_days_left = max((sub.trial_end - today).days, 0)
 
-    # ===========================
-    # PAID → 3 DAY GRACE
-    # ===========================
     if status == "active" and sub.ends_at:
         if now > sub.ends_at:
             status = "grace"
             grace_deadline = sub.ends_at + timedelta(days=3)
         else:
             grace_deadline = None
-
     elif status == "grace":
         grace_deadline = sub.grace_ends_at or (sub.ends_at + timedelta(days=3)) if sub.ends_at else None
-
     else:
         grace_deadline = None
 
-    # ===========================
-    # GRACE EXPIRY → HARD BLOCK
-    # ===========================
     if status == "grace" and grace_deadline:
         if now > grace_deadline:
             status = "expired"
         else:
             grace_days_left = max((grace_deadline.date() - today).days, 0)
 
-    # ===========================
-    # BLOCKING RULES
-    # ===========================
     soft_block = status in ("grace", "expired")
     hard_block = status == "expired"
 
-    return {
+    subscription_payload = {
+        "plan_name": plan.name,
         "status": status,
-        "plan": {
-            "id": sub.plan_id,
-            "name": plan.name,
-            "billing_cycle": sub.billing_cycle,
-        },
+        "billing_cycle": sub.billing_cycle,
+        "ends_at": sub.ends_at.isoformat() if sub.ends_at else None,
+        "grace_ends_at": grace_deadline.isoformat() if grace_deadline else None,
+        "cancelled_at": sub.cancelled_at.isoformat() if sub.cancelled_at else None,
         "trial_days_left": trial_days_left,
         "grace_days_left": grace_days_left,
-        "trial_ends_at": sub.trial_end,
-        "grace_ends_at": grace_deadline,
+        "in_grace": status == "grace",
+    }
+
+    return {
+        "subscription": subscription_payload,
         "block": {
             "soft_block": soft_block,
             "hard_block": hard_block,
@@ -497,7 +478,6 @@ async def cancel_subscription(
         .where(
             Subscription.user_id == current_user.id,
             Subscription.status.in_(["active", "trial", "grace"]),
-
         )
         .order_by(Subscription.created_at.desc())
         .limit(1)
