@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { apiFetch } from "@../../lib/fetcher";
+import { apiFetch } from "@/app/lib/fetcher";
 
 type PublicPlan = {
   id: number;
@@ -29,7 +29,8 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     const loadPlans = async () => {
       try {
-        const res = await apiFetch("/public/plans");
+        // IMPORTANT: UPDATED PATH
+        const res = await apiFetch("/api/public/plans");
         const data = await res.json();
         setPlans(data || []);
       } catch (err) {
@@ -42,7 +43,7 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
   }, []);
 
   useEffect(() => {
-    const p = plans.find((x) => x.code === planCode);
+    const p = plans.find((x) => x.code.toLowerCase() === planCode.toLowerCase());
     if (p) setPlan(p);
   }, [plans, planCode]);
 
@@ -59,9 +60,7 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
   }
 
   const amountPaise =
-    cycle === "monthly"
-      ? plan.monthly_price
-      : plan.yearly_price && plan.yearly_allowed
+    cycle === "yearly" && plan.yearly_allowed && plan.yearly_price
       ? plan.yearly_price
       : plan.monthly_price;
 
@@ -89,9 +88,9 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
     }
 
     try {
-      // *** FORCING MANUAL ORDERS FOR ALL CYCLES ***
+      // IMPORTANT: UPDATED PATH
       const backendResp = await apiFetch(
-        `/billing/subscription/manual?plan_id=${plan.id}&cycle=${cycle}`,
+        `/api/billing/subscription/manual?plan_id=${plan.id}&cycle=${cycle}`,
         { method: "POST" }
       );
 
@@ -114,7 +113,7 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
         },
         handler: async function (response: any) {
           try {
-            const verifyResp = await apiFetch("/billing/razorpay/verify", {
+            const verifyResp = await apiFetch("/api/billing/razorpay/verify", {
               method: "POST",
               body: JSON.stringify({
                 razorpay_order_id: response.razorpay_order_id,
