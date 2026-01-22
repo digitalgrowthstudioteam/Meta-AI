@@ -24,8 +24,9 @@ export default function PricingPage() {
   useEffect(() => {
     const loadPlans = async () => {
       try {
-        // IMPORTANT: Updated for correct backend path + cookies
-        const res = await apiFetch("/public/plans");
+        const res = await fetcher("/api/public/plans", {
+          credentials: "include",
+        });
         const data = await res.json();
         setPlans(data || []);
       } catch (err) {
