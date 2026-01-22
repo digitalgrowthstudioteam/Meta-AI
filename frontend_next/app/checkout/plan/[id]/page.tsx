@@ -81,9 +81,9 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
   const onCheckout = async () => {
     setBusy(true);
 
-    const ok = await loadRazorpayScript();
-    if (!ok) {
-      alert("Failed to load Razorpay. Check network.");
+    const loaded = await loadRazorpayScript();
+    if (!loaded) {
+      alert("Failed to load Razorpay Checkout.");
       setBusy(false);
       return;
     }
@@ -101,6 +101,11 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
         );
       }
 
+      if (!backendResp.ok) {
+        router.push("/billing/failure");
+        return;
+      }
+
       const data = await backendResp.json();
       const key = data.key;
 
@@ -108,9 +113,43 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
         key,
         name: "Meta-AI Billing",
         description: `${plan.name} (${cycle})`,
-        handler: () => router.push("/billing/success"),
+        notes: {
+          plan_id: plan.id.toString(),
+          cycle,
+        },
+        handler: async function (response: any) {
+          if (cycle === "yearly") {
+            try {
+              const verifyResp = await apiFetch("/billing/razorpay/verify", {
+                method: "POST",
+                body: JSON.stringify({
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature: response.razorpay_signature,
+                }),
+              });
+
+              if (verifyResp.ok) {
+                router.push("/billing/success");
+              } else {
+                router.push("/billing/failure");
+              }
+            } catch (err) {
+              console.error("Verify failed:", err);
+              router.push("/billing/failure");
+            }
+          } else {
+            router.push("/billing/success");
+          }
+        },
         modal: {
-          ondismiss: () => router.push("/billing/failure"),
+          ondismiss: function () {
+            router.push("/billing/failure");
+          },
+        },
+        customer: {
+          name: "Billing User",
+          email: "billing@example.com",
         },
       };
 
@@ -123,7 +162,7 @@ export default function CheckoutPage({ params }: { params: { id: string } }) {
       const rzp = new (window as any).Razorpay(options);
       rzp.open();
     } catch (err) {
-      console.error("Checkout init failed", err);
+      console.error("Checkout failed:", err);
       router.push("/billing/failure");
     } finally {
       setBusy(false);
