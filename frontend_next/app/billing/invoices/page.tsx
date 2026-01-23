@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Clock, Loader2 } from "lucide-react";
-import { apiFetch } from "../../lib/fetcher";
+import { apiFetch } from "@/app/lib/fetcher";
 
 function formatDate(dateStr?: string | null) {
   if (!dateStr) return "";
