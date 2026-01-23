@@ -1,6 +1,6 @@
 'use client';
 import useSWR from 'swr';
-import { fetcher } from "../../../lib/fetcher";
+import { fetcher } from "@/app/lib/fetcher";
 
 export default function AdminMetricsPage() {
   const { data } = useSWR('/api/admin/metrics/sync-status', fetcher);
