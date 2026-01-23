@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import toast from "react-hot-toast";
-import { apiFetch } from "../../lib/fetcher";
+import { apiFetch } from "@/app/lib/fetcher";
 
 /* ----------------------------------
  * TYPES
