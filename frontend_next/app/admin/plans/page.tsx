@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { apiFetch } from "../../lib/fetcher";
+import { apiFetch } from "@/app/lib/fetcher";
 
 type PlanRow = {
   id: number;
