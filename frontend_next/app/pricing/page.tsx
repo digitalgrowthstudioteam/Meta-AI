@@ -24,7 +24,7 @@ export default function PricingPage() {
   useEffect(() => {
     const loadPlans = async () => {
       try {
-        const res = await fetcher("/api/public/plans", {
+        const res = await fetcher("/public/plans", {
           credentials: "include",
         });
         const data = await res.json();
