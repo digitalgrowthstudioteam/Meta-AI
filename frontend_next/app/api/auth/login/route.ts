@@ -5,14 +5,14 @@ const BACKEND_URL =
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.text();
+    const body = await request.json();
 
-    const res = await fetch(`${BACKEND_URL}/auth/login`, {
+    const res = await fetch(`${BACKEND_URL}/api/auth/login`, {
       method: "POST",
       headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
+        "Content-Type": "application/json",
       },
-      body,
+      body: JSON.stringify(body),
     });
 
     if (!res.ok) {
