@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode } from "react";
+import { ReactNode, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import ClientShell from "./client-shell";
 import Topbar from "./components/Topbar";
@@ -12,11 +12,13 @@ function BillingGate({ children }: { children: ReactNode }) {
 
   if (loading) return <div className="p-6">Loading...</div>;
 
-  // Hard block → redirect to billing page
-  if (block.hard_block) {
-    router.replace("/billing");
-    return null;
-  }
+  useEffect(() => {
+    if (!loading && block.hard_block) {
+      router.replace("/billing");
+    }
+  }, [loading, block.hard_block, router]);
+
+  if (block.hard_block) return null;
 
   return <>{children}</>;
 }
@@ -24,10 +26,16 @@ function BillingGate({ children }: { children: ReactNode }) {
 export default function ClientLayoutWrapper({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
-  const showSidebar =
-    pathname !== "/" &&
-    pathname !== "/login" &&
-    !pathname.startsWith("/admin");
+  const isPublicPage =
+    pathname === "/" ||
+    pathname === "/login" ||
+    pathname === "/verify";
+
+  const showSidebar = !isPublicPage && !pathname.startsWith("/admin");
+
+  if (isPublicPage || pathname.startsWith("/admin")) {
+    return <>{children}</>;
+  }
 
   return (
     <BillingProvider>
